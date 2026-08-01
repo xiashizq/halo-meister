@@ -99,12 +99,12 @@ jobs:
           $prerelease = "${{ inputs.prerelease }}" -eq "true"
           $title = "Halo Meister $version"
           $isTagPush = "${{ github.event_name }}" -eq "push"
-          # Fixed boilerplate — no hand-written or auto-generated changelogs.
-          $notes = @"
-## Changes
-- Fixed some issues
-- Added some features
-"@
+          # Fixed boilerplate - keep indented so YAML block scalars stay valid.
+          $notes = @(
+            '## Changes'
+            '- Fixed some issues'
+            '- Added some features'
+          ) -join "`n"
 
           $existing = $null
           try { $existing = gh release view $tag 2>$null } catch { $existing = $null }
