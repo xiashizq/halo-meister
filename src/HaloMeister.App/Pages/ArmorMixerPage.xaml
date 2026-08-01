@@ -1,0 +1,195 @@
+<Page
+    x:Class="HaloMeister.App.Pages.ArmorMixerPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+
+    <Grid Padding="24" RowSpacing="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='armor_mixer.armor_mixer'}" />
+                <TextBlock
+                    Style="{StaticResource LivePageDescriptionStyle}"
+                    Text="{i18n:Loc Key='armor_mixer.choose_a_foundation_replace_its_body_or_h_5c04f6'}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <TextBlock x:Name="ConnectionStatusText" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                    <TextBlock
+                        x:Name="BridgeStatusText"
+                        MaxWidth="360"
+                        HorizontalAlignment="Right"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <Button
+                    x:Name="ScanButton"
+                    Click="OnConnectAndScan"
+                    Content="{i18n:Loc Key='armor_mixer.scan_armor'}"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Border x:Name="EmptyStatePanel" Style="{StaticResource LiveToolCardStyle}">
+                <StackPanel MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                    <FontIcon HorizontalAlignment="Center" FontSize="38" Glyph="&#xE790;" Opacity="0.5" />
+                    <TextBlock HorizontalAlignment="Center" FontSize="20" FontWeight="SemiBold" Text="{i18n:Loc Key='armor_mixer.scan_the_loaded_spartan_armor'}" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        TextAlignment="Center"
+                        Style="{StaticResource LivePageDescriptionStyle}"
+                        Text="{i18n:Loc Key='armor_mixer.halo_meister_will_find_compatible_appeara_48f43c'}" />
+                    <TextBlock
+                        x:Name="OwnershipNotice"
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource CompactSafetyTextStyle}"
+                        TextAlignment="Center"
+                        Text="{i18n:Loc Key='armor_mixer.experimental_changes_apply_only_to_the_cu_706dfc'}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Grid x:Name="EditorGrid" ColumnSpacing="14" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="360" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Style="{StaticResource LiveToolCardStyle}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="16">
+                            <StackPanel Spacing="4">
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='armor_mixer.1_choose_foundation'}" />
+                                <TextBlock
+                                    Style="{StaticResource LivePageDescriptionStyle}"
+                                    Text="{i18n:Loc Key='armor_mixer.the_foundation_supplies_every_region_you_ed26e5'}" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="BaseVariantCombo"
+                                DisplayMemberPath="DisplayName"
+                                Header="{i18n:Loc Key='armor_mixer.foundation_appearance'}"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnBaseVariantChanged" />
+                            <Border Style="{StaticResource LiveToolInsetStyle}">
+                                <TextBlock
+                                    x:Name="BaseDetailText"
+                                    Style="{StaticResource CompactSafetyTextStyle}" />
+                            </Border>
+                            <Button
+                                x:Name="ResetRowsButton"
+                                HorizontalAlignment="Left"
+                                Click="OnResetRows"
+                                Content="{i18n:Loc Key='armor_mixer.reset_regions_to_foundation'}" />
+                            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                            <StackPanel Spacing="7">
+                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='armor_mixer.how_mixing_works'}" />
+                                <TextBlock Style="{StaticResource CompactSafetyTextStyle}" Text="{i18n:Loc Key='armor_mixer.1_pick_the_armor_that_should_provide_the_449e06'}" />
+                                <TextBlock Style="{StaticResource CompactSafetyTextStyle}" Text="{i18n:Loc Key='armor_mixer.2_choose_a_compatible_donor_for_each_regi_557887'}" />
+                                <TextBlock Style="{StaticResource CompactSafetyTextStyle}" Text="{i18n:Loc Key='armor_mixer.3_apply_once_halo_meister_rebuilds_the_pl_a63d38'}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource LiveToolCardStyle}">
+                    <Grid RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='armor_mixer.2_choose_region_sources'}" />
+                                <TextBlock
+                                    Style="{StaticResource LivePageDescriptionStyle}"
+                                    Text="{i18n:Loc Key='armor_mixer.leave_a_region_on_the_foundation_or_selec_7181d0'}" />
+                            </StackPanel>
+                            <Border Grid.Column="1" Padding="10,4" VerticalAlignment="Center" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="12">
+                                <TextBlock x:Name="RegionCountText" FontSize="12" />
+                            </Border>
+                        </Grid>
+
+                        <ListView x:Name="RegionList" Grid.Row="1" SelectionMode="None">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0,0,0,10" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="16" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8">
+                                        <Grid ColumnSpacing="24">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="300" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center" Spacing="3">
+                                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                <TextBlock
+                                                    FontFamily="Consolas"
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{Binding Detail}"
+                                                    TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <ComboBox
+                                                Grid.Column="1"
+                                                DisplayMemberPath="DisplayName"
+                                                Header="{i18n:Loc Key='armor_mixer.source_appearance'}"
+                                                HorizontalAlignment="Stretch"
+                                                ItemsSource="{Binding Donors}"
+                                                SelectedItem="{Binding SelectedDonor, Mode=TwoWay}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="2" Padding="14,10" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ProgressRing x:Name="BusyRing" Width="20" Height="20" IsActive="False" />
+                <TextBlock
+                    x:Name="SummaryText"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='armor_mixer.connect_from_the_app_header_then_scan_the_1cbafd'}" />
+                <Button
+                    x:Name="ApplyButton"
+                    Grid.Column="2"
+                    Click="OnApply"
+                    Content="{i18n:Loc Key='armor_mixer.apply_mixed_armor'}"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </Grid>
+        </Border>
+
+        <InfoBar x:Name="StatusBar" Grid.Row="3" IsOpen="False" />
+    </Grid>
+</Page>

@@ -1,0 +1,180 @@
+<Page
+    x:Class="HaloMeister.App.Pages.ReadmePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="1040"
+            Padding="28,24,28,48"
+            HorizontalAlignment="Stretch"
+            Spacing="22">
+
+            <StackPanel Spacing="8">
+                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='readme.help'}" />
+                <TextBlock
+                    MaxWidth="760"
+                    HorizontalAlignment="Left"
+                    FontSize="18"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='readme.start_here_when_you_are_setting_up_halo_m_0f64d2'}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <InfoBar
+                IsClosable="False"
+                IsOpen="True"
+                Severity="Warning"
+                Title="{i18n:Loc Key='readme.use_halo_meister_offline'}"
+                Message="{i18n:Loc Key='readme.use_live_tools_only_in_an_offline_campaig_a96c30'}" />
+
+            <Grid ColumnSpacing="16" RowSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Style="{StaticResource DashboardCardStyle}">
+                    <StackPanel Spacing="10">
+                        <FontIcon HorizontalAlignment="Left" FontSize="22" Glyph="&#xE896;" />
+                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.edit_progress_or_profile_data'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.open_progress_profile_authenticate_with_p_5d20bd'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource DashboardCardStyle}">
+                    <StackPanel Spacing="10">
+                        <FontIcon HorizontalAlignment="Left" FontSize="22" Glyph="&#xE8B7;" />
+                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.manage_local_game_files'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.use_game_files_for_equipped_customization_ca1c62'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Style="{StaticResource DashboardCardStyle}">
+                    <StackPanel Spacing="10">
+                        <FontIcon HorizontalAlignment="Left" FontSize="22" Glyph="&#xE768;" />
+                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.use_live_tools'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.open_setup_while_the_game_is_closed_insta_4c4892'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource DashboardCardStyle}">
+                    <StackPanel Spacing="10">
+                        <FontIcon HorizontalAlignment="Left" FontSize="22" Glyph="&#xE774;" />
+                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.control_from_your_phone'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.open_phone_remote_enable_the_local_server_32d3ea'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Expander IsExpanded="True">
+                <Expander.Header>
+                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.first_time_live_tools_setup'}" />
+                </Expander.Header>
+                <StackPanel Padding="0,14,0,4" Spacing="10">
+                    <TextBlock Text="{i18n:Loc Key='readme.1_extract_the_complete_halo_meister_relea_8196cb'}" TextWrapping="Wrap" />
+                    <TextBlock Text="{i18n:Loc Key='readme.2_close_campaign_evolved_open_setup_and_s_78653c'}" TextWrapping="Wrap" />
+                    <TextBlock Text="{i18n:Loc Key='readme.3_select_install_or_repair_update_halo_me_e6c420'}" TextWrapping="Wrap" />
+                    <TextBlock Text="{i18n:Loc Key='readme.4_start_campaign_evolved_load_an_offline_3708cb'}" TextWrapping="Wrap" />
+                    <TextBlock Text="{i18n:Loc Key='readme.5_open_a_live_tools_page_and_refresh_or_s_1f945d'}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Expander>
+
+            <Expander IsExpanded="True">
+                <Expander.Header>
+                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.haloscript_scripting_guide'}" />
+                </Expander.Header>
+                <StackPanel Padding="0,14,0,4" Spacing="14">
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='readme.open_advanced_scripting_haloscript_is_sel_ec73f8'}"
+                        TextWrapping="Wrap" />
+
+                    <Grid ColumnSpacing="18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="7">
+                            <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='readme.accepted_forms'}" />
+                            <TextBlock FontFamily="Cascadia Mono, Consolas" Text="{i18n:Loc Key='readme.hs_chud_show_0'}" />
+                            <TextBlock FontFamily="Cascadia Mono, Consolas" Text="{i18n:Loc Key='readme.unit_kill_player0'}" />
+                            <TextBlock FontFamily="Cascadia Mono, Consolas" Text="{i18n:Loc Key='readme.fade_out_0_0_0_0'}" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='readme.use_one_expression_or_command_per_line_ha_fa45fc'}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="7">
+                            <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='readme.autocomplete'}" />
+                            <TextBlock Text="{i18n:Loc Key='readme.type_two_or_more_command_characters_to_op_d7af39'}" TextWrapping="Wrap" />
+                            <TextBlock Text="{i18n:Loc Key='readme.press_ctrl_space_to_show_common_commands_38c385'}" TextWrapping="Wrap" />
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.insert_selected_creates_an_editable_expre_a335ef'}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Border
+                        Padding="12"
+                        Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        CornerRadius="7">
+                        <TextBlock
+                            Text="{i18n:Loc Key='readme.haloscript_submissions_are_not_verified_t_d524b5'}"
+                            TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+            </Expander>
+
+            <Expander>
+                <Expander.Header>
+                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.realtime_tag_configurations'}" />
+                </Expander.Header>
+                <StackPanel Padding="0,14,0,4" Spacing="10">
+                    <TextBlock Text="{i18n:Loc Key='readme.realtime_tags_can_keep_several_loaded_tag_4de5f8'}" TextWrapping="Wrap" />
+                    <TextBlock Text="{i18n:Loc Key='readme.schema_field_and_tag_reference_edits_made_9ec4a4'}" TextWrapping="Wrap" />
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.a_configuration_is_a_focused_patch_set_no_2946fa'}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Expander>
+
+            <Expander IsExpanded="True">
+                <Expander.Header>
+                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.troubleshooting'}" />
+                </Expander.Header>
+                <StackPanel Padding="0,14,0,4" Spacing="14">
+                    <StackPanel Spacing="4">
+                        <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='readme.the_game_will_not_connect'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.start_campaign_evolved_enter_a_campaign_m_421368'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='readme.the_bridge_is_not_ready'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.close_the_game_open_setup_run_repair_upda_6d6bbe'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='readme.a_live_list_is_empty'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.load_an_offline_mission_reconnect_and_sca_6c1cd0'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='readme.playfab_download_is_unavailable'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.select_authenticate_and_let_campaign_evol_141ed4'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='readme.a_file_operation_is_blocked'}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.close_campaign_evolved_halo_meister_block_81cd76'}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+
+            <Border Style="{StaticResource DashboardCardStyle}">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.safe_recovery_pattern'}" />
+                    <TextBlock Text="{i18n:Loc Key='readme.back_up_make_one_focused_change_verify_it_f910e5'}" TextWrapping="Wrap" />
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.if_a_live_experiment_behaves_badly_stop_t_0344ac'}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

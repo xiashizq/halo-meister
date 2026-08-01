@@ -1,0 +1,26 @@
+# Thin entry point that reuses Package (纯净版).
+# Prefer Actions → "Package (纯净版)" for one-click ZIP builds.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Also create a GitHub Release"
+        type: boolean
+        default: true
+      prerelease:
+        description: "Mark the GitHub Release as prerelease"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    uses: ./.github/workflows/package.yml
+    with:
+      create_release: ${{ inputs.create_release }}
+      prerelease: ${{ inputs.prerelease }}
+    secrets: inherit

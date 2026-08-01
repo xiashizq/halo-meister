@@ -1,0 +1,51 @@
+# Build outputs and package artifacts
+**/bin/
+**/obj/
+target/
+.build/
+artifacts/
+
+# IDE and editor state
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Local research, probes, and generated tooling
+.analysis/
+.tools/
+steam-dlls/
+.codex-remote-attachments/
+
+# Machine-specific project material (kept locally, never published)
+docs/project-routes.md
+docs/halomods-notes.md
+mods/CEModeMenu/
+samples/sample-save.json
+samples/halo-save-edited.json
+
+# Native build intermediates and historical bridge builds
+*.exp
+*.lib
+*.obj
+src/HaloMeister.App/Assets/UE4SS/halomeister_blam.dll
+src/HaloMeister.App/Assets/UE4SS/halomeister_blam_v*.dll
+!src/HaloMeister.App/Assets/UE4SS/halomeister_blam_v45.dll
+
+# Local settings, logs, backups, and crash data
+.env
+.env.*
+!.env.example
+*.local.json
+*.log
+*.dmp
+*.bak
+*.received.*
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini

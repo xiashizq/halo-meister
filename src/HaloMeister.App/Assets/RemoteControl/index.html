@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171329">
+  <meta name="description" content="Local phone remote for Halo Meister">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/app.css">
+  <title>Halo Meister Remote</title>
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">HM</div>
+      <div>
+        <strong>Halo Meister</strong>
+        <span data-i18n="remote.phone_remote">Phone remote</span>
+      </div>
+    </div>
+    <button id="status-pill" class="status-pill offline" type="button">
+      <span></span>
+      <b data-i18n="common.checking">Checking…</b>
+    </button>
+  </header>
+
+  <main>
+    <section id="pairing-required" class="panel hero hidden">
+      <p class="eyebrow" data-i18n="remote.pairing_required">Pairing required</p>
+      <h1 data-i18n="remote.pairing_title">Open the QR code from Halo Meister.</h1>
+      <p data-i18n="remote.pairing_body">This browser does not have the temporary pairing key. Stop and restart the remote on your PC to create a fresh QR code.</p>
+    </section>
+
+    <section id="home-view" class="view active">
+      <div class="hero panel">
+        <div>
+          <p class="eyebrow" data-i18n="remote.offline_control">Offline campaign control</p>
+          <h1 data-i18n="remote.hero_title">Your mission, within reach.</h1>
+          <p id="hero-detail" data-i18n="remote.hero_checking">Checking the PC and in-game bridge…</p>
+        </div>
+        <button id="connect-button" class="primary hidden" type="button" data-i18n="remote.connect_to_game">Connect to game</button>
+      </div>
+
+      <div class="metric-grid">
+        <article class="metric panel">
+          <span data-i18n="remote.game">Game</span>
+          <strong id="game-state" data-i18n="remote.checking">Checking</strong>
+          <small id="game-detail">—</small>
+        </article>
+        <article class="metric panel">
+          <span data-i18n="remote.bridge">Bridge</span>
+          <strong id="bridge-state" data-i18n="remote.checking">Checking</strong>
+          <small id="bridge-detail">—</small>
+        </article>
+      </div>
+
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow" data-i18n="remote.quick_actions">Quick actions</p>
+          <h2 data-i18n="remote.what_change">What do you want to change?</h2>
+        </div>
+      </div>
+      <div class="action-grid">
+        <button class="action-card" data-go="weapons" type="button">
+          <span class="action-icon violet">W</span>
+          <span><b data-i18n="remote.load_weapon">Load weapon</b><small data-i18n="remote.load_weapon_sub">Pick from this mission</small></span>
+          <i>›</i>
+        </button>
+        <button class="action-card" data-go="spawner" type="button">
+          <span class="action-icon coral">S</span>
+          <span><b data-i18n="remote.spawn_enemies">Spawn enemies</b><small data-i18n="remote.spawn_enemies_sub">Single unit or fireteam</small></span>
+          <i>›</i>
+        </button>
+        <button class="action-card" data-go="skulls" type="button">
+          <span class="action-icon gold">K</span>
+          <span><b data-i18n="remote.live_skulls">Live skulls</b><small data-i18n="remote.live_skulls_sub">Toggle simulation modifiers</small></span>
+          <i>›</i>
+        </button>
+        <button class="action-card" data-go="player" type="button">
+          <span class="action-icon cyan">P</span>
+          <span><b data-i18n="remote.player_position">Player position</b><small data-i18n="remote.player_position_sub">Read or teleport</small></span>
+          <i>›</i>
+        </button>
+      </div>
+    </section>
+
+    <section id="weapons-view" class="view">
+      <div class="section-heading">
+        <div><p class="eyebrow" data-i18n="remote.runtime_loadout">Runtime loadout</p><h1 data-i18n="remote.weapons">Weapons</h1></div>
+        <button class="secondary refresh-view" data-view="weapons" type="button" data-i18n="remote.refresh">Refresh</button>
+      </div>
+      <label class="search"><span>⌕</span><input id="weapon-search" type="search" data-i18n-placeholder="remote.search_weapons" placeholder="Search loaded weapons"></label>
+      <div id="weapon-list" class="card-list loading-block" data-i18n="remote.open_mission_refresh">Open a campaign mission, then refresh.</div>
+    </section>
+
+    <section id="spawner-view" class="view">
+      <div class="section-heading">
+        <div><p class="eyebrow" data-i18n="remote.runtime_placement">Runtime placement</p><h1 data-i18n="remote.spawner">Spawner</h1></div>
+        <button class="secondary refresh-view" data-view="spawner" type="button" data-i18n="remote.refresh">Refresh</button>
+      </div>
+      <label class="search"><span>⌕</span><input id="enemy-search" type="search" data-i18n-placeholder="remote.search_enemies" placeholder="Search enemies and factions"></label>
+      <div id="enemy-list" class="card-list loading-block" data-i18n="remote.open_mission_refresh">Open a campaign mission, then refresh.</div>
+    </section>
+
+    <section id="skulls-view" class="view">
+      <div class="section-heading">
+        <div><p class="eyebrow" data-i18n="remote.simulation_modifiers">Simulation modifiers</p><h1 data-i18n="remote.live_skulls">Live skulls</h1></div>
+        <button class="secondary refresh-view" data-view="skulls" type="button" data-i18n="remote.refresh">Refresh</button>
+      </div>
+      <label class="search"><span>⌕</span><input id="skull-search" type="search" data-i18n-placeholder="remote.search_skulls" placeholder="Search skulls"></label>
+      <div id="skull-list" class="card-list loading-block" data-i18n="remote.load_skull_catalog">Load the live skull catalog to begin.</div>
+    </section>
+
+    <section id="player-view" class="view">
+      <div class="section-heading">
+        <div><p class="eyebrow" data-i18n="remote.player_tools">Player tools</p><h1 data-i18n="remote.position">Position</h1></div>
+        <button id="read-position" class="secondary" type="button" data-i18n="remote.read_current">Read current</button>
+      </div>
+      <div class="panel coordinate-panel">
+        <div class="coordinate-grid">
+          <label>X<input id="coord-x" inputmode="decimal" type="number" step="any" placeholder="0"></label>
+          <label>Y<input id="coord-y" inputmode="decimal" type="number" step="any" placeholder="0"></label>
+          <label>Z<input id="coord-z" inputmode="decimal" type="number" step="any" placeholder="0"></label>
+        </div>
+        <button id="teleport-button" class="primary wide" type="button" data-i18n="remote.teleport">Teleport</button>
+      </div>
+      <p class="footnote" data-i18n="remote.coords_footnote">Coordinates apply to the currently controlled player in the loaded offline mission.</p>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" data-i18n-aria="remote.sections" aria-label="Remote sections">
+    <button class="active" data-view="home" type="button"><span>⌂</span><b data-i18n="remote.home">Home</b></button>
+    <button data-view="weapons" type="button"><span>W</span><b data-i18n="remote.weapons">Weapons</b></button>
+    <button data-view="spawner" type="button"><span>＋</span><b data-i18n="remote.spawn">Spawn</b></button>
+    <button data-view="skulls" type="button"><span>◆</span><b data-i18n="remote.nav_skulls">Skulls</b></button>
+    <button data-view="player" type="button"><span>⌖</span><b data-i18n="remote.player">Player</b></button>
+  </nav>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

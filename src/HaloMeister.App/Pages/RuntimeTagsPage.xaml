@@ -1,0 +1,500 @@
+<Page
+    x:Class="HaloMeister.App.Pages.RuntimeTagsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+
+    <Grid Padding="24,20,24,16" ColumnSpacing="14" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*" MinWidth="300" />
+            <ColumnDefinition Width="3*" MinWidth="480" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Spacing="8">
+            <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='runtime_tags.realtime_tags'}" />
+            <TextBlock
+                HorizontalAlignment="Left"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap"
+                Text="{i18n:Loc Key='runtime_tags.browse_the_loaded_blam_tag_table_keep_sev_81e370'}" />
+            <Border Style="{StaticResource LiveToolInsetStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon
+                        VerticalAlignment="Top"
+                        FontSize="14"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Glyph="&#xE7BA;" />
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='runtime_tags.editing_live_process_memory'}" />
+                        <TextBlock
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            Text="{i18n:Loc Key='runtime_tags.schema_field_and_tag_reference_changes_ca_b7334f'}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button
+                    x:Name="SaveTagConfigButton"
+                    Click="OnSaveTagConfig"
+                    Content="{i18n:Loc Key='runtime_tags.save_configuration'}"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="ClearTagConfigButton"
+                    Click="OnClearTagConfig"
+                    Content="{i18n:Loc Key='runtime_tags.clear_draft'}"
+                    IsEnabled="False"
+                    ToolTipService.ToolTip="{i18n:Loc Key='runtime_tags.forget_tracked_configuration_changes_with_4aa8d6'}" />
+                <Button
+                    x:Name="LoadTagModButton"
+                    Click="OnLoadTagMod"
+                    Content="{i18n:Loc Key='runtime_tags.load_configuration'}"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="ExportTagModButton"
+                    Click="OnExportTagMod"
+                    Content="{i18n:Loc Key='runtime_tags.build_native_mod'}"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="InstallOverlayButton"
+                    Click="OnInstallOverlay"
+                    Content="{i18n:Loc Key='runtime_tags.install_native_mod'}" />
+            </StackPanel>
+            <TextBlock
+                x:Name="ConnectionText"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{i18n:Loc Key='runtime_tags.no_tag_scan_yet'}"
+                TextWrapping="Wrap" />
+            <StackPanel
+                Grid.Column="2"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    x:Name="ScanButton"
+                    Click="OnScan"
+                    Content="{i18n:Loc Key='runtime_tags.scan_tags'}"
+                    IsEnabled="False"
+                    Style="{StaticResource AccentButtonStyle}" />
+                <Button
+                    x:Name="RefreshButton"
+                    Click="OnRefresh"
+                    Content="{i18n:Loc Key='runtime_tags.refresh'}"
+                    IsEnabled="False" />
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource LiveToolCardStyle}">
+        <Grid RowSpacing="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBox
+                x:Name="SearchBox"
+                Header="{i18n:Loc Key='runtime_tags.filter_tags'}"
+                PlaceholderText="{i18n:Loc Key='runtime_tags.name_path_or_four_cc'}"
+                TextChanged="OnSearchChanged" />
+            <TextBlock
+                x:Name="TagFilterStatusText"
+                Grid.Row="1"
+                FontSize="11"
+                Opacity="0.65" />
+            <TreeView
+                x:Name="TagTree"
+                Grid.Row="2"
+                ItemInvoked="OnTagTreeItemInvoked"
+                SelectionMode="Single">
+                <TreeView.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Padding="2,5">
+                            <TextBlock
+                                Text="{Binding Content.DisplayName}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                FontFamily="Consolas"
+                                FontSize="11"
+                                Opacity="0.65"
+                                Text="{Binding Content.Detail}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+        </Grid>
+        </Border>
+
+        <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource LiveToolCardStyle}">
+        <Grid RowSpacing="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <StackPanel
+                x:Name="TagEmptyState"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="8">
+                <FontIcon
+                    HorizontalAlignment="Center"
+                    FontSize="28"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Glyph="&#xE8A5;" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="18"
+                    FontWeight="SemiBold"
+                    Text="{i18n:Loc Key='runtime_tags.open_a_tag_to_begin'}" />
+                <TextBlock
+                    MaxWidth="420"
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='runtime_tags.choose_a_tag_from_the_catalog_each_tag_op_ba3d3a'}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+        <Grid x:Name="EditorWorkspace" RowSpacing="8" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TabView
+                x:Name="OpenTagsTabView"
+                Height="42"
+                IsAddTabButtonVisible="False"
+                SelectionChanged="OnOpenTagSelectionChanged"
+                TabCloseRequested="OnOpenTagCloseRequested"
+                TabWidthMode="SizeToContent" />
+
+            <StackPanel Grid.Row="1" Spacing="8">
+                <TextBlock
+                    x:Name="SelectedTagText"
+                    Style="{ThemeResource SubtitleTextBlockStyle}"
+                    Text="{i18n:Loc Key='runtime_tags.select_a_tag'}"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    x:Name="SelectedTagDetail"
+                    FontFamily="Consolas"
+                    FontSize="12"
+                    Opacity="0.72"
+                    TextWrapping="Wrap" />
+                <Border
+                    x:Name="SpawnActionPanel"
+                    Padding="10"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    CornerRadius="4"
+                    Visibility="Collapsed">
+                    <Grid RowSpacing="6" ColumnSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button
+                            x:Name="SpawnTagButton"
+                            Click="OnSpawnSelectedTag"
+                            Content="{i18n:Loc Key='runtime_tags.experimental_spawn'}"
+                            IsEnabled="False"
+                            Style="{StaticResource AccentButtonStyle}" />
+                        <Button
+                            x:Name="SecondarySpawnActionButton"
+                            Grid.Column="1"
+                            Content="{i18n:Loc Key='runtime_tags.replace_unavailable'}"
+                            IsEnabled="False" />
+                        <TextBlock
+                            x:Name="SpawnBridgeText"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Opacity="0.72"
+                            Text="{i18n:Loc Key='runtime_tags.native_bridge_status'}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Grid.Row="1"
+                            Grid.ColumnSpan="3"
+                            Opacity="0.72"
+                            x:Name="SpawnExplanationText"
+                            Text="{i18n:Loc Key='runtime_tags.experimental_spawning_queues_a_build_lock_fba6d7'}"
+                            TextWrapping="Wrap" />
+                        <CheckBox
+                            x:Name="EnableExperimentalSpawnCheckBox"
+                            Grid.Row="2"
+                            Grid.ColumnSpan="3"
+                            Checked="OnExperimentalSpawnConsentChanged"
+                            Content="{i18n:Loc Key='runtime_tags.i_understand_this_experimental_native_cal_685597'}"
+                            Unchecked="OnExperimentalSpawnConsentChanged" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <Pivot x:Name="EditorPivot" Grid.Row="2">
+                <PivotItem Header="{i18n:Loc Key='runtime_tags.schema_fields'}">
+                    <Grid RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock
+                            Text="{i18n:Loc Key='runtime_tags.search_the_whole_tag_including_nested_blo_05896d'}"
+                            TextWrapping="Wrap" />
+                        <Grid Grid.Row="1" ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox
+                                x:Name="FieldSearchBox"
+                                PlaceholderText="{i18n:Loc Key='runtime_tags.search_fields_and_values_inside_this_tag'}"
+                                TextChanged="OnFieldSearchChanged" />
+                            <Button
+                                Grid.Column="1"
+                                Click="OnQuickFieldSearch"
+                                Content="{i18n:Loc Key='runtime_tags.references'}"
+                                Tag="type:reference" />
+                            <Button
+                                Grid.Column="2"
+                                Click="OnQuickFieldSearch"
+                                Content="{i18n:Loc Key='runtime_tags.projectiles'}"
+                                Tag="projectile" />
+                            <Button
+                                Grid.Column="3"
+                                Click="OnQuickFieldSearch"
+                                Content="{i18n:Loc Key='runtime_tags.weapons'}"
+                                Tag="weapon" />
+                        </Grid>
+                        <Grid Grid.Row="2" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                x:Name="BackBlockButton"
+                                Click="OnBackBlock"
+                                Content="{i18n:Loc Key='runtime_tags.back'}"
+                                IsEnabled="False" />
+                            <TextBlock
+                                x:Name="FieldContextText"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Text="{i18n:Loc Key='runtime_tags.root'}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                x:Name="FieldSearchStatusText"
+                                Grid.Column="1"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Opacity="0.65" />
+                            <NumberBox
+                                x:Name="BlockElementBox"
+                                Grid.Column="2"
+                                Header="{i18n:Loc Key='runtime_tags.element'}"
+                                IsEnabled="False"
+                                Minimum="0"
+                                SpinButtonPlacementMode="Compact"
+                                Value="0" />
+                            <Button
+                                x:Name="OpenBlockButton"
+                                Grid.Column="3"
+                                VerticalAlignment="Bottom"
+                                Click="OnOpenBlock"
+                                Content="{i18n:Loc Key='runtime_tags.open_block'}"
+                                IsEnabled="False" />
+                        </Grid>
+                        <ListView
+                            x:Name="FieldList"
+                            Grid.Row="3"
+                            SelectionChanged="OnFieldSelectionChanged"
+                            SelectionMode="Single">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="2,5" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock
+                                                FontFamily="Consolas"
+                                                FontSize="11"
+                                                Text="{Binding OffsetDisplay}" />
+                                            <TextBlock
+                                                FontSize="11"
+                                                Opacity="0.65"
+                                                Text="{Binding Type}" />
+                                        </StackPanel>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Text="{Binding Name}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            FontFamily="Consolas"
+                                            Text="{Binding Value}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </PivotItem>
+                <PivotItem Header="{i18n:Loc Key='runtime_tags.raw_bytes'}">
+                    <Grid RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <NumberBox
+                                x:Name="RawLengthBox"
+                                Header="{i18n:Loc Key='runtime_tags.bytes'}"
+                                Maximum="65536"
+                                Minimum="1"
+                                SpinButtonPlacementMode="Compact"
+                                Value="256" />
+                            <Button
+                                VerticalAlignment="Bottom"
+                                Click="OnReadRaw"
+                                Content="{i18n:Loc Key='runtime_tags.read'}" />
+                        </StackPanel>
+                        <TextBox
+                            x:Name="RawHexBox"
+                            Grid.Row="1"
+                            AcceptsReturn="True"
+                            FontFamily="Consolas"
+                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            TextWrapping="NoWrap"
+                            />
+                        <Button
+                            Grid.Row="2"
+                            HorizontalAlignment="Left"
+                            Click="OnInjectRaw"
+                            Content="{i18n:Loc Key='runtime_tags.inject_exact_length_bytes'}" />
+                    </Grid>
+                </PivotItem>
+            </Pivot>
+
+            <Grid Grid.Row="3" ColumnSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox
+                    x:Name="FieldValueBox"
+                    Header="{i18n:Loc Key='runtime_tags.selected_field_value'}"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="InjectFieldButton"
+                    Grid.Column="1"
+                    VerticalAlignment="Bottom"
+                    Click="OnInjectField"
+                    Content="{i18n:Loc Key='runtime_tags.inject_field'}"
+                    IsEnabled="False"
+                    Style="{StaticResource AccentButtonStyle}" />
+                <Grid
+                    x:Name="TagReferencePanel"
+                    Grid.Row="1"
+                    Grid.ColumnSpan="2"
+                    Margin="0,8,0,0"
+                    ColumnSpacing="8"
+                    Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <AutoSuggestBox
+                        x:Name="TagReferencePicker"
+                        Header="{i18n:Loc Key='runtime_tags.replacement_tag'}"
+                        MaxSuggestionListHeight="420"
+                        PlaceholderText="{i18n:Loc Key='runtime_tags.search_compatible_tags'}"
+                        QueryIcon="Find"
+                        SuggestionChosen="OnTagReferenceSuggestionChosen"
+                        TextChanged="OnTagReferenceTextChanged"
+                        TextMemberPath="DisplayName">
+                        <AutoSuggestBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel
+                                    MinWidth="420"
+                                    Padding="4,6"
+                                    Spacing="2">
+                                    <TextBlock
+                                        FontWeight="SemiBold"
+                                        Text="{Binding LeafName}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        FontFamily="Consolas"
+                                        FontSize="11"
+                                        Opacity="0.68"
+                                        Text="{Binding ReferenceDetail}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </AutoSuggestBox.ItemTemplate>
+                    </AutoSuggestBox>
+                    <Button
+                        x:Name="InjectReferenceButton"
+                        Grid.Column="1"
+                        VerticalAlignment="Bottom"
+                        Click="OnInjectReference"
+                        Content="{i18n:Loc Key='runtime_tags.swap_reference'}"
+                        IsEnabled="False"
+                        Style="{StaticResource AccentButtonStyle}" />
+                    <Button
+                        Grid.Column="2"
+                        VerticalAlignment="Bottom"
+                        Click="OnExperimentalInjectReference"
+                        Content="{i18n:Loc Key='runtime_tags.experimental'}"
+                        ToolTipService.ToolTip="{i18n:Loc Key='runtime_tags.search_every_loaded_tag_and_bypass_the_fi_3a10e0'}" />
+                </Grid>
+            </Grid>
+
+        </Grid>
+            <InfoBar
+                x:Name="PageStatus"
+                Grid.Row="1"
+                IsClosable="True"
+                IsOpen="False" />
+        </Grid>
+        </Border>
+    </Grid>
+</Page>

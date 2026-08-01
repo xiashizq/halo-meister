@@ -1,0 +1,62 @@
+HALO MEISTER - START HERE
+=========================
+
+1. Extract the entire release ZIP to a normal folder.
+   Do not run the app from inside the ZIP and do not copy HaloMeister.exe by
+   itself. Its Assets and runtime files must remain beside it.
+
+2. Run HaloMeister.exe.
+   This release includes the required .NET and Windows App SDK runtime. You do
+   not need the .NET SDK or Visual Studio.
+
+3. Save-data and local-file tools can be used without connecting to the game.
+   Read the in-app Readme before restoring or changing data, and retain your
+   own known-good backups.
+
+4. Prerequisites for live modding tools:
+   - Install Halo: Campaign Evolved and use the supported game build.
+   - In Halo Meister, choose Set up live tools and select the game folder.
+   - Confirm the download. Halo Meister downloads a pinned UE4SS release from
+     the official RE-UE4SS GitHub repository, verifies its SHA-256 checksum,
+     applies Campaign Evolved settings/signatures, and installs its companion
+     bridge. Existing replaced files are backed up first.
+   - Restart the game, load an offline campaign mission, and choose Connect.
+
+5. Runtime tools are for offline campaign use only. Native tools are locked to
+   verified game builds and intentionally refuse unknown builds.
+
+6. Retail-build restrictions:
+   - PlayFab save data and entitlements are read-only. Patch settings is
+     disabled.
+   - Customization always allows Mark VI and game-default appearances. Other
+     armor and weapon skins require ownership that Halo Meister can verify from
+     the loaded PlayFab save; unverifiable store-license choices are disabled.
+     Armor Mixer filters the player's foundation and donor armor to Mark VI and
+     entitlement-verified promotional choices. Weapon Loader exposes only
+     default weapon appearances because it cannot verify per-item ownership.
+     Spartan NPC spawning remains unrestricted; the ownership rule applies to
+     the player's equipped appearance, not spawned characters.
+     This prevents the retail app from bypassing cosmetic ownership and reduces
+     copyright, licensing, and DMCA takedown risk.
+
+Windows may identify an unsigned community build as coming from an unknown
+publisher. Download releases only from the Halo Meister project source and
+verify the accompanying SHA256 file when one is provided.
+
+Troubleshooting
+---------------
+
+- "Bundled definitions are missing":
+  Extract the complete ZIP again; keep the Assets folder beside the EXE.
+
+- "UE4SS installation was not found":
+  Choose Set up live tools and select the folder containing the Campaign Evolved
+  installation. The folder must contain HaloCampaignEvolved.exe or
+  HaloSimulation_tag_release.dll under its Meteorite binaries path.
+
+- "Bridge not ready":
+  Repair/update the bridge, restart the game, load a mission, and reconnect.
+
+- "Build verification failed":
+  Stop. The game updated and the guarded native feature is not validated for
+  that version yet.

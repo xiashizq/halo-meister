@@ -1,0 +1,133 @@
+# One-click clean portable package (self-contained win-x64).
+# GitHub → Actions → "Package (纯净版)" → Run workflow → Download artifact.
+name: Package (纯净版)
+
+run-name: Package ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Also create GitHub Release vX.Y.Z (from Directory.Build.props)"
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark GitHub Release as prerelease"
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      create_release:
+        description: "Also create GitHub Release"
+        type: boolean
+        required: false
+        default: false
+      prerelease:
+        description: "Mark GitHub Release as prerelease"
+        type: boolean
+        required: false
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build clean win-x64 ZIP
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content -LiteralPath .\Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.Version
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Directory.Build.props contains an invalid SemVer: $version"
+          }
+          if ("${{ github.event_name }}" -eq "push" -and
+              "${{ github.ref_name }}" -ne "v$version") {
+            throw "Tag ${{ github.ref_name }} does not match canonical version v$version. Update Directory.Build.props first."
+          }
+          "value=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Canonical version: $version"
+
+      - name: Publish clean portable package
+        shell: pwsh
+        run: .\publish-release.ps1 -Version "${{ steps.version.outputs.value }}"
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HaloMeister-${{ steps.version.outputs.value }}-win-x64
+          path: |
+            artifacts/release/HaloMeister-${{ steps.version.outputs.value }}-win-x64.zip
+            artifacts/release/HaloMeister-${{ steps.version.outputs.value }}-win-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create / update GitHub Release
+        if: >-
+          startsWith(github.ref, 'refs/tags/v') ||
+          inputs.create_release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ steps.version.outputs.value }}"
+          $tag = "${{ steps.version.outputs.tag }}"
+          $zip = "artifacts/release/HaloMeister-$version-win-x64.zip"
+          $sha = "$zip.sha256"
+          $prerelease = "${{ inputs.prerelease }}" -eq "true"
+          $title = "Halo Meister $version"
+          $isTagPush = "${{ github.event_name }}" -eq "push"
+          # Fixed boilerplate — no hand-written or auto-generated changelogs.
+          $notes = @"
+## Changes
+- Fixed some issues
+- Added some features
+"@
+
+          $existing = $null
+          try { $existing = gh release view $tag 2>$null } catch { $existing = $null }
+
+          if ($existing) {
+            Write-Host "Updating existing release $tag"
+            gh release upload $tag $zip $sha --clobber
+            if ($prerelease) {
+              gh release edit $tag --prerelease --title $title --notes $notes
+            } else {
+              gh release edit $tag --latest --title $title --notes $notes
+            }
+            return
+          }
+
+          Write-Host "Creating release $tag"
+          $ghArgs = @(
+            "release", "create", $tag, $zip, $sha,
+            "--title", $title,
+            "--notes", $notes
+          )
+          if ($prerelease) { $ghArgs += "--prerelease" }
+          if (-not $isTagPush) {
+            $ghArgs += @("--target", "${{ github.sha }}")
+          }
+          & gh @ghArgs

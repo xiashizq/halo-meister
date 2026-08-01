@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>HaloMeister.App</RootNamespace>
+    <AssemblyName>HaloMeister</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\HaloMeisterIcon.ico</ApplicationIcon>
+    <Description>Campaign save editor and offline runtime modding toolbox for Halo: Campaign Evolved.</Description>
+
+    <!-- WinUI 3 does not support AnyCPU. -->
+    <Platforms>x64;arm64</Platforms>
+    <RuntimeIdentifier Condition="'$(Platform)' != 'arm64'">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(Platform)' == 'arm64'">win-arm64</RuntimeIdentifier>
+
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+
+    <!-- Unpackaged + self contained: no MSIX, no separate runtime install, just an .exe. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- Release is the end-user retail build produced by publish-release.ps1. -->
+    <DefineConstants>$(DefineConstants);RETAIL</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
+    <PackageReference Include="Titanium.Web.Proxy" Version="3.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HaloMeister.Core\HaloMeister.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\HaloMeisterIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\HaloMeisterIcon.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Customization\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\DifficultyIcons\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\WeaponIcons\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\SkullIcons\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Definitions\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\GameBuildProfiles.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\HaloScript\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Keep historical local bridge builds out of source and release packages. -->
+    <Content Include="Assets\UE4SS\bridge.lua" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\UE4SS\halomeister_blam_v45.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\UE4SSLoader\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Native\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\RemoteControl\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\i18n\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\START_HERE.txt" Link="START_HERE.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

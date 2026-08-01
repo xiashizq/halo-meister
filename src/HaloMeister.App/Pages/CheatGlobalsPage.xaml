@@ -1,0 +1,327 @@
+<Page
+    x:Class="HaloMeister.App.Pages.CheatGlobalsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+
+    <Grid Padding="24,24,24,16" RowSpacing="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="5">
+            <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='cheat_globals.gameplay_modifiers'}" />
+            <TextBlock
+                Style="{StaticResource LivePageDescriptionStyle}"
+                Text="{i18n:Loc Key='cheat_globals.tune_the_current_offline_mission_with_foc_002796'}" />
+        </StackPanel>
+
+        <Border Grid.Row="1" Style="{StaticResource LiveToolInsetStyle}">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="BridgeStatusText"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Grid.Column="1"
+                    Width="20"
+                    Height="20"
+                    IsActive="False" />
+            </Grid>
+        </Border>
+
+        <Pivot Grid.Row="2">
+            <PivotItem Header="{i18n:Loc Key='cheat_globals.quick_cheats'}">
+                <ScrollViewer
+                    x:Name="CheatsScrollViewer"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+                    <StackPanel Padding="0,12,0,16" Spacing="12">
+                        <Border Style="{StaticResource LiveToolCardStyle}">
+                            <Grid ColumnSpacing="18">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3">
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.mission_cheats'}" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{i18n:Loc Key='cheat_globals.load_the_current_state_then_switch_indivi_427e72'}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="9">
+                                    <Button
+                                        x:Name="RefreshButton"
+                                        Click="OnRefresh"
+                                        Content="{i18n:Loc Key='cheat_globals.load_cheats'}"
+                                        IsEnabled="False" />
+                                    <Button
+                                        x:Name="DisableAllButton"
+                                        Click="OnDisableAll"
+                                        Content="{i18n:Loc Key='cheat_globals.turn_all_off'}"
+                                        IsEnabled="False" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border
+                            x:Name="CheatsEmptyPanel"
+                            Padding="28"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="10">
+                            <StackPanel HorizontalAlignment="Center" Spacing="6">
+                                <FontIcon
+                                    HorizontalAlignment="Center"
+                                    FontSize="24"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Glyph="&#xE90F;" />
+                                <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.load_the_mission_cheats'}" />
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='cheat_globals.start_or_resume_an_offline_mission_then_c_1672f7'}"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <ItemsControl x:Name="GlobalsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,8" Style="{StaticResource LiveToolInsetStyle}">
+                                        <Grid ColumnSpacing="18">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="3">
+                                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                <TextBlock
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{Binding Description}"
+                                                    TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <ToggleSwitch
+                                                Grid.Column="1"
+                                                MinWidth="92"
+                                                VerticalAlignment="Center"
+                                                IsOn="{Binding IsEnabled, Mode=TwoWay}"
+                                                OffContent="{i18n:Loc Key='cheat_globals.off'}"
+                                                OnContent="{i18n:Loc Key='cheat_globals.on'}"
+                                                Toggled="OnGlobalToggled" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+
+            <PivotItem Header="{i18n:Loc Key='cheat_globals.player_traits'}">
+                <ScrollViewer
+                    x:Name="ModifiersScrollViewer"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+                    <StackPanel Padding="0,12,0,16" Spacing="12">
+                        <Border Style="{StaticResource LiveToolCardStyle}">
+                            <Grid ColumnSpacing="18">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3">
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.player_trait_profile'}" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{i18n:Loc Key='cheat_globals.adjust_survivability_combat_movement_and_8de132'}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="9">
+                                    <Button
+                                        x:Name="RefreshModifiersButton"
+                                        Click="OnRefreshModifiers"
+                                        Content="{i18n:Loc Key='cheat_globals.load_traits'}" />
+                                    <Button
+                                        x:Name="RestoreModifiersButton"
+                                        Click="OnRestoreModifiers"
+                                        Content="{i18n:Loc Key='cheat_globals.restore_changes'}"
+                                        IsEnabled="False" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border
+                            x:Name="ModifiersEmptyPanel"
+                            Padding="28"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="10">
+                            <StackPanel HorizontalAlignment="Center" Spacing="6">
+                                <FontIcon
+                                    HorizontalAlignment="Center"
+                                    FontSize="24"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Glyph="&#xE713;" />
+                                <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.load_the_player_traits'}" />
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='cheat_globals.choose_load_traits_after_entering_an_offl_051ba4'}"
+                                    TextAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <ItemsControl x:Name="ModifierList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <ItemsWrapGrid
+                                        ItemWidth="490"
+                                        Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,10,10" Style="{StaticResource LiveToolCardStyle}">
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="150" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="4">
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding DisplayName}" TextWrapping="Wrap" />
+                                                <TextBlock
+                                                    Style="{StaticResource CompactSafetyTextStyle}"
+                                                    Text="{Binding Description}" />
+                                            </StackPanel>
+                                            <ComboBox
+                                                Grid.Column="1"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Center"
+                                                DisplayMemberPath="Label"
+                                                ItemsSource="{Binding Options}"
+                                                SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
+                                                SelectionChanged="OnModifierChanged" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Border Style="{StaticResource LiveToolInsetStyle}">
+                            <TextBlock
+                                Style="{StaticResource CompactSafetyTextStyle}"
+                                Text="{i18n:Loc Key='cheat_globals.if_the_current_player_body_retained_copie_dc2bfe'}" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+
+            <PivotItem Header="{i18n:Loc Key='cheat_globals.allegiance'}">
+                <ScrollViewer
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+                    <StackPanel Padding="0,12,0,16" Spacing="12">
+                        <Border Style="{StaticResource LiveToolCardStyle}">
+                            <StackPanel Spacing="18">
+                                <StackPanel Spacing="3">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.player_allegiance'}" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{i18n:Loc Key='cheat_globals.temporarily_change_which_campaign_faction_57126c'}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="280" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox
+                                        x:Name="PlayerTeamComboBox"
+                                        HorizontalAlignment="Stretch"
+                                        DisplayMemberPath="Label"
+                                        IsEnabled="False"
+                                        PlaceholderText="{i18n:Loc Key='cheat_globals.load_current_allegiance'}"
+                                        SelectionChanged="OnPlayerTeamChanged" />
+                                    <Button
+                                        x:Name="LoadPlayerTeamButton"
+                                        Grid.Column="1"
+                                        Click="OnLoadPlayerTeam"
+                                        Content="{i18n:Loc Key='cheat_globals.load_current'}" />
+                                    <Button
+                                        x:Name="RestorePlayerTeamButton"
+                                        Grid.Column="2"
+                                        Click="OnRestorePlayerTeam"
+                                        Content="{i18n:Loc Key='cheat_globals.restore_original'}"
+                                        IsEnabled="False" />
+                                </Grid>
+
+                                <Border Style="{StaticResource LiveToolInsetStyle}">
+                                    <StackPanel Spacing="3">
+                                        <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.what_this_selection_does'}" />
+                                        <TextBlock
+                                            x:Name="PlayerTeamDescriptionText"
+                                            Style="{StaticResource CompactSafetyTextStyle}"
+                                            Text="{i18n:Loc Key='cheat_globals.load_the_controlled_player_s_current_alle_09bc42'}" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource LiveToolInsetStyle}">
+                            <TextBlock
+                                Style="{StaticResource CompactSafetyTextStyle}"
+                                Text="{i18n:Loc Key='cheat_globals.allegiance_applies_only_to_the_current_pl_77e9dd'}" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+        </Pivot>
+
+        <Border Grid.Row="3" Style="{StaticResource LiveToolInsetStyle}">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="SummaryText"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='cheat_globals.load_an_offline_campaign_mission_then_cho_e859a5'}"
+                    TextWrapping="Wrap" />
+                <StackPanel
+                    x:Name="SuccessPanel"
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="7"
+                    Visibility="Collapsed">
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                        Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                        Glyph="&#xE73E;" />
+                    <TextBlock
+                        x:Name="SuccessStatusText"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <InfoBar x:Name="StatusBar" Grid.Row="4" IsOpen="False" />
+    </Grid>
+</Page>

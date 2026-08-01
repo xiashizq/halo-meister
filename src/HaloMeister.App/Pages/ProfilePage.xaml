@@ -1,0 +1,267 @@
+<Page
+    x:Class="HaloMeister.App.Pages.ProfilePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization"
+    xmlns:pages="using:HaloMeister.App.Pages">
+
+    <Grid
+        MaxWidth="1120"
+        Padding="28,24,28,28"
+        HorizontalAlignment="Stretch"
+        RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock
+                Style="{ThemeResource TitleTextBlockStyle}"
+                Text="{i18n:Loc Key='profile.profile_entitlements'}" />
+            <TextBlock
+                x:Name="PageDescription"
+                MaxWidth="760"
+                HorizontalAlignment="Left"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{i18n:Loc Key='profile.review_every_entitlement_supported_by_the_3bbd57'}"
+                TextWrapping="Wrap" />
+        </StackPanel>
+
+        <pages:SaveDataAlert Grid.Row="1" />
+
+        <Border
+            Grid.Row="2"
+            Padding="20"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="10">
+            <Grid RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="3">
+                        <TextBlock
+                            Style="{ThemeResource SubtitleTextBlockStyle}"
+                            Text="{i18n:Loc Key='profile.available_entitlements'}" />
+                        <TextBlock
+                            x:Name="EntitlementSummary"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{i18n:Loc Key='profile.load_save_data_to_check_ownership'}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <Button x:Name="UnlockAllButton" Click="OnUnlockAll" Content="{i18n:Loc Key='profile.unlock_all'}" />
+                        <Button x:Name="LockAllButton" Click="OnLockAll" Content="{i18n:Loc Key='profile.lock_all'}" />
+                    </StackPanel>
+                </Grid>
+
+                <InfoBar
+                    x:Name="EntitlementNotice"
+                    Grid.Row="1"
+                    IsClosable="False"
+                    IsOpen="True"
+                    Message="{i18n:Loc Key='profile.these_values_edit_the_loaded_save_use_upl_3a3db9'}"
+                    Severity="Informational" />
+
+                <Grid Grid.Row="2" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="180" />
+                    </Grid.ColumnDefinitions>
+                    <AutoSuggestBox
+                        x:Name="EntitlementSearch"
+                        QueryIcon="Find"
+                        TextChanged="OnFilterChanged"
+                        PlaceholderText="{i18n:Loc Key='profile.search_names_or_ids'}" />
+                    <ComboBox
+                        x:Name="StatusFilter"
+                        Grid.Column="1"
+                        HorizontalAlignment="Stretch"
+                        SelectionChanged="OnStatusFilterChanged"
+                        SelectedIndex="0">
+                        <x:String>All states</x:String>
+                        <x:String>Unlocked</x:String>
+                        <x:String>Locked</x:String>
+                    </ComboBox>
+                </Grid>
+
+                <ListView
+                    x:Name="EntitlementList"
+                    Grid.Row="3"
+                    IsItemClickEnabled="False"
+                    SelectionMode="None">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,8" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Border
+                                Padding="16,12"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                                <Grid ColumnSpacing="18">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock
+                                                Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                                Text="{Binding Display}" />
+                                            <Border
+                                                Padding="7,2"
+                                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                CornerRadius="10">
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{Binding Category}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock
+                                            FontFamily="Consolas"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding Id}" />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        Grid.Column="1"
+                                        MinWidth="118"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding IsEditable}"
+                                        OffContent="{Binding Status}"
+                                        OnContent="{Binding Status}"
+                                        IsOn="{Binding IsUnlocked, Mode=TwoWay}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="12">
+                <Expander x:Name="CustomEntitlementExpander" Header="{i18n:Loc Key='profile.add_a_custom_or_future_entitlement'}" IsExpanded="False">
+                    <StackPanel Padding="0,12,0,4" Spacing="8">
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{i18n:Loc Key='profile.unknown_values_are_preserved_and_appear_a_be37bb'}"
+                            TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBox
+                                x:Name="NewEntitlement"
+                                Width="360"
+                                PlaceholderText="{i18n:Loc Key='profile.entitlement_id'}" />
+                            <Button
+                                x:Name="AddEntitlementButton"
+                                Click="OnAddEntitlement"
+                                Content="{i18n:Loc Key='profile.add_entitlement'}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="{i18n:Loc Key='profile.advanced_profile_data'}" IsExpanded="False">
+                    <StackPanel Padding="0,16,0,4" Spacing="18">
+                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='profile.profile_flags'}" />
+                        <ItemsControl x:Name="FlagList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Margin="0,0,0,8"
+                                        Padding="14,10"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        CornerRadius="8">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding Display}" />
+                                                <TextBlock
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                                    Text="{Binding Path}" />
+                                            </StackPanel>
+                                            <ToggleSwitch
+                                                Grid.Column="1"
+                                                MinWidth="0"
+                                                IsOn="{Binding Value, Mode=TwoWay}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='profile.training_bitvectors'}" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            TextWrapping="Wrap"
+                            Text="{i18n:Loc Key='profile.packed_tutorial_prompt_flags_decimal_and_d9cda2'}" />
+                        <ItemsControl x:Name="NumberList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Margin="0,0,0,8"
+                                        Padding="14"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        CornerRadius="8">
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="180" />
+                                                <ColumnDefinition Width="110" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding Display}" />
+                                                <TextBlock
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                                    Text="{Binding Path}" />
+                                            </StackPanel>
+                                            <TextBox
+                                                Grid.Column="1"
+                                                Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                                            <TextBlock
+                                                Grid.Column="2"
+                                                VerticalAlignment="Center"
+                                                FontFamily="Consolas"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{Binding Hex}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

@@ -1,0 +1,9 @@
+{
+  "name": "Halo Meister Remote",
+  "short_name": "Halo Meister",
+  "description": "Local phone remote for Halo Meister runtime tools.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0b16",
+  "theme_color": "#171329"
+}

@@ -1,0 +1,402 @@
+<Page
+    x:Class="HaloMeister.App.Pages.WeaponLoaderPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+    <Grid Padding="24" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel
+                MaxWidth="840"
+                HorizontalAlignment="Left"
+                Spacing="4">
+                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='weapon_loader.weapon_workshop'}" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='weapon_loader.pick_up_loaded_weapons_apply_their_author_bd270e'}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    x:Name="RefreshButton"
+                    Click="OnRefresh"
+                    Content="{i18n:Loc Key='weapon_loader.refresh'}"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="ScanButton"
+                    Click="OnScan"
+                    Content="{i18n:Loc Key='weapon_loader.scan_loaded_weapons'}"
+                    IsEnabled="False"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="420" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid RowSpacing="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="16,14,16,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                            Text="{i18n:Loc Key='weapon_loader.loaded_weapons'}" />
+                        <TextBlock
+                            x:Name="CountText"
+                            Grid.Column="1"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            FontSize="12"
+                            Text="{i18n:Loc Key='weapon_loader.not_scanned'}" />
+                    </Grid>
+
+                    <TextBox
+                        x:Name="SearchBox"
+                        Grid.Row="1"
+                        Margin="16,0"
+                        IsEnabled="False"
+                        PlaceholderText="{i18n:Loc Key='weapon_loader.search_weapons_or_tag_paths'}"
+                        TextChanged="OnSearchChanged" />
+
+                    <ListView
+                        x:Name="WeaponList"
+                        Grid.Row="2"
+                        Margin="8,0,8,8"
+                        IsItemClickEnabled="True"
+                        ItemClick="OnWeaponClicked"
+                        SelectionMode="Single">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid MinHeight="68" Padding="4,5" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="92" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border
+                                        Width="92"
+                                        Height="52"
+                                        Padding="5"
+                                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                        CornerRadius="6">
+                                        <Image Source="{Binding ImageUri}" Stretch="Uniform" />
+                                    </Border>
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Spacing="2">
+                                        <TextBlock
+                                            FontWeight="SemiBold"
+                                            Text="{Binding Name}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            FontFamily="Consolas"
+                                            FontSize="10"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding TagPath}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Border>
+
+            <Border
+                Grid.Column="1"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid>
+                    <StackPanel
+                        x:Name="EmptyState"
+                        Width="420"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="8">
+                        <FontIcon
+                            FontSize="32"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="&#xE8B7;" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Style="{ThemeResource SubtitleTextBlockStyle}"
+                            Text="{i18n:Loc Key='weapon_loader.choose_a_weapon'}" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{i18n:Loc Key='weapon_loader.select_a_loaded_weapon_from_the_catalog_t_39e605'}"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <ScrollViewer
+                        x:Name="SelectionDetails"
+                        Padding="20"
+                        Visibility="Collapsed">
+                        <StackPanel Spacing="18">
+                            <Grid ColumnSpacing="22">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="280" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border
+                                    Height="164"
+                                    Padding="16"
+                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                    CornerRadius="8">
+                                    <Image
+                                        x:Name="SelectedWeaponImage"
+                                        Stretch="Uniform" />
+                                </Border>
+
+                                <StackPanel
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Spacing="8">
+                                    <TextBlock
+                                        x:Name="SelectedWeaponText"
+                                        Style="{ThemeResource SubtitleTextBlockStyle}"
+                                        TextWrapping="Wrap" />
+                                    <TextBlock
+                                        x:Name="SelectedPathText"
+                                        FontFamily="Consolas"
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap" />
+                                    <Button
+                                        x:Name="LoadButton"
+                                        Margin="0,8,0,0"
+                                        HorizontalAlignment="Left"
+                                        Click="OnLoadWeapon"
+                                        Content="{i18n:Loc Key='weapon_loader.pick_up_and_equip'}"
+                                        IsEnabled="False"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <InfoBar
+                                IsClosable="False"
+                                IsOpen="True"
+                                Severity="Informational"
+                                Title="{i18n:Loc Key='weapon_loader.uses_the_game_s_normal_pickup_rules'}"
+                                Message="{i18n:Loc Key='weapon_loader.the_engine_creates_and_equips_the_weapon_c49c61'}" />
+
+                            <Border
+                                Padding="16"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                CornerRadius="8">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Spacing="3">
+                                        <TextBlock
+                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                            Text="{i18n:Loc Key='weapon_loader.weapon_variant'}" />
+                                        <TextBlock
+                                            x:Name="VariantSummaryText"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox
+                                            x:Name="VariantPicker"
+                                            HorizontalAlignment="Stretch"
+                                            IsEnabled="False"
+                                            SelectionChanged="OnVariantSelectionChanged">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel MinWidth="300" Padding="2,4" Spacing="2">
+                                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                                        <TextBlock
+                                                            FontFamily="Consolas"
+                                                            FontSize="10"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Text="{Binding Detail}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <Button
+                                            x:Name="ApplyVariantButton"
+                                            Grid.Column="1"
+                                            Click="OnApplyVariant"
+                                            Content="{i18n:Loc Key='weapon_loader.apply_variant'}"
+                                            IsEnabled="False" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border
+                                Padding="16"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                CornerRadius="8">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Spacing="3">
+                                        <TextBlock
+                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                            Text="{i18n:Loc Key='weapon_loader.projectile'}" />
+                                        <TextBlock
+                                            x:Name="CurrentProjectileText"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <AutoSuggestBox
+                                            x:Name="ProjectilePicker"
+                                            IsEnabled="False"
+                                            MaxSuggestionListHeight="420"
+                                            PlaceholderText="{i18n:Loc Key='weapon_loader.search_loaded_projectiles'}"
+                                            QueryIcon="Find"
+                                            GotFocus="OnProjectilePickerGotFocus"
+                                            SuggestionChosen="OnProjectileSuggestionChosen"
+                                            TextChanged="OnProjectileTextChanged"
+                                            TextMemberPath="DisplayName">
+                                            <AutoSuggestBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel MinWidth="360" Padding="4,6" Spacing="2">
+                                                        <TextBlock FontWeight="SemiBold" Text="{Binding LeafName}" />
+                                                        <TextBlock
+                                                            FontFamily="Consolas"
+                                                            FontSize="11"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Text="{Binding Name}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </AutoSuggestBox.ItemTemplate>
+                                        </AutoSuggestBox>
+                                        <Button
+                                            x:Name="SwapButton"
+                                            Grid.Column="1"
+                                            Click="OnSwap"
+                                            Content="{i18n:Loc Key='weapon_loader.swap_projectile'}"
+                                            IsEnabled="False" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border
+                                x:Name="StanchionPanel"
+                                Padding="16"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                CornerRadius="8"
+                                Visibility="Collapsed">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Spacing="3">
+                                        <TextBlock
+                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                            Text="{i18n:Loc Key='weapon_loader.stanchion_compatibility'}" />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{i18n:Loc Key='weapon_loader.inspect_this_packaged_weapon_against_the_f5f954'}"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button
+                                            x:Name="ImportStanchionButton"
+                                            Click="OnImportStanchion"
+                                            Content="{i18n:Loc Key='weapon_loader.load_and_inspect'}"
+                                            IsEnabled="False" />
+                                        <Button
+                                            x:Name="ApplySubstitutionsButton"
+                                            Click="OnApplySubstitutions"
+                                            Content="{i18n:Loc Key='weapon_loader.apply_compatibility_fixes'}"
+                                            IsEnabled="False" />
+                                    </StackPanel>
+                                    <TextBlock
+                                        x:Name="ImportSummaryText"
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap" />
+                                    <ListView
+                                        x:Name="DependencyList"
+                                        MaxHeight="190"
+                                        SelectionMode="None">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Padding="2,4" Spacing="2">
+                                                    <TextBlock
+                                                        FontFamily="Consolas"
+                                                        FontSize="10"
+                                                        Text="{Binding FieldPath}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        Opacity="0.7"
+                                                        Text="{Binding MissingReference}" />
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        Text="{Binding ReplacementText}"
+                                                        TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2" RowSpacing="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock
+                x:Name="ConnectionText"
+                FontSize="11"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{i18n:Loc Key='weapon_loader.no_weapon_scan_yet'}" />
+            <InfoBar
+                x:Name="StatusBar"
+                Grid.Row="1"
+                IsClosable="True"
+                IsOpen="False" />
+        </Grid>
+    </Grid>
+</Page>

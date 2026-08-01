@@ -1,0 +1,211 @@
+<Window
+    x:Class="HaloMeister.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization"
+    Title="Halo Meister">
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border
+            Grid.Row="0"
+            Padding="18,10,14,10"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1">
+            <Grid ColumnSpacing="18">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="11">
+                    <Border
+                        Width="32"
+                        Height="32"
+                        CornerRadius="8">
+                        <Image
+                            Source="ms-appx:///Assets/HaloMeisterIcon.png"
+                            Stretch="UniformToFill" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center" Spacing="0">
+                        <TextBlock FontSize="15" FontWeight="SemiBold" Text="Halo Meister" />
+                        <TextBlock
+                            x:Name="AppTaglineText"
+                            FontSize="11"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{i18n:Loc Key='shell.meteorite_saves_settings_live_tools'}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="10">
+                    <ProgressRing
+                        x:Name="GameConnectionProgress"
+                        Width="18"
+                        Height="18"
+                        IsActive="False" />
+                    <Ellipse
+                        x:Name="GameConnectionIndicator"
+                        Width="8"
+                        Height="8"
+                        Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                    <TextBlock
+                        x:Name="GameConnectionText"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='shell.game_disconnected'}" />
+                    <Button
+                        x:Name="GameConnectionButton"
+                        Click="OnConnectGame"
+                        Content="{i18n:Loc Key='shell.connect'}"
+                        Style="{StaticResource AccentButtonStyle}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border
+            x:Name="CloudActionsBar"
+            Grid.Row="1"
+            Padding="16,6"
+            Background="{ThemeResource LayerFillColorAltBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <TextBlock x:Name="CloudTitleText" FontWeight="SemiBold" Text="{i18n:Loc Key='shell.playfab_cloud_save'}" />
+                    <TextBlock
+                        x:Name="CloudContextText"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='shell.authenticate_download_then_review_your_ca_df834a'}" />
+                </StackPanel>
+                <CommandBar
+                    Grid.Column="1"
+                    Background="Transparent"
+                    DefaultLabelPosition="Right"
+                    IsOpen="False">
+                    <AppBarButton
+                        x:Name="SaveAuthButton"
+                        Click="OnSaveAuth"
+                        Icon="Permissions"
+                        Label="{i18n:Loc Key='shell.authenticate'}" />
+                    <AppBarButton
+                        x:Name="GetUserDataButton"
+                        Click="OnGetUserData"
+                        Icon="Download"
+                        IsEnabled="False"
+                        Label="{i18n:Loc Key='shell.download_save'}" />
+                    <AppBarButton
+                        x:Name="PatchSettingsButton"
+                        Click="OnPatchSettings"
+                        Icon="Upload"
+                        IsEnabled="False"
+                        Label="{i18n:Loc Key='shell.upload_changes'}" />
+                </CommandBar>
+            </Grid>
+        </Border>
+
+        <InfoBar
+            x:Name="Status"
+            Grid.Row="2"
+            IsClosable="True"
+            IsOpen="False" />
+
+        <NavigationView
+            x:Name="Nav"
+            Grid.Row="3"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            OpenPaneLength="264"
+            PaneDisplayMode="Left"
+            SelectionChanged="OnNavSelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem
+                    x:Name="HomeNavItem"
+                    Content="{i18n:Loc Key='shell.home'}"
+                    Icon="Home"
+                    Tag="home" />
+
+                <NavigationViewItem
+                    x:Name="ProgressProfileNavItem"
+                    Content="{i18n:Loc Key='shell.progress_profile'}"
+                    Icon="Map"
+                    IsExpanded="False"
+                    SelectsOnInvoked="False">
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem
+                            x:Name="CampaignProgressNavItem"
+                            Content="{i18n:Loc Key='shell.campaign_progress'}"
+                            Icon="Map"
+                            Tag="campaign-progress" />
+                        <NavigationViewItem x:Name="ProfileNavItem" Content="{i18n:Loc Key='shell.profile_entitlements'}" Icon="Contact" Tag="profile" />
+                        <NavigationViewItem x:Name="RawNavItem" Content="{i18n:Loc Key='shell.raw_save_data'}" Icon="Document" Tag="raw" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+
+                <NavigationViewItem
+                    x:Name="GameFilesNavItem"
+                    Content="{i18n:Loc Key='shell.game_files'}"
+                    Icon="Folder"
+                    IsExpanded="False"
+                    SelectsOnInvoked="False">
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="CustomizationNavItem" Content="{i18n:Loc Key='shell.customization'}" Icon="Edit" Tag="customization" />
+                        <NavigationViewItem x:Name="ConfigNavItem" Content="{i18n:Loc Key='shell.game_settings'}" Icon="Setting" Tag="config" />
+                        <NavigationViewItem x:Name="GameSavesNavItem" Content="{i18n:Loc Key='shell.game_saves'}" Icon="SaveLocal" Tag="game-saves" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+
+                <NavigationViewItem
+                    x:Name="LiveToolsNavItem"
+                    Content="{i18n:Loc Key='shell.live_tools'}"
+                    Icon="Play"
+                    IsExpanded="False"
+                    SelectsOnInvoked="False">
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="GameplayNavItem" Content="{i18n:Loc Key='shell.gameplay'}" Icon="Repair" Tag="live-gameplay" />
+                        <NavigationViewItem x:Name="SpawnEquipNavItem" Content="{i18n:Loc Key='shell.spawn_equip'}" Icon="Add" Tag="live-spawn" />
+                        <NavigationViewItem x:Name="PlayerAppearanceNavItem" Content="{i18n:Loc Key='shell.player_appearance'}" Icon="Contact" Tag="live-player" />
+                        <NavigationViewItem x:Name="CameraWorldNavItem" Content="{i18n:Loc Key='shell.camera_world'}" Icon="Video" Tag="live-world" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+
+                <NavigationViewItem
+                    x:Name="AdvancedNavItem"
+                    Content="{i18n:Loc Key='shell.advanced'}"
+                    Icon="Repair"
+                    IsExpanded="False"
+                    SelectsOnInvoked="False">
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="RuntimeTagsNavItem" Content="{i18n:Loc Key='shell.realtime_tags'}" Icon="Bullets" Tag="runtime-tags" />
+                        <NavigationViewItem x:Name="ScriptingNavItem" Content="{i18n:Loc Key='shell.scripting'}" Icon="Keyboard" Tag="scripting" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem x:Name="RemoteNavItem" Content="{i18n:Loc Key='shell.phone_remote'}" Icon="World" Tag="phone-remote" />
+                <NavigationViewItem x:Name="SetupNavItem" Content="{i18n:Loc Key='shell.setup'}" Icon="Setting" Tag="setup" />
+                <NavigationViewItem x:Name="HelpNavItem" Content="{i18n:Loc Key='shell.help'}" Icon="Help" Tag="help" />
+                <NavigationViewItem x:Name="CommunityNavItem" Content="{i18n:Loc Key='shell.community_links'}" Icon="People" Tag="community" />
+            </NavigationView.FooterMenuItems>
+
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+    </Grid>
+</Window>

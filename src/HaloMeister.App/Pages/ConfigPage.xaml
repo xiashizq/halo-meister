@@ -1,0 +1,273 @@
+<Page
+    x:Class="HaloMeister.App.Pages.ConfigPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+
+    <Grid Padding="28,24,28,28" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Spacing="3">
+                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='config.game_settings'}" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='config.tune_campaign_evolved_settings_without_ed_b9025b'}" />
+            </StackPanel>
+
+            <StackPanel
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    Click="OnReload"
+                    ToolTipService.ToolTip="{i18n:Loc Key='config.discard_saved_state_and_reload_every_file_e5d3d8'}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE72C;" />
+                        <TextBlock Text="{i18n:Loc Key='config.reload'}" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    Click="OnOpenConfigFolder"
+                    ToolTipService.ToolTip="{i18n:Loc Key='config.open_the_meteorite_saved_folder'}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE838;" />
+                        <TextBlock Text="{i18n:Loc Key='config.open_folder'}" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="SaveButton"
+                    Click="OnSave"
+                    IsEnabled="False"
+                    Style="{StaticResource AccentButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE74E;" />
+                        <TextBlock Text="{i18n:Loc Key='config.save_changes'}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Border
+            Grid.Row="1"
+            Padding="14,10"
+            Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+            BorderBrush="{ThemeResource SystemFillColorCautionBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <FontIcon
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                    Glyph="&#xE7BA;" />
+                <TextBlock
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    TextWrapping="Wrap">
+                    <Run FontWeight="SemiBold" Text="{i18n:Loc Key='config.live_halo_settings_are_supported'}" />
+                    <Run Text="{i18n:Loc Key='config.when_the_ue4ss_bridge_is_ready_saving_hal_562b2d'}" />
+                </TextBlock>
+            </Grid>
+        </Border>
+
+        <Border
+            Grid.Row="2"
+            MinHeight="420"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300" />
+                    <ColumnDefinition Width="1" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Padding="14,18,14,14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock
+                        Margin="8,0,0,10"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Text="{i18n:Loc Key='config.config_files'}" />
+
+                    <ListView
+                        x:Name="DocumentList"
+                        Grid.Row="1"
+                        Margin="0,0,0,14"
+                        IsItemClickEnabled="True"
+                        SelectionChanged="OnDocumentSelectionChanged"
+                        SelectionMode="Single"
+                        SingleSelectionFollowsFocus="False" />
+
+                    <Border
+                        Grid.Row="2"
+                        Padding="12"
+                        Background="{ThemeResource LayerFillColorAltBrush}"
+                        CornerRadius="8">
+                        <StackPanel Spacing="8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='config.safety_backups'}" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        FontSize="12"
+                                        Text="{i18n:Loc Key='config.snapshots_of_every_editable_file'}" />
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="1"
+                                    Padding="8,4"
+                                    Click="OnOpenBackupFolder"
+                                    ToolTipService.ToolTip="{i18n:Loc Key='config.open_backup_folder'}">
+                                    <FontIcon FontSize="13" Glyph="&#xE838;" />
+                                </Button>
+                            </Grid>
+                            <ComboBox
+                                x:Name="BackupPicker"
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="DisplayName"
+                                PlaceholderText="{i18n:Loc Key='config.no_backups_yet'}" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    HorizontalAlignment="Stretch"
+                                    Click="OnCreateBackup"
+                                    Content="{i18n:Loc Key='config.back_up_now'}" />
+                                <Button
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    Click="OnRestore"
+                                    Content="{i18n:Loc Key='config.restore'}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Rectangle
+                    Grid.Column="1"
+                    Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
+
+                <Grid Grid.Column="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Padding="24,20,24,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="3">
+                            <TextBlock
+                                x:Name="SelectedDocumentTitle"
+                                Style="{ThemeResource SubtitleTextBlockStyle}"
+                                Text="{i18n:Loc Key='config.select_a_config_file'}" />
+                            <TextBlock
+                                x:Name="SelectedDocumentPath"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                FontFamily="Consolas"
+                                FontSize="12"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <Border
+                            x:Name="UnsavedBadge"
+                            Grid.Column="1"
+                            Padding="9,4"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                            CornerRadius="12"
+                            Visibility="Collapsed">
+                            <TextBlock
+                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Text="{i18n:Loc Key='config.unsaved'}" />
+                        </Border>
+                    </Grid>
+
+                    <Grid Grid.Row="1" Padding="24,0,24,14" ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox
+                            x:Name="SearchSettings"
+                            Width="380"
+                            MaxWidth="520"
+                            HorizontalAlignment="Left"
+                            PlaceholderText="{i18n:Loc Key='config.search_this_file_s_settings'}"
+                            TextChanged="OnSearchSettingsChanged" />
+                        <TextBlock
+                            x:Name="SettingCountText"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+
+                    <Grid Grid.Row="2">
+                        <ContentPresenter x:Name="EditorContent" />
+                        <StackPanel
+                            x:Name="EmptyState"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="10">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                FontSize="40"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE8A5;" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                Text="{i18n:Loc Key='config.no_editable_config_files_found'}" />
+                            <TextBlock
+                                MaxWidth="360"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='config.launch_campaign_evolved_once_to_generate_a5c21b'}"
+                                TextAlignment="Center"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <InfoBar
+            x:Name="PageStatus"
+            Grid.Row="3"
+            IsClosable="True"
+            IsOpen="False" />
+    </Grid>
+</Page>

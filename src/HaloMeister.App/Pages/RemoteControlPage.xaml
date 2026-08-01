@@ -1,0 +1,223 @@
+<Page
+    x:Class="HaloMeister.App.Pages.RemoteControlPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            Padding="24,24,24,40"
+            HorizontalAlignment="Stretch"
+            Spacing="18">
+
+            <StackPanel Spacing="5">
+                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='remote_control.phone_remote'}" />
+                <TextBlock
+                    HorizontalAlignment="Left"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='remote_control.control_the_running_game_from_a_phone_tab_fb76f2'}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Border Style="{StaticResource LiveToolInsetStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon
+                        VerticalAlignment="Top"
+                        FontSize="15"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Glyph="&#xE72E;" />
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='remote_control.use_a_trusted_private_network'}" />
+                        <TextBlock
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            Text="{i18n:Loc Key='remote_control.anyone_with_the_pairing_link_can_use_the_d8a087'}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Style="{StaticResource LiveToolCardStyle}">
+                <Grid ColumnSpacing="28">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Spacing="18">
+                        <Grid ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                Width="40"
+                                Height="40"
+                                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                CornerRadius="10">
+                                <FontIcon
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="18"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                    Glyph="&#xE774;" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="3">
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='remote_control.remote_session'}" />
+                                <TextBlock
+                                    x:Name="StateText"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='remote_control.remote_control_is_off'}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Style="{StaticResource LiveToolInsetStyle}">
+                            <Grid ColumnSpacing="18">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3">
+                                    <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='remote_control.1_start_remote_access'}" />
+                                    <TextBlock
+                                        Style="{StaticResource CompactSafetyTextStyle}"
+                                        Text="{i18n:Loc Key='remote_control.creates_a_temporary_private_pairing_link_2977d0'}" />
+                                </StackPanel>
+                                <Button
+                                    x:Name="ToggleButton"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Click="OnToggleRemote"
+                                    Content="{i18n:Loc Key='remote_control.enable_remote'}"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                            </Grid>
+                        </Border>
+
+                        <StackPanel x:Name="PairingPanel" Spacing="10" Visibility="Collapsed">
+                            <StackPanel Spacing="3">
+                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='remote_control.2_pair_your_phone'}" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='remote_control.scan_the_code_or_open_the_address_on_a_de_1ccb34'}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <TextBox
+                                x:Name="PairingUrlBox"
+                                HorizontalAlignment="Stretch"
+                                IsReadOnly="True"
+                                TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                                <Button Click="OnCopyAddress" Content="{i18n:Loc Key='remote_control.copy_link'}" />
+                                <Button Click="OnOpenLocally" Content="{i18n:Loc Key='remote_control.preview_locally'}" />
+                            </StackPanel>
+                            <TextBlock
+                                x:Name="AlternateAddressesText"
+                                FontFamily="Consolas"
+                                Style="{StaticResource CompactSafetyTextStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel
+                        x:Name="QrBorder"
+                        Grid.Column="1"
+                        Width="252"
+                        VerticalAlignment="Top"
+                        Spacing="10"
+                        Visibility="Collapsed">
+                        <Border
+                            Width="252"
+                            Height="252"
+                            Padding="12"
+                            Background="White"
+                            CornerRadius="12">
+                            <Image x:Name="PairingQr" Stretch="Uniform" />
+                        </Border>
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            Text="{i18n:Loc Key='remote_control.scan_to_open_halo_meister_remote'}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Style="{StaticResource LiveToolCardStyle}">
+                    <StackPanel Spacing="12">
+                        <StackPanel Spacing="3">
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='remote_control.direct_lan_access'}" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='remote_control.optional_firewall_fallback'}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="FirewallStatusText"
+                            Text="{i18n:Loc Key='remote_control.checking_windows_firewall'}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            Text="{i18n:Loc Key='remote_control.configure_this_only_if_a_phone_on_your_lo_2a0c93'}" />
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <Button
+                                x:Name="ConfigureFirewallButton"
+                                Click="OnConfigureFirewall"
+                                Content="{i18n:Loc Key='remote_control.configure_firewall'}" />
+                            <Button
+                                x:Name="RemoveFirewallButton"
+                                Click="OnRemoveFirewall"
+                                Content="{i18n:Loc Key='remote_control.remove_rule'}"
+                                IsEnabled="False" />
+                        </StackPanel>
+                        <TextBlock
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            Text="{i18n:Loc Key='remote_control.administrator_approval_required_tcp_48731_2f3696'}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource LiveToolCardStyle}">
+                    <StackPanel Spacing="12">
+                        <StackPanel Spacing="3">
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='remote_control.available_on_your_phone'}" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='remote_control.focused_controls_for_a_running_offline_mission'}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Grid ColumnSpacing="20" RowSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="{i18n:Loc Key='remote_control.game_connection'}" />
+                            <TextBlock Grid.Column="1" Text="{i18n:Loc Key='remote_control.weapon_loader'}" />
+                            <TextBlock Grid.Row="1" Text="{i18n:Loc Key='remote_control.enemy_spawner'}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{i18n:Loc Key='remote_control.live_skulls'}" />
+                            <TextBlock Grid.Row="2" Text="{i18n:Loc Key='remote_control.player_position'}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{i18n:Loc Key='remote_control.teleport'}" />
+                        </Grid>
+                        <TextBlock
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            Text="{i18n:Loc Key='remote_control.save_editing_setup_and_unrestricted_devel_36094b'}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <InfoBar x:Name="StatusBar" IsOpen="False" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

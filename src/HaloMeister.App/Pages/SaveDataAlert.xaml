@@ -1,0 +1,14 @@
+<UserControl
+    x:Class="HaloMeister.App.Pages.SaveDataAlert"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+
+    <InfoBar
+        x:Name="Alert"
+        IsClosable="False"
+        IsOpen="False"
+        Severity="Warning"
+        Title="{i18n:Loc Key='save_data_alert.no_save_data_loaded'}"
+        Message="{i18n:Loc Key='save_data_alert.use_download_save_in_the_playfab_bar_abov_770593'}" />
+</UserControl>

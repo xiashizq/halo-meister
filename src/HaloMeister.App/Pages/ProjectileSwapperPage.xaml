@@ -1,0 +1,156 @@
+<Page
+    x:Class="HaloMeister.App.Pages.ProjectileSwapperPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:i18n="using:HaloMeister.App.Localization">
+    <Grid Padding="24" RowSpacing="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='projectile_swapper.projectile_swapper'}" />
+            <TextBlock
+                MaxWidth="800"
+                Opacity="0.75"
+                Text="{i18n:Loc Key='projectile_swapper.pick_a_loaded_weapon_search_for_a_project_ae8f67'}"
+                TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel
+            Grid.Row="1"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal"
+            Spacing="8">
+            <Button
+                x:Name="ScanButton"
+                Click="OnScan"
+                Content="{i18n:Loc Key='projectile_swapper.scan_loaded_tags'}"
+                IsEnabled="False"
+                Style="{StaticResource AccentButtonStyle}" />
+            <Button
+                x:Name="RefreshButton"
+                Click="OnRefresh"
+                Content="{i18n:Loc Key='projectile_swapper.refresh'}"
+                IsEnabled="False" />
+        </StackPanel>
+
+        <Grid Grid.Row="2" ColumnSpacing="18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="280" />
+                <ColumnDefinition Width="3*" MinWidth="380" />
+            </Grid.ColumnDefinitions>
+
+            <Grid RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBox
+                    x:Name="WeaponSearchBox"
+                    Header="{i18n:Loc Key='projectile_swapper.search_weapons'}"
+                    IsEnabled="False"
+                    PlaceholderText="{i18n:Loc Key='projectile_swapper.assault_rifle_plasma_vehicle'}"
+                    TextChanged="OnWeaponSearchChanged" />
+                <TextBlock
+                    x:Name="WeaponCountText"
+                    Grid.Row="1"
+                    FontSize="11"
+                    Opacity="0.65" />
+                <ListView
+                    x:Name="WeaponList"
+                    Grid.Row="2"
+                    IsItemClickEnabled="True"
+                    ItemClick="OnWeaponClicked"
+                    SelectionMode="Single">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Padding="4,6" ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="104" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border
+                                    Width="104"
+                                    Height="58"
+                                    Padding="4"
+                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                    CornerRadius="5">
+                                    <Image Source="{Binding ImageUri}" Stretch="Uniform" />
+                                </Border>
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding Name}"
+                                    TextWrapping="Wrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+
+            <Border
+                Grid.Column="1"
+                Padding="18"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <StackPanel Spacing="14">
+                    <TextBlock
+                        x:Name="SelectedWeaponText"
+                        Style="{ThemeResource SubtitleTextBlockStyle}"
+                        Text="{i18n:Loc Key='projectile_swapper.select_a_weapon'}" />
+                    <TextBlock
+                        x:Name="CurrentProjectileText"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <AutoSuggestBox
+                        x:Name="ProjectilePicker"
+                        Header="{i18n:Loc Key='projectile_swapper.replace_projectile_with'}"
+                        IsEnabled="False"
+                        MaxSuggestionListHeight="420"
+                        PlaceholderText="{i18n:Loc Key='projectile_swapper.type_to_search_projectiles'}"
+                        QueryIcon="Find"
+                        GotFocus="OnProjectilePickerGotFocus"
+                        SuggestionChosen="OnProjectileSuggestionChosen"
+                        TextChanged="OnProjectileTextChanged"
+                        TextMemberPath="DisplayName">
+                        <AutoSuggestBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel MinWidth="360" Padding="4,6" Spacing="2">
+                                    <TextBlock FontWeight="SemiBold" Text="{Binding LeafName}" />
+                                    <TextBlock
+                                        FontFamily="Consolas"
+                                        FontSize="11"
+                                        Opacity="0.65"
+                                        Text="{Binding Name}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </AutoSuggestBox.ItemTemplate>
+                    </AutoSuggestBox>
+                    <Button
+                        x:Name="SwapButton"
+                        HorizontalAlignment="Left"
+                        Click="OnSwap"
+                        Content="{i18n:Loc Key='projectile_swapper.swap_projectile'}"
+                        IsEnabled="False"
+                        Style="{StaticResource AccentButtonStyle}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Spacing="8">
+            <TextBlock
+                x:Name="ConnectionText"
+                FontSize="11"
+                Opacity="0.65"
+                Text="{i18n:Loc Key='projectile_swapper.no_tag_scan_yet'}" />
+            <InfoBar x:Name="StatusBar" IsClosable="True" IsOpen="False" />
+        </StackPanel>
+    </Grid>
+</Page>
