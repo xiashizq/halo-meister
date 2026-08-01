@@ -1,8 +1,8 @@
 # One-click clean portable package (self-contained win-x64).
-# GitHub → Actions → "Package (纯净版)" → Run workflow → Download artifact.
-name: Package (纯净版)
+# GitHub → Actions → "Release" → Run workflow → Download artifact.
+name: Release
 
-run-name: Package ${{ github.ref_name }}
+run-name: Release ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -15,18 +15,6 @@ on:
         description: "Mark GitHub Release as prerelease"
         type: boolean
         default: false
-  workflow_call:
-    inputs:
-      create_release:
-        description: "Also create GitHub Release"
-        type: boolean
-        required: false
-        default: false
-      prerelease:
-        description: "Mark GitHub Release as prerelease"
-        type: boolean
-        required: false
-        default: false
   push:
     tags:
       - "v*"
@@ -35,7 +23,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: package-${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
