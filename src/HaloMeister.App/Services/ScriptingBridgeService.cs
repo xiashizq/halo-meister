@@ -87,9 +87,17 @@ public sealed class ScriptingBridgeService
     private const string MarkerEnd = "-- HALOMEISTER SCRIPTING BRIDGE:END";
     private const string MarkerVersion = "-- HALOMEISTER SCRIPTING BRIDGE:VERSION";
     private const int MaximumCodeBytes = 64 * 1024;
-    private static readonly TimeSpan HeartbeatLifetime = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan[] HeartbeatRetryDelays =
-        [TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)];
+    private static readonly TimeSpan HeartbeatLifetime = TimeSpan.FromSeconds(8);
+    // Fast probes for the common case where status.hm appears within a few seconds,
+    // then settle into a steady poll. Callers cancel when they no longer need to wait.
+    private static readonly TimeSpan[] HeartbeatInitialDelays =
+    [
+        TimeSpan.FromMilliseconds(250),
+        TimeSpan.FromMilliseconds(500),
+        TimeSpan.FromMilliseconds(750),
+        TimeSpan.FromSeconds(1),
+    ];
+    private static readonly TimeSpan HeartbeatPollInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(15);
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly object CapabilityProfileGate = new();
@@ -191,22 +199,31 @@ public sealed class ScriptingBridgeService
     }
 
     /// <summary>
-    /// Waits through the short period between the game process appearing and
-    /// UE4SS writing its first bridge heartbeat. It intentionally retries only
-    /// status reads, never a game operation.
+    /// Keeps reading the bridge heartbeat until one is live or
+    /// <paramref name="cancellationToken"/> is cancelled. Works for both
+    /// app-first and game-first launches: it does not stop just because the
+    /// game process is not visible yet. Status-only; never runs a game operation.
     /// </summary>
     public async Task<ScriptingBridgeStatus> WaitForHeartbeatAsync(
         CancellationToken cancellationToken = default)
     {
         ScriptingBridgeStatus status = GetStatus();
-        if (status.IsRuntimeReady || !status.IsGameProcessRunning)
+        if (status.IsRuntimeReady)
             return status;
 
-        foreach (TimeSpan delay in HeartbeatRetryDelays)
+        foreach (TimeSpan delay in HeartbeatInitialDelays)
         {
             await Task.Delay(delay, cancellationToken);
             status = GetStatus();
-            if (status.IsRuntimeReady || !status.IsGameProcessRunning)
+            if (status.IsRuntimeReady)
+                return status;
+        }
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(HeartbeatPollInterval, cancellationToken);
+            status = GetStatus();
+            if (status.IsRuntimeReady)
                 return status;
         }
 
@@ -459,31 +476,68 @@ public sealed class ScriptingBridgeService
     /// </summary>
     private (DateTimeOffset? Heartbeat, int? Version) ReadStatusFile()
     {
-        try
+        // The Lua bridge rewrites status.hm via delete+rename. Share-compatible
+        // retries avoid treating that momentary gap as "no heartbeat" when the
+        // game was already running before Halo Meister started.
+        for (int attempt = 0; attempt < 4; attempt++)
         {
-            string[] lines = File.ReadAllLines(StatusPath, Utf8);
-            if (lines.Length < 2 || lines[0] != StatusMagic ||
-                !long.TryParse(lines[1], out long unixTime))
-                return _lastStatus;
+            try
+            {
+                using var stream = new FileStream(
+                    StatusPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream, Utf8, detectEncodingFromByteOrderMarks: true);
+                var lines = new List<string>(4);
+                while (lines.Count < 4 && reader.ReadLine() is { } line)
+                    lines.Add(line);
+                if (lines.Count < 2 || lines[0] != StatusMagic ||
+                    !long.TryParse(lines[1], out long unixTime))
+                {
+                    return _lastStatus;
+                }
 
-            int? version = lines.Length >= 4 && int.TryParse(lines[3].Trim(), out int parsed)
-                ? parsed
-                : null;
-            _lastStatus = (DateTimeOffset.FromUnixTimeSeconds(unixTime), version);
-            return _lastStatus;
+                int? version = lines.Count >= 4 && int.TryParse(lines[3].Trim(), out int parsed)
+                    ? parsed
+                    : null;
+                _lastStatus = (DateTimeOffset.FromUnixTimeSeconds(unixTime), version);
+                return _lastStatus;
+            }
+            catch (FileNotFoundException)
+            {
+                if (attempt < 3)
+                {
+                    Thread.Sleep(25);
+                    continue;
+                }
+                return _lastStatus;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                Directory.CreateDirectory(BridgeRoot);
+                return _lastStatus;
+            }
+            catch (IOException)
+            {
+                if (attempt < 3)
+                {
+                    Thread.Sleep(25);
+                    continue;
+                }
+                return _lastStatus;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return _lastStatus;
+            }
+            catch
+            {
+                return _lastStatus;
+            }
         }
-        catch (IOException)
-        {
-            return _lastStatus;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return _lastStatus;
-        }
-        catch
-        {
-            return (null, null);
-        }
+
+        return _lastStatus;
     }
 
     private static bool IsGameProcessRunning()

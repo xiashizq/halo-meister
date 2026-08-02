@@ -62,6 +62,7 @@
     <Content Include="Assets\UE4SS\halomeister_blam_v45.dll" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\UE4SSLoader\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Native\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Overlays\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\RemoteControl\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\i18n\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\START_HERE.txt" Link="START_HERE.txt" CopyToOutputDirectory="PreserveNewest" />

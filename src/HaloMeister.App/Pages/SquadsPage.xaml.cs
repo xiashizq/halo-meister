@@ -139,6 +139,13 @@ public sealed partial class SquadsPage : Page
             "squads.spawn_counts",
             _selected.SpawnPointCount,
             _selected.SpawnFormationCount);
+        bool hasSpawnPoints = _selected.SpawnPoints.Count > 0;
+        SpawnPointsHeaderText.Visibility = Visibility.Visible;
+        SpawnPointsList.ItemsSource = _selected.SpawnPoints;
+        SpawnPointsList.Visibility =
+            hasSpawnPoints ? Visibility.Visible : Visibility.Collapsed;
+        SpawnPointsEmptyText.Visibility =
+            hasSpawnPoints ? Visibility.Collapsed : Visibility.Visible;
         UpdateControls();
     }
 

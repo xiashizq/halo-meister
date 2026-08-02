@@ -43,6 +43,9 @@ $requiredSources = @(
     'src\HaloMeister.App\Assets\UE4SSLoader\NOTICE.md',
     'src\HaloMeister.App\Assets\UE4SSLoader\Signatures\FName_Constructor.lua',
     'src\HaloMeister.App\Assets\Native\halomeister-tagmod-exporter.exe',
+    'src\HaloMeister.App\Assets\Overlays\MMYJ_FULL_VEHI_WAP_P.utoc',
+    'src\HaloMeister.App\Assets\Overlays\MMYJ_FULL_VEHI_WAP_P.ucas',
+    'src\HaloMeister.App\Assets\Overlays\MMYJ_FULL_VEHI_WAP_P.pak',
     'src\HaloMeister.App\Assets\Definitions\haloce_evolved\_meta.json'
 )
 foreach ($relative in $requiredSources) {
@@ -81,6 +84,9 @@ $requiredPackageFiles = @(
     'Assets\UE4SSLoader\NOTICE.md',
     'Assets\UE4SSLoader\Signatures\FName_Constructor.lua',
     'Assets\Native\halomeister-tagmod-exporter.exe',
+    'Assets\Overlays\MMYJ_FULL_VEHI_WAP_P.utoc',
+    'Assets\Overlays\MMYJ_FULL_VEHI_WAP_P.ucas',
+    'Assets\Overlays\MMYJ_FULL_VEHI_WAP_P.pak',
     'Assets\Definitions\haloce_evolved\_meta.json',
     'Assets\Definitions\haloce_evolved\weapon.json'
 )

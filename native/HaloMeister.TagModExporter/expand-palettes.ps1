@@ -1,0 +1,85 @@
+# Expand every Campaign Evolved scenario vehicle/weapon palette and write a _P overlay.
+param(
+    [string]$Paks,
+    [string]$Output = (Join-Path $PSScriptRoot "out\MMYJ_FULL_VEHI_WAP_P.utoc"),
+    [switch]$DryRun,
+    [switch]$Install
+)
+
+$ErrorActionPreference = "Stop"
+
+function Resolve-PaksDirectory {
+    param([string]$Explicit)
+    if ($Explicit) {
+        $full = (Resolve-Path $Explicit).Path
+        if (-not (Get-ChildItem $full -Filter *.utoc -ErrorAction SilentlyContinue)) {
+            throw "No .utoc files in $full"
+        }
+        return $full
+    }
+    if ($env:HALO_CAMPAIGN_EVOLVED_ROOT) {
+        $candidates = @(
+            (Join-Path $env:HALO_CAMPAIGN_EVOLVED_ROOT "Meteorite\Content\Paks"),
+            (Join-Path $env:HALO_CAMPAIGN_EVOLVED_ROOT "Content\Meteorite\Content\Paks")
+        )
+        foreach ($candidate in $candidates) {
+            if ((Test-Path $candidate) -and (Get-ChildItem $candidate -Filter *.utoc -ErrorAction SilentlyContinue)) {
+                return (Resolve-Path $candidate).Path
+            }
+        }
+    }
+    $roots = Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $props = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+            if ($props.DisplayName -match 'Halo.*Campaign Evolved' -and $props.InstallLocation) {
+                $props.InstallLocation
+            }
+        }
+    foreach ($root in $roots) {
+        $candidate = Join-Path $root "Meteorite\Content\Paks"
+        if ((Test-Path $candidate) -and (Get-ChildItem $candidate -Filter *.utoc -ErrorAction SilentlyContinue)) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+    throw "Could not find Meteorite\Content\Paks. Pass -Paks or set HALO_CAMPAIGN_EVOLVED_ROOT."
+}
+
+$exeCandidates = @(
+    (Join-Path $PSScriptRoot "target\release\halomeister-tagmod-exporter.exe"),
+    (Join-Path $PSScriptRoot "..\..\src\HaloMeister.App\Assets\Native\halomeister-tagmod-exporter.exe")
+)
+$exe = $exeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $exe) {
+    Push-Location $PSScriptRoot
+    try { cargo build --release }
+    finally { Pop-Location }
+    $exe = Join-Path $PSScriptRoot "target\release\halomeister-tagmod-exporter.exe"
+}
+if (-not (Test-Path $exe)) {
+    throw "halomeister-tagmod-exporter.exe was not found. Build native/HaloMeister.TagModExporter first."
+}
+
+$paksDir = Resolve-PaksDirectory -Explicit $Paks
+New-Item -ItemType Directory -Force -Path (Split-Path $Output) | Out-Null
+$args = @("--paks", $paksDir, "--expand-palettes", "--output", $Output)
+if ($DryRun) { $args += "--dry-run" }
+& $exe @args
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+if ($Install -and -not $DryRun) {
+    if (Get-Process -Name "HaloCampaignEvolved" -ErrorAction SilentlyContinue) {
+        throw "Close Halo: Campaign Evolved before installing the overlay."
+    }
+    foreach ($ext in @("utoc", "ucas", "pak")) {
+        $source = [IO.Path]::ChangeExtension($Output, $ext)
+        $destination = Join-Path $paksDir (Split-Path $source -Leaf)
+        if (-not (Test-Path $source)) { throw "Missing $source" }
+        if (Test-Path $destination) {
+            throw "$destination already exists. Remove or rename it first."
+        }
+        Copy-Item $source $destination
+        Write-Host "Installed $destination"
+    }
+}

@@ -14,7 +14,6 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="4">
                 <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='vehicle_workshop.vehicle_workshop'}" />
@@ -23,21 +22,33 @@
                     Text="{i18n:Loc Key='vehicle_workshop.browse_and_create_vehicle_tags_already_lo_194a4e'}"
                     />
             </StackPanel>
-            <Button
-                x:Name="RefreshButton"
+            <StackPanel
                 Grid.Column="1"
-                Click="OnRefresh"
-                Content="{i18n:Loc Key='vehicle_workshop.refresh'}"
-                IsEnabled="False"
-                VerticalAlignment="Center" />
-            <Button
-                x:Name="ScanButton"
-                Grid.Column="2"
-                Click="OnScan"
-                Content="{i18n:Loc Key='vehicle_workshop.scan_vehicles'}"
-                IsEnabled="False"
-                Style="{StaticResource AccentButtonStyle}"
-                VerticalAlignment="Center" />
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    x:Name="RefreshButton"
+                    Click="OnRefresh"
+                    Content="{i18n:Loc Key='vehicle_workshop.refresh'}"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="FullPalettesButton"
+                    Click="OnToggleFullPalettes"
+                    Content="{i18n:Loc Key='vehicle_workshop.add_all_vehicles_weapons'}"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="ScanButton"
+                    Click="OnScan"
+                    Content="{i18n:Loc Key='vehicle_workshop.scan_vehicles'}"
+                    IsEnabled="False"
+                    Style="{StaticResource AccentButtonStyle}" />
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Width="22"
+                    Height="22"
+                    IsActive="False" />
+            </StackPanel>
         </Grid>
 
         <Grid Grid.Row="1" ColumnSpacing="16">
@@ -142,6 +153,40 @@
                             x:Name="SelectedDatumText"
                             FontFamily="Consolas"
                             FontSize="11" />
+                        <Border
+                            Padding="16"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="8">
+                            <StackPanel Spacing="10">
+                                <StackPanel Spacing="3">
+                                    <TextBlock
+                                        Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                        Text="{i18n:Loc Key='vehicle_workshop.vehicle_variant'}" />
+                                    <TextBlock
+                                        x:Name="VariantSummaryText"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                                <ComboBox
+                                    x:Name="VariantPicker"
+                                    HorizontalAlignment="Stretch"
+                                    IsEnabled="False"
+                                    SelectionChanged="OnVariantSelectionChanged">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel MinWidth="280" Padding="2,4" Spacing="2">
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{Binding Detail}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                        </Border>
                         <Button
                             x:Name="SpawnButton"
                             Margin="0,8,0,0"
@@ -155,6 +200,13 @@
                             HorizontalAlignment="Left"
                             Click="OnEnablePlayerControl"
                             Content="{i18n:Loc Key='vehicle_workshop.enable_player_control'}"
+                            IsEnabled="False"
+                            Visibility="Collapsed" />
+                        <Button
+                            x:Name="AllowSeraphExitButton"
+                            HorizontalAlignment="Left"
+                            Click="OnAllowSeraphExit"
+                            Content="{i18n:Loc Key='vehicle_workshop.allow_player_exit'}"
                             IsEnabled="False"
                             Visibility="Collapsed" />
                         <InfoBar

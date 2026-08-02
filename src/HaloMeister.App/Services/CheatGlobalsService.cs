@@ -1,11 +1,19 @@
+using System.Text;
 using HaloMeister.App.Localization;
 
 namespace HaloMeister.App.Services;
 
+public enum CheatGlobalBackend
+{
+    SkullHook,
+    HaloScript,
+}
+
 public sealed record CheatGlobalDefinition(
     string Name,
     string DisplayNameKey,
-    string DescriptionKey);
+    string DescriptionKey,
+    CheatGlobalBackend Backend);
 
 public sealed class CheatGlobalItem
 {
@@ -20,21 +28,36 @@ public sealed class CheatGlobalItem
 public sealed class CheatGlobalsService
 {
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
+    private readonly Dictionary<string, bool> _scriptCheatState =
+        new(StringComparer.Ordinal);
 
     public static IReadOnlyList<CheatGlobalDefinition> Catalog { get; } =
     [
         new(
             "infinite_health",
             "cheat_globals.infinite_health",
-            "cheat_globals.infinite_health_desc"),
+            "cheat_globals.infinite_health_desc",
+            CheatGlobalBackend.SkullHook),
         new(
             "infinite_ammo",
             "cheat_globals.infinite_ammo",
-            "cheat_globals.infinite_ammo_desc"),
+            "cheat_globals.infinite_ammo_desc",
+            CheatGlobalBackend.SkullHook),
         new(
             "jetpack",
             "cheat_globals.jetpack",
-            "cheat_globals.jetpack_desc"),
+            "cheat_globals.jetpack_desc",
+            CheatGlobalBackend.SkullHook),
+        new(
+            "deathless_player",
+            "cheat_globals.deathless_player",
+            "cheat_globals.deathless_player_desc",
+            CheatGlobalBackend.HaloScript),
+        new(
+            "ai_disregard",
+            "cheat_globals.ai_disregard",
+            "cheat_globals.ai_disregard_desc",
+            CheatGlobalBackend.HaloScript),
     ];
 
     public ScriptingBridgeStatus BridgeStatus => _bridge.GetStatus();
@@ -43,19 +66,21 @@ public sealed class CheatGlobalsService
         CancellationToken cancellationToken = default)
     {
         EnsureBridgeReady();
-        ScriptExecutionResult result = await _bridge.ExecuteAsync(
-            ScriptLanguage.BlamCheatGlobalsRead,
-            "read",
-            TimeSpan.FromSeconds(15),
+        Dictionary<string, bool> skullValues = await ReadSkullHookValuesAsync(
             cancellationToken);
-        if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
-
-        Dictionary<string, bool> values = ParseValues(result.Message);
         return Catalog.Select(definition => new CheatGlobalItem
         {
             Definition = definition,
-            IsEnabled = values.TryGetValue(definition.Name, out bool enabled) && enabled,
+            IsEnabled = definition.Backend switch
+            {
+                CheatGlobalBackend.SkullHook =>
+                    skullValues.TryGetValue(definition.Name, out bool enabled) &&
+                    enabled,
+                CheatGlobalBackend.HaloScript =>
+                    _scriptCheatState.TryGetValue(definition.Name, out bool scriptEnabled) &&
+                    scriptEnabled,
+                _ => false,
+            },
         }).ToArray();
     }
 
@@ -64,9 +89,30 @@ public sealed class CheatGlobalsService
         bool enabled,
         CancellationToken cancellationToken = default)
     {
-        if (!Catalog.Any(item => item.Name == name))
-            throw new ArgumentOutOfRangeException(nameof(name));
+        CheatGlobalDefinition definition = Catalog.FirstOrDefault(
+                item => item.Name == name)
+            ?? throw new ArgumentOutOfRangeException(nameof(name));
         EnsureBridgeReady();
+
+        switch (definition.Backend)
+        {
+            case CheatGlobalBackend.SkullHook:
+                await SetSkullHookAsync(name, enabled, cancellationToken);
+                break;
+            case CheatGlobalBackend.HaloScript:
+                await SetHaloScriptCheatAsync(name, enabled, cancellationToken);
+                _scriptCheatState[name] = enabled;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(definition));
+        }
+    }
+
+    private async Task SetSkullHookAsync(
+        string name,
+        bool enabled,
+        CancellationToken cancellationToken)
+    {
         ScriptExecutionResult result = await _bridge.ExecuteAsync(
             ScriptLanguage.BlamCheatGlobalWrite,
             $"{name}={(enabled ? 1 : 0)}",
@@ -78,6 +124,50 @@ public sealed class CheatGlobalsService
         Dictionary<string, bool> values = ParseValues(result.Message);
         if (!values.TryGetValue(name, out bool actual) || actual != enabled)
             throw new InvalidDataException(L.Get("cheat_globals.error_not_retained"));
+    }
+
+    private async Task SetHaloScriptCheatAsync(
+        string name,
+        bool enabled,
+        CancellationToken cancellationToken)
+    {
+        string script = name switch
+        {
+            "deathless_player" => BuildDeathlessScript(enabled),
+            "ai_disregard" =>
+                $"ai_disregard (players) {(enabled ? "true" : "false")}",
+            _ => throw new ArgumentOutOfRangeException(nameof(name)),
+        };
+
+        ScriptExecutionResult result = await _bridge.ExecuteAsync(
+            ScriptLanguage.HaloScript,
+            script,
+            TimeSpan.FromSeconds(20),
+            cancellationToken);
+        if (result.Outcome is not (ScriptOutcome.Submitted or ScriptOutcome.Confirmed))
+            throw new InvalidOperationException(result.Message);
+    }
+
+    private static string BuildDeathlessScript(bool enabled)
+    {
+        string flag = enabled ? "true" : "false";
+        var builder = new StringBuilder();
+        for (int index = 0; index <= 3; index++)
+            builder.AppendLine($"object_cannot_die (player{index}) {flag}");
+        return builder.ToString().TrimEnd();
+    }
+
+    private async Task<Dictionary<string, bool>> ReadSkullHookValuesAsync(
+        CancellationToken cancellationToken)
+    {
+        ScriptExecutionResult result = await _bridge.ExecuteAsync(
+            ScriptLanguage.BlamCheatGlobalsRead,
+            "read",
+            TimeSpan.FromSeconds(15),
+            cancellationToken);
+        if (result.Outcome != ScriptOutcome.Confirmed)
+            throw new InvalidOperationException(result.Message);
+        return ParseValues(result.Message);
     }
 
     private static Dictionary<string, bool> ParseValues(string message)

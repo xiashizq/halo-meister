@@ -154,6 +154,37 @@
                             <TextBlock x:Name="TaskText" />
                             <TextBlock x:Name="FolderText" TextWrapping="Wrap" />
                             <TextBlock x:Name="SpawnCountsText" />
+                            <TextBlock
+                                x:Name="SpawnPointsHeaderText"
+                                Margin="0,4,0,0"
+                                FontWeight="SemiBold"
+                                Text="{i18n:Loc Key='squads.spawn_points_header'}"
+                                Visibility="Collapsed" />
+                            <ListView
+                                x:Name="SpawnPointsList"
+                                MaxHeight="280"
+                                Margin="0,2,0,0"
+                                IsItemClickEnabled="False"
+                                SelectionMode="None"
+                                Visibility="Collapsed">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock
+                                            Padding="0,2"
+                                            FontFamily="Consolas"
+                                            FontSize="11"
+                                            Text="{Binding Display}"
+                                            TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                            <TextBlock
+                                x:Name="SpawnPointsEmptyText"
+                                Margin="0,2,0,0"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='squads.spawn_points_empty'}"
+                                Visibility="Collapsed" />
                             <StackPanel
                                 Margin="0,8,0,0"
                                 Orientation="Horizontal"

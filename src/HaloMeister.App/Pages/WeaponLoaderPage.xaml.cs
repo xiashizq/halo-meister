@@ -12,6 +12,7 @@ public sealed partial class WeaponLoaderPage : Page
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly WeaponLoaderService _loader = new();
     private readonly ProjectileSwapperService _swapper = new();
+    private readonly FullPalettesOverlayService _fullPalettes = new();
     private IReadOnlyList<LoadableWeapon> _weapons = [];
     private ProjectileSwapperSession? _projectileSession;
     private LoadableWeapon? _selected;
@@ -22,6 +23,7 @@ public sealed partial class WeaponLoaderPage : Page
     private StanchionImportPreview? _stanchionPreview;
     private bool _busy;
     private bool _hasScanned;
+    private bool _fullPalettesInstalled;
     private int _variantRequestVersion;
 
     public WeaponLoaderPage()
@@ -29,6 +31,7 @@ public sealed partial class WeaponLoaderPage : Page
         InitializeComponent();
         _game.ConnectionChanged += OnGameConnectionChanged;
         Unloaded += OnUnloaded;
+        RefreshFullPalettesState();
         UpdateConnectionButtons();
         UpdateBridgeStatus();
     }
@@ -68,6 +71,43 @@ public sealed partial class WeaponLoaderPage : Page
             ApplyFilter();
             ShowSelection();
             UpdateBridgeStatus();
+        });
+    }
+
+    private async void OnToggleFullPalettes(object sender, RoutedEventArgs e)
+    {
+        await RunBusy(async () =>
+        {
+            if (_fullPalettes.IsGameRunning)
+            {
+                ShowStatus(
+                    L.Get("vehicle_workshop.full_palettes_close_game"),
+                    InfoBarSeverity.Warning);
+                return;
+            }
+
+            bool installing = !_fullPalettesInstalled;
+            string actionLabel = installing
+                ? L.Get("vehicle_workshop.add_all_vehicles_weapons")
+                : L.Get("vehicle_workshop.remove_all_vehicles_weapons");
+            var confirm = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = actionLabel,
+                Content = installing
+                    ? L.Get("vehicle_workshop.full_palettes_install_confirm")
+                    : L.Get("vehicle_workshop.full_palettes_remove_confirm"),
+                PrimaryButtonText = actionLabel,
+                CloseButtonText = L.Get("common.cancel"),
+                DefaultButton = ContentDialogButton.Close,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+                return;
+
+            FullPalettesOverlayResult result = await Task.Run(() =>
+                installing ? _fullPalettes.Install() : _fullPalettes.Remove());
+            RefreshFullPalettesState();
+            ShowStatus(result.Message, InfoBarSeverity.Success);
         });
     }
 
@@ -409,6 +449,7 @@ public sealed partial class WeaponLoaderPage : Page
         finally
         {
             _busy = false;
+            RefreshFullPalettesState();
             UpdateConnectionButtons();
             UpdateLoadButton();
             UpdateImportButtons();
@@ -420,10 +461,26 @@ public sealed partial class WeaponLoaderPage : Page
     private void OnGameConnectionChanged(object? sender, EventArgs e)
         => DispatcherQueue.TryEnqueue(UpdateConnectionButtons);
 
+    private void RefreshFullPalettesState()
+    {
+        try
+        {
+            _fullPalettesInstalled = _fullPalettes.IsInstalled();
+        }
+        catch
+        {
+            _fullPalettesInstalled = false;
+        }
+    }
+
     private void UpdateConnectionButtons()
     {
         ScanButton.IsEnabled = !_busy && _game.IsConnected;
         RefreshButton.IsEnabled = !_busy && _game.IsConnected && _hasScanned;
+        FullPalettesButton.IsEnabled = !_busy;
+        FullPalettesButton.Content = _fullPalettesInstalled
+            ? L.Get("vehicle_workshop.remove_all_vehicles_weapons")
+            : L.Get("vehicle_workshop.add_all_vehicles_weapons");
         UpdateLoadButton();
         UpdateImportButtons();
         UpdateProjectileControls();

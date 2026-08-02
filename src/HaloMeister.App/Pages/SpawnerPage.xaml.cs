@@ -199,7 +199,7 @@ public sealed partial class SpawnerPage : Page
                     vehicle.DisplayName,
                     vehicle.Category,
                     vehicle.TagPath,
-                    [],
+                    _vehicleSpawner.ReadSpawnVariants(vehicle),
                     showPreview: false);
                 break;
         }
@@ -261,7 +261,7 @@ public sealed partial class SpawnerPage : Page
                 case SpawnMode.Vehicle:
                     LoadableVehicle vehicle = _selectedVehicle
                         ?? throw new InvalidOperationException(L.Get("spawner.select_vehicle"));
-                    result = await _vehicleSpawner.SpawnAsync(vehicle);
+                    result = await _vehicleSpawner.SpawnAsync(vehicle, _selectedVariant);
                     successPrefix = string.Empty;
                     break;
                 case SpawnMode.Armor:

@@ -1,5 +1,5 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 88
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 89
 do
     local hm_ok, hm_error = pcall(function()
         local UEHelpers = require("UEHelpers")
@@ -11,7 +11,7 @@ do
         -- Keep in step with the VERSION marker above; Halo Meister compares the
         -- version reported here against the copy it ships so it can tell you when
         -- the game is still running a stale bridge.
-        local bridge_version = 88
+        local bridge_version = 89
         -- User scripts execute in a dedicated environment. Expose the UE4SS
         -- helper module there while retaining normal access to global UE4SS
         -- APIs and preserving the historical global assignment behavior.
@@ -41,16 +41,44 @@ do
         local maximum_code_bytes = 64 * 1024
         local poll_delay_ms = 250
         local last_heartbeat = 0
+        local root_ready = false
         -- Imported tag data assets must stay rooted for the rest of the mission.
         -- Blam may retain the binary blob after this request completes.
         local loaded_tag_assets = {}
         local ai_capture_bootstrap = nil
 
+        -- Halo Meister normally creates this folder on launch. When the game starts
+        -- first, the bridge must create it itself or every heartbeat write fails.
+        local function ensure_root()
+            if root_ready then return true end
+            local probe_path = root .. ".hm_dir"
+            local probe = io.open(probe_path, "ab")
+            if probe then
+                probe:close()
+                os.remove(probe_path)
+                root_ready = true
+                return true
+            end
+            local dir = root:gsub("[/\\]+$", "")
+            os.execute('cmd /d /c mkdir "' .. dir .. '" >nul 2>nul')
+            probe = io.open(probe_path, "ab")
+            if not probe then return false end
+            probe:close()
+            os.remove(probe_path)
+            root_ready = true
+            return true
+        end
+
         -- A game crash can leave a claimed request behind. It must never block the
         -- single-slot mailbox after the next launch.
-        os.remove(processing_path)
+        if ensure_root() then
+            os.remove(processing_path)
+        end
 
         local function write_atomic(path, contents)
+            if not ensure_root() then
+                return false, "scripting mailbox folder is unavailable"
+            end
             local temporary_path = path .. ".tmp"
             local file, open_error = io.open(temporary_path, "wb")
             if not file then return false, open_error end
@@ -60,13 +88,22 @@ do
                 os.remove(temporary_path)
                 return false, write_error
             end
+            -- Prefer replace-in-place when the target is locked for reading: delete
+            -- + rename can succeed at delete and then fail at rename, wiping the
+            -- only heartbeat Halo Meister can see.
             os.remove(path)
             local renamed, rename_error = os.rename(temporary_path, path)
-            if not renamed then
+            if renamed then return true end
+            local fallback, fallback_error = io.open(path, "wb")
+            if fallback then
+                local fallback_wrote = fallback:write(contents)
+                fallback:close()
                 os.remove(temporary_path)
-                return false, rename_error
+                if fallback_wrote then return true end
+                return false, fallback_error or "fallback write failed"
             end
-            return true
+            os.remove(temporary_path)
+            return false, rename_error
         end
 
         local function write_result(request_id, status, message)
@@ -1437,11 +1474,18 @@ do
 
             local now = os.time()
             if now ~= last_heartbeat then
-                write_atomic(
+                local wrote, write_error = write_atomic(
                     status_path,
                     status_magic .. "\n" .. now .. "\nready\n" .. bridge_version
                 )
-                last_heartbeat = now
+                if wrote then
+                    last_heartbeat = now
+                elseif write_error then
+                    print(string.format(
+                        "[HaloMeister] Could not write scripting heartbeat: %s\n",
+                        tostring(write_error)
+                    ))
+                end
             end
 
             local ok, request_or_error = xpcall(read_request, debug.traceback)

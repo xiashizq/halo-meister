@@ -43,9 +43,8 @@ public sealed partial class GameSavesPage : Page
 
     private void SelectInitialPlatform()
     {
-        bool steamHasSaves = _steamStore.LiveRootExists && _steamStore.Discover().Count > 0;
-        bool storeHasSaves = _storeStore.LiveRootExists && _storeStore.Discover().Count > 0;
-        bool preferStore = !steamHasSaves && storeHasSaves;
+        bool preferStore =
+            GamePlatformPreference.Current.Platform == GamePlatformKind.MicrosoftStore;
 
         _suppressPlatformChange = true;
         try
@@ -66,6 +65,9 @@ public sealed partial class GameSavesPage : Page
         if (sender.SelectedItem?.Tag is not string platform) return;
 
         _store = platform == WgsGameSaveStore.Platform ? _storeStore : _steamStore;
+        GamePlatformPreference.Current.Platform = platform == WgsGameSaveStore.Platform
+            ? GamePlatformKind.MicrosoftStore
+            : GamePlatformKind.Steam;
         ApplyPlatformChrome();
         Refresh();
     }

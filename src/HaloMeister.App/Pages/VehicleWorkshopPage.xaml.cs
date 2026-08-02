@@ -9,16 +9,22 @@ public sealed partial class VehicleWorkshopPage : Page
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly VehicleWorkshopService _vehicles = new();
+    private readonly FullPalettesOverlayService _fullPalettes = new();
     private IReadOnlyList<LoadableVehicle> _all = [];
+    private IReadOnlyList<VehicleModelVariant> _variants = [];
     private LoadableVehicle? _selected;
+    private VehicleModelVariant? _selectedVariant;
+    private int _variantRequestVersion;
     private bool _busy;
     private bool _hasScanned;
+    private bool _fullPalettesInstalled;
 
     public VehicleWorkshopPage()
     {
         InitializeComponent();
         _game.ConnectionChanged += OnConnectionChanged;
         Unloaded += OnUnloaded;
+        RefreshFullPalettesState();
         UpdateControls();
     }
 
@@ -35,6 +41,43 @@ public sealed partial class VehicleWorkshopPage : Page
             ShowStatus(
                 L.Format("vehicle_workshop.found_vehicles", _all.Count),
                 InfoBarSeverity.Success);
+        });
+    }
+
+    private async void OnToggleFullPalettes(object sender, RoutedEventArgs e)
+    {
+        await RunBusy(async () =>
+        {
+            if (_fullPalettes.IsGameRunning)
+            {
+                ShowStatus(
+                    L.Get("vehicle_workshop.full_palettes_close_game"),
+                    InfoBarSeverity.Warning);
+                return;
+            }
+
+            bool installing = !_fullPalettesInstalled;
+            string actionLabel = installing
+                ? L.Get("vehicle_workshop.add_all_vehicles_weapons")
+                : L.Get("vehicle_workshop.remove_all_vehicles_weapons");
+            var confirm = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = actionLabel,
+                Content = installing
+                    ? L.Get("vehicle_workshop.full_palettes_install_confirm")
+                    : L.Get("vehicle_workshop.full_palettes_remove_confirm"),
+                PrimaryButtonText = actionLabel,
+                CloseButtonText = L.Get("common.cancel"),
+                DefaultButton = ContentDialogButton.Close,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+                return;
+
+            FullPalettesOverlayResult result = await Task.Run(() =>
+                installing ? _fullPalettes.Install() : _fullPalettes.Remove());
+            RefreshFullPalettesState();
+            ShowStatus(result.Message, InfoBarSeverity.Success);
         });
     }
 
@@ -84,10 +127,69 @@ public sealed partial class VehicleWorkshopPage : Page
         SelectedPathText.Text = _selected?.TagPath ?? "";
         SelectedDatumText.Text = _selected?.Detail ?? "";
         EnablePlayerControlButton.Visibility =
-            VehicleWorkshopService.IsPelican(_selected)
+            VehicleWorkshopService.SupportsPlayerControl(_selected)
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+        AllowSeraphExitButton.Visibility =
+            VehicleWorkshopService.IsSeraph(_selected)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        _ = ShowVariantsAsync(_selected, ++_variantRequestVersion);
         UpdateControls();
+    }
+
+    private async Task ShowVariantsAsync(LoadableVehicle? selected, int requestVersion)
+    {
+        _variants = [];
+        _selectedVariant = null;
+        VariantPicker.ItemsSource = null;
+        VariantSummaryText.Text = selected is null
+            ? ""
+            : L.Get("vehicle_workshop.reading_variants");
+        UpdateVariantControls();
+
+        if (selected is null)
+            return;
+
+        try
+        {
+            VehicleVariantCatalog catalog = await Task.Run(
+                () => _vehicles.ReadVariants(selected));
+            if (requestVersion != _variantRequestVersion ||
+                _selected?.Tag.Index != selected.Tag.Index)
+            {
+                return;
+            }
+
+            _variants = catalog.Variants;
+            VariantPicker.ItemsSource = _variants;
+            VariantPicker.SelectedIndex = 0;
+            _selectedVariant = VariantPicker.SelectedItem as VehicleModelVariant;
+            VariantSummaryText.Text = L.Format(
+                _variants.Count == 1
+                    ? "vehicle_workshop.authored_variant_one"
+                    : "vehicle_workshop.authored_variant_many",
+                _variants.Count);
+        }
+        catch
+        {
+            if (requestVersion != _variantRequestVersion ||
+                _selected?.Tag.Index != selected.Tag.Index)
+            {
+                return;
+            }
+            VariantSummaryText.Text = L.Get("vehicle_workshop.variants_unavailable");
+        }
+
+        UpdateVariantControls();
+    }
+
+    private void OnVariantSelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        _selectedVariant = VariantPicker.SelectedItem as VehicleModelVariant;
+        UpdateVariantControls();
     }
 
     private async void OnSpawn(object sender, RoutedEventArgs e)
@@ -95,10 +197,20 @@ public sealed partial class VehicleWorkshopPage : Page
         if (_selected is not { } vehicle) return;
         await RunBusy(async () =>
         {
-            ScriptExecutionResult result = await _vehicles.SpawnAsync(vehicle);
-            ShowStatus(
-                L.Format("vehicle_workshop.spawned_ahead", vehicle.Name, result.Message),
-                InfoBarSeverity.Success);
+            ScriptExecutionResult result = await _vehicles.SpawnAsync(
+                vehicle,
+                _selectedVariant);
+            string message = _selectedVariant is null
+                ? L.Format(
+                    "vehicle_workshop.spawned_ahead",
+                    vehicle.Name,
+                    result.Message)
+                : L.Format(
+                    "vehicle_workshop.spawned_ahead_variant",
+                    vehicle.Name,
+                    _selectedVariant.Name,
+                    result.Message);
+            ShowStatus(message, InfoBarSeverity.Success);
         });
     }
 
@@ -108,7 +220,18 @@ public sealed partial class VehicleWorkshopPage : Page
         await RunBusy(async () =>
         {
             VehiclePlayerControlResult result = await Task.Run(
-                () => _vehicles.EnablePelicanPlayerControl(vehicle));
+                () => _vehicles.EnablePlayerControl(vehicle));
+            ShowStatus(result.Message, InfoBarSeverity.Success);
+        });
+    }
+
+    private async void OnAllowSeraphExit(object sender, RoutedEventArgs e)
+    {
+        if (_selected is not { } vehicle) return;
+        await RunBusy(async () =>
+        {
+            VehicleSeatExitResult result = await Task.Run(
+                () => _vehicles.AllowSeraphPlayerExit(vehicle));
             ShowStatus(result.Message, InfoBarSeverity.Success);
         });
     }
@@ -123,6 +246,7 @@ public sealed partial class VehicleWorkshopPage : Page
         finally
         {
             _busy = false;
+            RefreshFullPalettesState();
             UpdateControls();
         }
     }
@@ -130,20 +254,50 @@ public sealed partial class VehicleWorkshopPage : Page
     private void OnConnectionChanged(object? sender, EventArgs e)
         => DispatcherQueue.TryEnqueue(UpdateControls);
 
+    private void RefreshFullPalettesState()
+    {
+        try
+        {
+            _fullPalettesInstalled = _fullPalettes.IsInstalled();
+        }
+        catch
+        {
+            _fullPalettesInstalled = false;
+        }
+    }
+
     private void UpdateControls()
     {
         ScriptingBridgeStatus bridge = _vehicles.BridgeStatus;
-        ScanButton.IsEnabled = !_busy && _game.IsConnected;
-        RefreshButton.IsEnabled = !_busy && _game.IsConnected && _hasScanned;
+        bool connected = !_busy && _game.IsConnected;
+        ScanButton.IsEnabled = connected;
+        FullPalettesButton.IsEnabled = !_busy;
+        FullPalettesButton.Content = _fullPalettesInstalled
+            ? L.Get("vehicle_workshop.remove_all_vehicles_weapons")
+            : L.Get("vehicle_workshop.add_all_vehicles_weapons");
+        RefreshButton.IsEnabled = connected && _hasScanned;
+        BusyRing.IsActive = _busy;
         SpawnButton.IsEnabled =
             !_busy && _selected is not null && _game.IsConnected &&
             bridge.IsRuntimeReady && !bridge.IsStale;
         EnablePlayerControlButton.IsEnabled =
             !_busy && _game.IsConnected &&
-            VehicleWorkshopService.IsPelican(_selected);
+            VehicleWorkshopService.SupportsPlayerControl(_selected);
+        AllowSeraphExitButton.IsEnabled =
+            !_busy && _game.IsConnected &&
+            VehicleWorkshopService.IsSeraph(_selected);
         ConnectionText.Text = _hasScanned
             ? L.Format("vehicle_workshop.loaded_summary", _all.Count, bridge.Summary)
             : bridge.Summary;
+        UpdateVariantControls();
+    }
+
+    private void UpdateVariantControls()
+    {
+        VariantPicker.IsEnabled =
+            !_busy &&
+            _game.IsConnected &&
+            _variants.Count > 0;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

@@ -38,6 +38,11 @@
                     Content="{i18n:Loc Key='weapon_loader.refresh'}"
                     IsEnabled="False" />
                 <Button
+                    x:Name="FullPalettesButton"
+                    Click="OnToggleFullPalettes"
+                    Content="{i18n:Loc Key='vehicle_workshop.add_all_vehicles_weapons'}"
+                    IsEnabled="False" />
+                <Button
                     x:Name="ScanButton"
                     Click="OnScan"
                     Content="{i18n:Loc Key='weapon_loader.scan_loaded_weapons'}"

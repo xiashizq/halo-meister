@@ -24,3 +24,18 @@ result with the release candidate.
 Only raise a capability to `LiveValidated` after its row succeeds. Any failed
 row lowers or keeps only that capability's level; it does not invalidate the
 rest of the profile.
+
+## Steam runtime tag editor
+
+Run this only with profile `2026-07-25-steam-post-cu2` in an offline mission
+and use a harmless scalar field with a known original value.
+
+1. Scan tags, open the tag, stage a field edit, and confirm it appears in the
+   staged-changes list without writing memory yet.
+2. Discard the staged change and confirm the field value is unchanged in
+   memory.
+3. Stage the same edit again, commit, and confirm the in-game / memory value
+   updates and the change lands in the session `.hmtagmod` draft.
+4. Undo the commit and confirm the original bytes are restored.
+5. Repeat once with a reference swap against a valid same-group target.
+6. Confirm a non-Steam / unsupported build can browse tags but refuses commit.

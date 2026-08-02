@@ -18,6 +18,8 @@ public sealed class RuntimeTagMemoryService : IDisposable
     private const uint ProcessVmWrite = 0x0020;
     private const uint ProcessQueryInformation = 0x0400;
     private const uint MemCommit = 0x1000;
+    private const uint MemReserve = 0x2000;
+    private const uint PageReadWrite = 0x04;
     private const uint PageGuard = 0x100;
     private const uint PageNoAccess = 0x01;
 
@@ -215,6 +217,148 @@ public sealed class RuntimeTagMemoryService : IDisposable
         BinaryPrimitives.WriteUInt32LittleEndian(
             reference.AsSpan(12), BuildRuntimeDatum(target));
         return reference;
+    }
+
+    /// <summary>
+    /// Returns whether <paramref name="address"/>..<paramref name="address"/>+count
+    /// lies in a single committed writable region.
+    /// </summary>
+    public bool IsWritable(long address, int count)
+    {
+        EnsureConnected();
+        if (address <= 0 || count <= 0) return false;
+        try
+        {
+            EnsureWritable(address, count);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Returns how many writable bytes remain in the committed region that
+    /// contains <paramref name="address"/>.
+    /// </summary>
+    public bool TryGetWritableExtent(long address, out int writableBytes)
+    {
+        EnsureConnected();
+        writableBytes = 0;
+        if (address <= 0) return false;
+        if (VirtualQueryEx(
+                _handle!,
+                new IntPtr(address),
+                out MemoryBasicInformation memory,
+                (nuint)Marshal.SizeOf<MemoryBasicInformation>()) == 0 ||
+            memory.State != MemCommit ||
+            (memory.Protect & (PageGuard | PageNoAccess)) != 0 ||
+            !IsWritableProtection(memory.Protect))
+        {
+            return false;
+        }
+
+        long regionEnd = checked(memory.BaseAddress.ToInt64() + (long)memory.RegionSize);
+        long remaining = regionEnd - address;
+        if (remaining <= 0 || remaining > int.MaxValue) return false;
+        writableBytes = (int)remaining;
+        return true;
+    }
+
+    /// <summary>
+    /// Allocates a committed, page-aligned writable buffer in the game process.
+    /// Used only for session-scoped tag-block relocation that still needs a
+    /// segmented arena encoding.
+    /// </summary>
+    public long AllocateRemote(int size)
+    {
+        EnsureConnected();
+        EnsureRuntimeIdentity();
+        if (size is <= 0 or > 16 * 1024 * 1024)
+            throw new ArgumentOutOfRangeException(nameof(size));
+
+        IntPtr allocated = VirtualAllocEx(
+            _handle!,
+            IntPtr.Zero,
+            (nuint)size,
+            MemCommit | MemReserve,
+            PageReadWrite);
+        if (allocated == IntPtr.Zero)
+            throw Win32("VirtualAllocEx");
+        return allocated.ToInt64();
+    }
+
+    /// <summary>
+    /// Claims an unused tag-arena slot and points it at <paramref name="baseAddress"/>
+    /// so newly allocated buffers can be addressed with segmented offsets.
+    /// Arena 0 is skipped because a zero encoded offset is treated as null.
+    /// </summary>
+    public int ClaimUnusedArena(long baseAddress)
+    {
+        EnsureConnected();
+        EnsureRuntimeIdentity();
+        if (baseAddress <= 0 || (baseAddress & 3) != 0)
+            throw new ArgumentOutOfRangeException(nameof(baseAddress));
+
+        // Slot 0 is reserved: encoded offset 0 is null in the runtime resolver.
+        for (int arena = 1; arena < 16; arena++)
+        {
+            long slot = _moduleBase + BuildProfile.ArenaTableOffset + arena * 8L;
+            ulong current = ReadUInt64(slot);
+            if (current != 0) continue;
+
+            byte[] expected = new byte[8];
+            byte[] replacement = new byte[8];
+            BinaryPrimitives.WriteUInt64LittleEndian(replacement, (ulong)baseAddress);
+            WriteVerified(slot, expected, replacement);
+            return arena;
+        }
+
+        throw new InvalidOperationException(
+            "No unused tag-arena slot is available for a temporary palette buffer.");
+    }
+
+    /// <summary>
+    /// Allocates <paramref name="data"/> in the game process, claims an unused
+    /// arena for it, and returns the segmented offset of the buffer start.
+    /// </summary>
+    public uint PublishArenaBuffer(ReadOnlySpan<byte> data)
+        => PublishArenaBuffer(data, out _);
+
+    /// <summary>
+    /// Allocates <paramref name="data"/> in the game process, claims an unused
+    /// arena for it, and returns both the segmented base offset and arena index.
+    /// </summary>
+    public uint PublishArenaBuffer(ReadOnlySpan<byte> data, out int arena)
+    {
+        if (data.Length == 0)
+            throw new ArgumentException("Buffer data is empty.", nameof(data));
+
+        long address = AllocateRemote(data.Length);
+        byte[] expected = new byte[data.Length];
+        WriteVerified(address, expected, data);
+        arena = ClaimUnusedArena(address);
+        uint encoded = (uint)(arena << 28);
+        if (encoded == 0 || !TryResolveOffset(encoded, out long resolved) ||
+            resolved != address)
+        {
+            throw new InvalidDataException(
+                "The temporary palette buffer could not be published into a tag arena.");
+        }
+        return encoded;
+    }
+
+    /// <summary>
+    /// Encodes a 4-byte-aligned byte offset inside a claimed tag arena.
+    /// </summary>
+    public static uint EncodeArenaByteOffset(int arena, int byteOffset)
+    {
+        if (arena is < 1 or > 15)
+            throw new ArgumentOutOfRangeException(nameof(arena));
+        if (byteOffset < 0 || (byteOffset & 3) != 0)
+            throw new ArgumentOutOfRangeException(nameof(byteOffset));
+        return (uint)(arena << 28) | (uint)(byteOffset >> 2);
     }
 
     public static uint BuildRuntimeDatum(RuntimeTagEntry target)
@@ -696,6 +840,14 @@ public sealed class RuntimeTagMemoryService : IDisposable
         IntPtr address,
         out MemoryBasicInformation buffer,
         nuint length);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr VirtualAllocEx(
+        SafeProcessHandle process,
+        IntPtr address,
+        nuint size,
+        uint allocationType,
+        uint protect);
 }
 
 public sealed record RuntimeMemoryWrite(long Address, byte[] Expected, byte[] Value);

@@ -1,3 +1,5 @@
+mod expand_palettes;
+
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use blam_tags::fields::{TagFieldData, TagFieldType, TagReferenceData};
@@ -62,6 +64,8 @@ fn run() -> Result<()> {
     let mut mod_path = None;
     let mut output = None;
     let mut inspect = None;
+    let mut expand_palettes = false;
+    let mut dry_run = false;
     while let Some(argument) = args.next() {
         match argument.to_string_lossy().as_ref() {
             "--paks" => paks = args.next().map(PathBuf::from),
@@ -69,13 +73,32 @@ fn run() -> Result<()> {
             "--mod" => mod_path = args.next().map(PathBuf::from),
             "--output" => output = args.next().map(PathBuf::from),
             "--inspect" => inspect = args.next().map(|value| value.to_string_lossy().into_owned()),
+            "--expand-palettes" => expand_palettes = true,
+            "--dry-run" => dry_run = true,
             other => bail!("unknown argument '{other}'"),
         }
     }
     let paks = paks.context("--paks is required")?;
+    let archives = open_archives(&paks)?;
+    if expand_palettes {
+        let output = priority_output(output.context("--output is required with --expand-palettes")?);
+        let report = expand_palettes::expand_all_mission_palettes(&archives, &output, dry_run)?;
+        for line in &report.lines {
+            println!("{line}");
+        }
+        println!(
+            "Summary: {} / {} scenario(s) changed from catalogs of {} vehicle(s)/{} weapon(s); +{} vehicle palette entries, +{} weapon palette entries",
+            report.scenarios_changed,
+            report.scenarios_seen,
+            report.vehicle_catalog,
+            report.weapon_catalog,
+            report.vehicle_added_total,
+            report.weapon_added_total
+        );
+        return Ok(());
+    }
     let definitions = definitions.context("--definitions is required")?;
     let groups = load_groups(&definitions)?;
-    let archives = open_archives(&paks)?;
     if let Some(identity) = inspect {
         let (group, name) = identity
             .split_once(':')

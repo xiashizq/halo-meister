@@ -15,6 +15,7 @@ public sealed partial class HomePage : Page
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
     private readonly PlayFabProxyService _cloud = PlayFabProxyService.Current;
     private readonly AppState _state = AppState.Current;
+    private readonly GamePlatformPreference _platform = GamePlatformPreference.Current;
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private string? _gameDirectory;
 
@@ -24,16 +25,43 @@ public sealed partial class HomePage : Page
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         _refreshTimer.Tick += OnRefreshTick;
+        _platform.Changed += OnPlatformPreferenceChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ApplyPlatformChrome();
         RefreshStatus();
         _refreshTimer.Start();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e) => _refreshTimer.Stop();
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _refreshTimer.Stop();
+        _platform.Changed -= OnPlatformPreferenceChanged;
+    }
+
     private void OnRefreshTick(object? sender, object e) => RefreshStatus();
+
+    private void OnPlatformPreferenceChanged(object? sender, EventArgs e)
+        => DispatcherQueue.TryEnqueue(ApplyPlatformChrome);
+
+    private void OnSelectSteamPlatform(object sender, RoutedEventArgs e)
+        => _platform.Platform = GamePlatformKind.Steam;
+
+    private void OnSelectStorePlatform(object sender, RoutedEventArgs e)
+        => _platform.Platform = GamePlatformKind.MicrosoftStore;
+
+    private void ApplyPlatformChrome()
+    {
+        bool steam = _platform.IsSteam;
+        PlatformButtonText.Text = steam
+            ? L.Get("game_saves.platform_steam")
+            : L.Get("game_saves.platform_microsoft_store");
+        LaunchGameButtonText.Text = steam
+            ? L.Get("home.launch_game_steam")
+            : L.Get("home.launch_game_store");
+    }
 
     private void RefreshStatus()
     {

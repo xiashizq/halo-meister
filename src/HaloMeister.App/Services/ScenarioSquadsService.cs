@@ -6,6 +6,27 @@ using HaloMeister.App.Models;
 
 namespace HaloMeister.App.Services;
 
+public sealed record ScenarioSquadSpawnPoint(
+    int Index,
+    string Name,
+    float X,
+    float Y,
+    float Z)
+{
+    public string Display
+    {
+        get
+        {
+            string coords = string.Create(
+                CultureInfo.InvariantCulture,
+                $"X={X:0.###}  Y={Y:0.###}  Z={Z:0.###}");
+            return string.IsNullOrWhiteSpace(Name)
+                ? $"{Index}.  {coords}"
+                : $"{Index}. {Name}  {coords}";
+        }
+    }
+}
+
 public sealed record ScenarioSquadInfo(
     int Index,
     string Name,
@@ -25,9 +46,10 @@ public sealed record ScenarioSquadInfo(
     string InitialTaskDisplay,
     short EditorFolderIndex,
     string EditorFolderDisplay,
-    int SpawnPointCount,
+    IReadOnlyList<ScenarioSquadSpawnPoint> SpawnPoints,
     int SpawnFormationCount)
 {
+    public int SpawnPointCount => SpawnPoints.Count;
     public string ListTitle => $"{Index}. {Name}";
     public string SearchText =>
         $"{Index} {Name} {ScriptName} {TeamDisplay} {ParentDisplay} {InitialObjectiveDisplay}";
@@ -225,7 +247,7 @@ public sealed class ScenarioSquadsService : IDisposable
                 task < 0 ? L.Get("squads.none") : task.ToString(CultureInfo.InvariantCulture),
                 folder,
                 FormatNamedIndex(scenario, folders, folder),
-                spawnPoints?.ChildCount ?? 0,
+                ReadSpawnPoints(scenario, spawnPoints),
                 formations?.ChildCount ?? 0));
         }
 
@@ -242,6 +264,78 @@ public sealed class ScenarioSquadsService : IDisposable
         if (!_definitions.HasSchema("scnr"))
             throw new InvalidDataException(
                 L.Get("squads.error_no_scnr_schema"));
+    }
+
+    private IReadOnlyList<ScenarioSquadSpawnPoint> ReadSpawnPoints(
+        RuntimeTagEntry scenario,
+        RuntimeTagFieldValue? block)
+    {
+        if (block is null ||
+            block.ChildBlockDefinition is null ||
+            block.ChildCount <= 0 ||
+            block.ChildAddress <= 0)
+        {
+            return [];
+        }
+
+        int count = Math.Min(block.ChildCount, 256);
+        var points = new List<ScenarioSquadSpawnPoint>(count);
+        for (int index = 0; index < count; index++)
+        {
+            IReadOnlyList<RuntimeTagFieldValue> fields = ReadBlock(
+                scenario, block, index);
+            string pointName = ReadSpawnPointName(fields);
+            if (!TryReadPoint3d(fields, "position", out float x, out float y, out float z))
+            {
+                points.Add(new ScenarioSquadSpawnPoint(index, pointName, 0, 0, 0));
+                continue;
+            }
+            points.Add(new ScenarioSquadSpawnPoint(index, pointName, x, y, z));
+        }
+        return points;
+    }
+
+    private string ReadSpawnPointName(IReadOnlyList<RuntimeTagFieldValue> fields)
+    {
+        RuntimeTagFieldValue? field = fields.FirstOrDefault(item =>
+            string.Equals(
+                CleanFieldName(item.Name),
+                "name",
+                StringComparison.OrdinalIgnoreCase));
+        if (field is null)
+            return "";
+        if (field.Type is "string" or "long_string")
+            return ReadCString(field.Address, field.Size);
+        if (field.Type == "string_id")
+        {
+            string label = ResolveStringIdLabel(field);
+            return label == L.Get("squads.none") ? "" : label;
+        }
+        return "";
+    }
+
+    private bool TryReadPoint3d(
+        IReadOnlyList<RuntimeTagFieldValue> fields,
+        string name,
+        out float x,
+        out float y,
+        out float z)
+    {
+        x = y = z = 0;
+        RuntimeTagFieldValue? field = fields.FirstOrDefault(item =>
+            string.Equals(item.Type, "real_point_3d", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                CleanFieldName(item.Name),
+                name,
+                StringComparison.OrdinalIgnoreCase));
+        if (field is null || field.Size < sizeof(float) * 3 || field.Address <= 0)
+            return false;
+
+        byte[] bytes = _memory.ReadBytes(field.Address, sizeof(float) * 3);
+        x = BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(0, 4));
+        y = BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(4, 4));
+        z = BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(8, 4));
+        return float.IsFinite(x) && float.IsFinite(y) && float.IsFinite(z);
     }
 
     private static RuntimeTagFieldValue? FindBlock(

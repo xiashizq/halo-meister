@@ -10,9 +10,9 @@ public sealed partial class SetupPage : Page
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+    private CancellationTokenSource? _heartbeatWatchCts;
     private bool _languageComboReady;
     private bool _checkingBridge;
-    private bool _bridgeWasGameRunning;
 
     public SetupPage()
     {
@@ -25,12 +25,18 @@ public sealed partial class SetupPage : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         PopulateLanguageCombo();
-        _ = RefreshStatusAsync(retryForHeartbeat: true);
+        ApplyStatus(_bridge.GetStatus());
+        StartHeartbeatWatch();
         _refreshTimer.Start();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e) => _refreshTimer.Stop();
-    private void OnRefreshTick(object? sender, object e) => _ = RefreshStatusAsync();
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _refreshTimer.Stop();
+        StopHeartbeatWatch();
+    }
+
+    private void OnRefreshTick(object? sender, object e) => ApplyStatus(_bridge.GetStatus());
 
     private void PopulateLanguageCombo()
     {
@@ -69,7 +75,51 @@ public sealed partial class SetupPage : Page
         MainWindow.Instance?.SetLanguage(code);
     }
 
-    private async Task RefreshStatusAsync(bool retryForHeartbeat = false)
+    private void StartHeartbeatWatch()
+    {
+        StopHeartbeatWatch();
+        if (_bridge.GetStatus().IsRuntimeReady)
+            return;
+
+        _heartbeatWatchCts = new CancellationTokenSource();
+        CancellationToken token = _heartbeatWatchCts.Token;
+        _ = WatchHeartbeatAsync(token);
+    }
+
+    private void StopHeartbeatWatch()
+    {
+        CancellationTokenSource? cts = _heartbeatWatchCts;
+        _heartbeatWatchCts = null;
+        if (cts is null)
+            return;
+        try { cts.Cancel(); }
+        catch (ObjectDisposedException) { }
+        cts.Dispose();
+    }
+
+    private async Task WatchHeartbeatAsync(CancellationToken cancellationToken)
+    {
+        if (_checkingBridge)
+            return;
+        _checkingBridge = true;
+        try
+        {
+            BridgeStatusText.Text = L.Get("setup.waiting_for_bridge_heartbeat");
+            ScriptingBridgeStatus status = await _bridge.WaitForHeartbeatAsync(cancellationToken);
+            if (!cancellationToken.IsCancellationRequested)
+                ApplyStatus(status);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Page unloaded or a newer watch replaced this one.
+        }
+        finally
+        {
+            _checkingBridge = false;
+        }
+    }
+
+    private void ApplyStatus(ScriptingBridgeStatus status)
     {
         bool connected = _game.IsConnected;
         GameStatusText.Text = connected
@@ -77,29 +127,13 @@ public sealed partial class SetupPage : Page
             : L.Get("setup.not_connected");
         ConnectButton.Content = connected ? L.Get("common.reconnect") : L.Get("common.connect");
 
-        ScriptingBridgeStatus status = _bridge.GetStatus();
-        bool startedSinceLastCheck = status.IsGameProcessRunning && !_bridgeWasGameRunning;
-        _bridgeWasGameRunning = status.IsGameProcessRunning;
-        if (!_checkingBridge && !status.IsRuntimeReady &&
-            status.IsGameProcessRunning && (retryForHeartbeat || startedSinceLastCheck))
-        {
-            _checkingBridge = true;
-            RecheckBridgeButton.IsEnabled = false;
+        if (!status.IsRuntimeReady && (_checkingBridge || status.IsGameProcessRunning))
             BridgeStatusText.Text = L.Get("setup.waiting_for_bridge_heartbeat");
-            try
-            {
-                status = await _bridge.WaitForHeartbeatAsync();
-            }
-            finally
-            {
-                _checkingBridge = false;
-                RecheckBridgeButton.IsEnabled = true;
-            }
-        }
+        else if (status.IsRuntimeReady && !status.IsStale)
+            BridgeStatusText.Text = L.Get("setup.bridge_ready");
+        else
+            BridgeStatusText.Text = status.Summary;
 
-        BridgeStatusText.Text = status.IsRuntimeReady && !status.IsStale
-            ? L.Get("setup.bridge_ready")
-            : status.Summary;
         InstallButton.Content = status.IsInstalled
             ? L.Get("common.repair_update")
             : L.Get("common.install");
@@ -107,23 +141,26 @@ public sealed partial class SetupPage : Page
     }
 
     private async void OnLaunchGame(object sender, RoutedEventArgs e)
-        => await (MainWindow.Instance?.LaunchGameAsync() ?? Task.CompletedTask);
+    {
+        await (MainWindow.Instance?.LaunchGameAsync() ?? Task.CompletedTask);
+        StartHeartbeatWatch();
+        ApplyStatus(_bridge.GetStatus());
+    }
 
     private async void OnConnect(object sender, RoutedEventArgs e)
     {
         await (MainWindow.Instance?.ConnectToGameAsync() ?? Task.CompletedTask);
-        await RefreshStatusAsync(retryForHeartbeat: true);
+        StartHeartbeatWatch();
+        ApplyStatus(_bridge.GetStatus());
     }
-
-    private async void OnRecheckBridge(object sender, RoutedEventArgs e)
-        => await RefreshStatusAsync(retryForHeartbeat: true);
 
     private async void OnInstall(object sender, RoutedEventArgs e)
     {
         InstallButton.IsEnabled = false;
         InstallButton.Content = L.Get("common.working");
         await (MainWindow.Instance?.InstallLiveToolsAsync() ?? Task.CompletedTask);
-        await RefreshStatusAsync(retryForHeartbeat: true);
+        StartHeartbeatWatch();
+        ApplyStatus(_bridge.GetStatus());
     }
 
     private void OnOpenLiveTools(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("live-gameplay");

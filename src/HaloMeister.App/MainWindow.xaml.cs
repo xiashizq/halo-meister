@@ -220,11 +220,13 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            bool launched = await Launcher.LaunchUriAsync(
-                new Uri("ms-xbl-7c27bae7:"));
+            bool steam = GamePlatformPreference.Current.IsSteam;
+            bool launched = await GamePlatformPreference.Current.LaunchGameAsync();
             Report(
                 launched
-                    ? L.Get("shell.launch_requested")
+                    ? L.Get(steam
+                        ? "shell.launch_requested_steam"
+                        : "shell.launch_requested")
                     : L.Get("shell.launch_rejected"),
                 launched ? InfoBarSeverity.Success : InfoBarSeverity.Warning,
                 launched ? L.Get("shell.launching_game") : L.Get("shell.could_not_launch"));

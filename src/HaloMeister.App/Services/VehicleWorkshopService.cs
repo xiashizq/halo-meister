@@ -31,24 +31,45 @@ public sealed record LoadableVehicle(string Name, RuntimeTagEntry Tag)
         terms.Any(term => value.Contains(term, StringComparison.Ordinal));
 }
 
+public sealed record VehicleModelVariant(
+    int Index,
+    uint StringId,
+    string Name)
+{
+    public string Detail => Index == 0
+        ? L.Get("vehicle_workshop.variant_default")
+        : L.Format("vehicle_workshop.variant_numbered", Index + 1);
+}
+
+public sealed record VehicleVariantCatalog(
+    RuntimeTagEntry Model,
+    IReadOnlyList<VehicleModelVariant> Variants);
+
 public sealed record VehiclePlayerControlResult(
     int ChangedSeatCount,
     bool WasAlreadyEnabled,
+    bool RemappedSeatLabel,
+    string VehicleName)
+{
+    public string Message => WasAlreadyEnabled
+        ? L.Format("vehicle_workshop.player_control_already_enabled", VehicleName)
+        : L.Format("vehicle_workshop.player_control_enabled", VehicleName);
+}
+
+public sealed record VehicleSeatExitResult(
+    int ChangedSeatCount,
+    bool WasAlreadyAllowed,
     bool RemappedSeatLabel)
 {
     public string Message
     {
         get
         {
-            if (WasAlreadyEnabled)
-                return L.Get("vehicle_workshop.pelican_already_enabled");
+            if (WasAlreadyAllowed)
+                return L.Get("vehicle_workshop.seraph_exit_already_allowed");
             return RemappedSeatLabel
-                ? L.Format(
-                    "vehicle_workshop.pelican_enabled_with_label",
-                    ChangedSeatCount)
-                : L.Format(
-                    "vehicle_workshop.pelican_enabled",
-                    ChangedSeatCount);
+                ? L.Get("vehicle_workshop.seraph_exit_allowed_with_label")
+                : L.Get("vehicle_workshop.seraph_exit_allowed");
         }
     }
 }
@@ -57,8 +78,15 @@ public sealed class VehicleWorkshopService : IDisposable
 {
     private const uint InvisibleSeat = 1u << 0;
     private const uint DriverSeat = 1u << 2;
+    // unit_seat_flags option index 4: "third person camera"
+    private const uint ThirdPersonCamera = 1u << 4;
     private const uint InvalidForPlayer = 1u << 13;
+    // unit_seat_flags option index 27: "disallow exit"
+    private const uint DisallowExit = 1u << 27;
     private const uint PlayerBlockingFlags = InvisibleSeat | InvalidForPlayer;
+    // Same player-blocking clears as Pelican, plus Seraph's native "disallow exit".
+    private const uint SeraphExitBlockingFlags =
+        InvisibleSeat | InvalidForPlayer | DisallowExit;
     private const short AiSeatTypeDriver = 5;
 
     private readonly RuntimeTagMemoryService _memory = RuntimeTagMemoryService.Current;
@@ -106,8 +134,104 @@ public sealed class VehicleWorkshopService : IDisposable
         return vehicles;
     }
 
+    public VehicleVariantCatalog ReadVariants(LoadableVehicle selected)
+    {
+        EnsureDefinitions();
+        RuntimeTagEntry live = FindLive(selected)
+            ?? throw new InvalidOperationException(
+                L.Get("vehicle_workshop.error_tag_unloaded"));
+        if (live.DataAddress <= 0 || live.RootCount <= 0)
+            throw new InvalidOperationException(
+                L.Get("vehicle_workshop.error_tag_not_ready"));
+
+        IReadOnlyList<RuntimeTagFieldValue> root = _definitions.ReadRootFields(
+            live.Group, live.DataAddress, _memory.ReadBytes, ResolveOrNull);
+        RuntimeTagFieldValue modelReference = root.FirstOrDefault(field =>
+                field.IsTagReference &&
+                string.Equals(
+                    LeafFieldName(field.Name),
+                    "model",
+                    StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException(
+                L.Format("vehicle_workshop.error_no_model", selected.Name));
+        RuntimeTagEntry model = _tags.FirstOrDefault(tag =>
+                tag.Index == modelReference.ReferencedTagIndex &&
+                string.Equals(tag.Group, "hlmt", StringComparison.OrdinalIgnoreCase) &&
+                tag.DataAddress > 0 &&
+                tag.RootCount > 0)
+            ?? throw new InvalidDataException(
+                L.Format("vehicle_workshop.error_no_hlmt", selected.Name));
+
+        IReadOnlyList<RuntimeTagFieldValue> modelRoot = _definitions.ReadRootFields(
+            model.Group, model.DataAddress, _memory.ReadBytes, ResolveOrNull);
+        RuntimeTagFieldValue variants = modelRoot.FirstOrDefault(field =>
+                field.CanOpenBlock &&
+                string.Equals(
+                    field.ChildBlockDefinition,
+                    "model_variant_block",
+                    StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException(
+                L.Format("vehicle_workshop.error_no_variants", selected.Name));
+
+        var result = new List<VehicleModelVariant>(variants.ChildCount);
+        for (int index = 0; index < variants.ChildCount; index++)
+        {
+            IReadOnlyList<RuntimeTagFieldValue> fields =
+                _definitions.ReadBlockFields(
+                    model.Group,
+                    variants.ChildBlockDefinition!,
+                    variants.ChildAddress,
+                    index,
+                    _memory.ReadBytes,
+                    ResolveOrNull);
+            RuntimeTagFieldValue? name = fields.FirstOrDefault(field =>
+                field.Type == "string_id" &&
+                field.Size == sizeof(uint) &&
+                string.Equals(
+                    LeafFieldName(field.Name),
+                    "name",
+                    StringComparison.OrdinalIgnoreCase));
+            if (name is null) continue;
+            uint stringId = BinaryPrimitives.ReadUInt32LittleEndian(
+                _memory.ReadBytes(name.Address, name.Size));
+            result.Add(new VehicleModelVariant(
+                index,
+                stringId,
+                FriendlyVariantName(stringId, index)));
+        }
+
+        if (result.Count == 0)
+            throw new InvalidDataException(
+                L.Format("vehicle_workshop.error_no_variants", selected.Name));
+        return new VehicleVariantCatalog(model, result);
+    }
+
+    public IReadOnlyList<SpawnVariantChoice> ReadSpawnVariants(LoadableVehicle selected)
+    {
+        try
+        {
+            return ReadVariants(selected).Variants
+                .Select(variant =>
+                {
+                    byte[] bytes = new byte[sizeof(uint)];
+                    BinaryPrimitives.WriteUInt32LittleEndian(bytes, variant.StringId);
+                    return new SpawnVariantChoice(
+                        variant.Name,
+                        bytes,
+                        checked((short)variant.Index),
+                        variant.Index);
+                })
+                .ToArray();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
     public async Task<ScriptExecutionResult> SpawnAsync(
         LoadableVehicle selected,
+        VehicleModelVariant? variant = null,
         CancellationToken cancellationToken = default)
     {
         ScriptingBridgeStatus status = _bridge.GetStatus();
@@ -117,17 +241,11 @@ public sealed class VehicleWorkshopService : IDisposable
         if (status.IsStale)
             throw new InvalidOperationException(status.Summary);
 
-        RuntimeTagEntry? live = _tags.FirstOrDefault(tag =>
-                tag.Index == selected.Tag.Index &&
-                string.Equals(tag.Group, "vehi", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(tag.Name, selected.Tag.Name, StringComparison.OrdinalIgnoreCase));
+        RuntimeTagEntry? live = FindLive(selected);
         if (live is null)
         {
             _tags = _memory.ReadTags();
-            live = _tags.FirstOrDefault(tag =>
-                tag.Index == selected.Tag.Index &&
-                string.Equals(tag.Group, "vehi", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(tag.Name, selected.Tag.Name, StringComparison.OrdinalIgnoreCase));
+            live = FindLive(selected);
         }
         if (live is null)
             throw new InvalidOperationException(L.Get("vehicle_workshop.error_tag_unloaded"));
@@ -136,14 +254,73 @@ public sealed class VehicleWorkshopService : IDisposable
                 L.Get("vehicle_workshop.error_tag_not_ready"));
 
         uint datum = RuntimeTagMemoryService.BuildRuntimeDatum(live);
-        ScriptExecutionResult result = await _bridge.ExecuteAsync(
-            ScriptLanguage.BlamSpawn,
-            datum.ToString("X8"),
-            TimeSpan.FromSeconds(15),
-            cancellationToken);
-        if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
-        return result;
+        if (variant is null || variant.StringId == 0)
+        {
+            ScriptExecutionResult plain = await _bridge.ExecuteAsync(
+                ScriptLanguage.BlamSpawn,
+                datum.ToString("X8"),
+                TimeSpan.FromSeconds(15),
+                cancellationToken);
+            if (plain.Outcome != ScriptOutcome.Confirmed)
+                throw new InvalidOperationException(plain.Message);
+            return plain;
+        }
+
+        // Same pattern as armor/enemy variant spawn: temporarily author the
+        // vehicle's default model variant, then create via the native path that
+        // also calls object_set_variant on the new datum.
+        EnsureDefinitions();
+        RuntimeTagFieldValue defaultVariant = _definitions.ReadRootFields(
+                live.Group, live.DataAddress, _memory.ReadBytes, ResolveOrNull)
+            .FirstOrDefault(field =>
+                field.Type == "string_id" &&
+                string.Equals(
+                    LeafFieldName(field.Name),
+                    "default model variant",
+                    StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException(
+                L.Format("vehicle_workshop.error_no_default_variant", selected.Name));
+        if (defaultVariant.Size != sizeof(uint))
+            throw new InvalidDataException(
+                L.Format("vehicle_workshop.error_no_default_variant", selected.Name));
+
+        byte[] original = _memory.ReadBytes(defaultVariant.Address, sizeof(uint));
+        byte[] next = new byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32LittleEndian(next, variant.StringId);
+        bool patched = !original.AsSpan().SequenceEqual(next);
+        if (patched)
+            _memory.WriteVerified(defaultVariant.Address, next);
+
+        try
+        {
+            ScriptExecutionResult result = await _bridge.ExecuteAsync(
+                ScriptLanguage.BlamBipedVariantSpawn,
+                $"{datum:X8},{variant.StringId:X8}",
+                TimeSpan.FromSeconds(15),
+                cancellationToken);
+            if (result.Outcome != ScriptOutcome.Confirmed)
+                throw new InvalidOperationException(result.Message);
+            return result;
+        }
+        finally
+        {
+            if (patched && _memory.IsConnected)
+                _memory.WriteVerified(defaultVariant.Address, original);
+        }
+    }
+
+    public async Task<ScriptExecutionResult> SpawnAsync(
+        LoadableVehicle selected,
+        SpawnVariantChoice? variant,
+        CancellationToken cancellationToken = default)
+    {
+        VehicleModelVariant? mapped = variant is null || variant.StringId == 0
+            ? null
+            : new VehicleModelVariant(
+                variant.VariantBlockIndex,
+                variant.StringId,
+                variant.Name);
+        return await SpawnAsync(selected, mapped, cancellationToken);
     }
 
     public void WarmUpDefinitions() => EnsureDefinitions();
@@ -178,20 +355,23 @@ public sealed class VehicleWorkshopService : IDisposable
         }
     }
 
-    public VehiclePlayerControlResult EnablePelicanPlayerControl(LoadableVehicle selected)
+    public VehiclePlayerControlResult EnablePelicanPlayerControl(LoadableVehicle selected) =>
+        EnablePlayerControl(selected);
+
+    public VehiclePlayerControlResult EnablePlayerControl(LoadableVehicle selected)
     {
         if (!_memory.IsConnected)
             throw new InvalidOperationException(
                 L.Get("vehicle_workshop.error_connect_game_first"));
-        if (!IsPelican(selected))
+        if (!SupportsPlayerControl(selected))
             throw new InvalidOperationException(
-                L.Get("vehicle_workshop.error_pelican_only"));
+                L.Get("vehicle_workshop.error_player_control_unsupported"));
 
         EnsureDefinitions();
         _tags = _memory.ReadTags();
         RuntimeTagEntry live = FindLive(selected)
             ?? throw new InvalidOperationException(
-                L.Get("vehicle_workshop.error_pelican_unloaded"));
+                L.Format("vehicle_workshop.error_player_control_unloaded", selected.Name));
 
         uint warthogDriverLabel;
         try
@@ -205,26 +385,25 @@ public sealed class VehicleWorkshopService : IDisposable
                 ex);
         }
 
-        uint? pelicanDriverLabel = _memory.TryResolveStringId("pelican_d", out uint pelicanId)
-            ? pelicanId
-            : null;
+        uint? nativeDriverLabel = ResolveNativeDriverLabel(selected);
 
         IReadOnlyList<SeatPatchField> seats = ReadSeats(live);
-        IReadOnlyList<SeatPatchField> targets = SelectPelicanDriverSeats(
+        IReadOnlyList<SeatPatchField> targets = SelectDriverSeats(
             seats,
-            pelicanDriverLabel,
+            nativeDriverLabel,
             warthogDriverLabel);
         if (targets.Count == 0)
             throw new InvalidDataException(
-                L.Get("vehicle_workshop.error_pelican_no_driver_seat"));
+                L.Format("vehicle_workshop.error_player_control_no_driver_seat", selected.Name));
 
         SeatPatchField[] needingWork = targets
             .Where(seat =>
                 seat.Label != warthogDriverLabel ||
-                (seat.Flags & PlayerBlockingFlags) != 0)
+                (seat.Flags & PlayerBlockingFlags) != 0 ||
+                (seat.Flags & ThirdPersonCamera) == 0)
             .ToArray();
         if (needingWork.Length == 0)
-            return new VehiclePlayerControlResult(0, true, false);
+            return new VehiclePlayerControlResult(0, true, false, selected.Name);
 
         var completed = new List<(long Address, byte[] Original)>();
         bool remappedLabel = false;
@@ -237,7 +416,8 @@ public sealed class VehicleWorkshopService : IDisposable
                 if (flags != seat.Flags)
                     throw new InvalidOperationException(
                         L.Format(
-                            "vehicle_workshop.error_pelican_flags_changed",
+                            "vehicle_workshop.error_player_control_flags_changed",
+                            selected.Name,
                             seat.Index));
 
                 byte[] currentLabel = _memory.ReadBytes(seat.LabelAddress, sizeof(uint));
@@ -245,10 +425,11 @@ public sealed class VehicleWorkshopService : IDisposable
                 if (label != seat.Label)
                     throw new InvalidOperationException(
                         L.Format(
-                            "vehicle_workshop.error_pelican_label_changed",
+                            "vehicle_workshop.error_player_control_label_changed",
+                            selected.Name,
                             seat.Index));
 
-                uint nextFlags = flags & ~PlayerBlockingFlags;
+                uint nextFlags = (flags & ~PlayerBlockingFlags) | ThirdPersonCamera;
                 if (nextFlags != flags)
                 {
                     byte[] replacement = new byte[sizeof(uint)];
@@ -268,17 +449,20 @@ public sealed class VehicleWorkshopService : IDisposable
                 }
             }
 
-            IReadOnlyList<SeatPatchField> verified = SelectPelicanDriverSeats(
+            IReadOnlyList<SeatPatchField> verified = SelectDriverSeats(
                 ReadSeats(live),
-                pelicanDriverLabel,
+                nativeDriverLabel,
                 warthogDriverLabel);
             if (verified.Count == 0 ||
                 verified.Any(seat =>
                     seat.Label != warthogDriverLabel ||
-                    (seat.Flags & PlayerBlockingFlags) != 0))
+                    (seat.Flags & PlayerBlockingFlags) != 0 ||
+                    (seat.Flags & ThirdPersonCamera) == 0))
             {
                 throw new InvalidDataException(
-                    L.Get("vehicle_workshop.error_pelican_verify_failed"));
+                    L.Format(
+                        "vehicle_workshop.error_player_control_verify_failed",
+                        selected.Name));
             }
         }
         catch
@@ -291,11 +475,147 @@ public sealed class VehicleWorkshopService : IDisposable
             throw;
         }
 
-        return new VehiclePlayerControlResult(needingWork.Length, false, remappedLabel);
+        return new VehiclePlayerControlResult(
+            needingWork.Length, false, remappedLabel, selected.Name);
+    }
+
+    public VehicleSeatExitResult AllowSeraphPlayerExit(LoadableVehicle selected)
+    {
+        if (!_memory.IsConnected)
+            throw new InvalidOperationException(
+                L.Get("vehicle_workshop.error_connect_game_first"));
+        if (!IsSeraph(selected))
+            throw new InvalidOperationException(
+                L.Get("vehicle_workshop.error_seraph_only"));
+
+        EnsureDefinitions();
+        _tags = _memory.ReadTags();
+        RuntimeTagEntry live = FindLive(selected)
+            ?? throw new InvalidOperationException(
+                L.Get("vehicle_workshop.error_seraph_unloaded"));
+        if (live.DataAddress <= 0)
+            throw new InvalidOperationException(
+                L.Get("vehicle_workshop.error_tag_not_ready"));
+
+        // Same trick as Pelican: remap the cockpit seat label to warthog_d so the
+        // engine treats exit/enter like a normal player-driven vehicle seat.
+        uint warthogDriverLabel;
+        try
+        {
+            warthogDriverLabel = _memory.ResolveStringId("warthog_d");
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException(
+                L.Get("vehicle_workshop.error_no_warthog_driver_label"),
+                ex);
+        }
+
+        uint? seraphDriverLabel = _memory.TryResolveStringId("seraph_d", out uint seraphId)
+            ? seraphId
+            : null;
+
+        IReadOnlyList<SeatPatchField> seats = ReadSeats(live);
+        IReadOnlyList<SeatPatchField> targets = SelectDriverSeats(
+            seats,
+            seraphDriverLabel,
+            warthogDriverLabel);
+        if (targets.Count == 0)
+            throw new InvalidDataException(
+                L.Get("vehicle_workshop.error_seraph_no_seats"));
+
+        SeatPatchField[] needingWork = targets
+            .Where(seat =>
+                seat.Label != warthogDriverLabel ||
+                (seat.Flags & SeraphExitBlockingFlags) != 0)
+            .ToArray();
+        if (needingWork.Length == 0)
+            return new VehicleSeatExitResult(0, true, false);
+
+        var completed = new List<(long Address, byte[] Original)>();
+        bool remappedLabel = false;
+        try
+        {
+            foreach (SeatPatchField seat in needingWork)
+            {
+                byte[] currentFlags = _memory.ReadBytes(seat.FlagsAddress, sizeof(uint));
+                uint flags = BinaryPrimitives.ReadUInt32LittleEndian(currentFlags);
+                if (flags != seat.Flags)
+                    throw new InvalidOperationException(
+                        L.Format(
+                            "vehicle_workshop.error_seraph_flags_changed",
+                            seat.Index));
+
+                byte[] currentLabel = _memory.ReadBytes(seat.LabelAddress, sizeof(uint));
+                uint label = BinaryPrimitives.ReadUInt32LittleEndian(currentLabel);
+                if (label != seat.Label)
+                    throw new InvalidOperationException(
+                        L.Format(
+                            "vehicle_workshop.error_seraph_label_changed",
+                            seat.Index));
+
+                uint nextFlags = flags & ~SeraphExitBlockingFlags;
+                if (nextFlags != flags)
+                {
+                    byte[] replacement = new byte[sizeof(uint)];
+                    BinaryPrimitives.WriteUInt32LittleEndian(replacement, nextFlags);
+                    _memory.WriteVerified(seat.FlagsAddress, replacement);
+                    completed.Add((seat.FlagsAddress, currentFlags));
+                }
+
+                if (label != warthogDriverLabel)
+                {
+                    byte[] replacement = new byte[sizeof(uint)];
+                    BinaryPrimitives.WriteUInt32LittleEndian(
+                        replacement, warthogDriverLabel);
+                    _memory.WriteVerified(seat.LabelAddress, replacement);
+                    completed.Add((seat.LabelAddress, currentLabel));
+                    remappedLabel = true;
+                }
+            }
+
+            IReadOnlyList<SeatPatchField> verified = SelectDriverSeats(
+                ReadSeats(live),
+                seraphDriverLabel,
+                warthogDriverLabel);
+            if (verified.Count == 0 ||
+                verified.Any(seat =>
+                    seat.Label != warthogDriverLabel ||
+                    (seat.Flags & SeraphExitBlockingFlags) != 0))
+            {
+                throw new InvalidDataException(
+                    L.Get("vehicle_workshop.error_seraph_exit_verify_failed"));
+            }
+        }
+        catch
+        {
+            foreach ((long address, byte[] original) in completed.AsEnumerable().Reverse())
+            {
+                try { _memory.WriteVerified(address, original); }
+                catch { }
+            }
+            throw;
+        }
+
+        return new VehicleSeatExitResult(needingWork.Length, false, remappedLabel);
     }
 
     public static bool IsPelican(LoadableVehicle? vehicle) =>
         vehicle is not null && IsPelicanPath(vehicle.Tag.Name);
+
+    public static bool IsBurdenOfProofTurret(LoadableVehicle? vehicle) =>
+        vehicle is not null && IsBurdenOfProofTurretPath(vehicle.Tag.Name);
+
+    public static bool IsAgTurretTwo(LoadableVehicle? vehicle) =>
+        vehicle is not null && IsAgTurretTwoPath(vehicle.Tag.Name);
+
+    public static bool SupportsPlayerControl(LoadableVehicle? vehicle) =>
+        IsPelican(vehicle) ||
+        IsBurdenOfProofTurret(vehicle) ||
+        IsAgTurretTwo(vehicle);
+
+    public static bool IsSeraph(LoadableVehicle? vehicle) =>
+        vehicle is not null && IsSeraphPath(vehicle.Tag.Name);
 
     public static string FriendlyName(RuntimeTagEntry tag)
     {
@@ -317,17 +637,17 @@ public sealed class VehicleWorkshopService : IDisposable
             string.Equals(tag.Group, "vehi", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(tag.Name, selected.Tag.Name, StringComparison.OrdinalIgnoreCase));
 
-    private static IReadOnlyList<SeatPatchField> SelectPelicanDriverSeats(
+    private static IReadOnlyList<SeatPatchField> SelectDriverSeats(
         IReadOnlyList<SeatPatchField> seats,
-        uint? pelicanDriverLabel,
+        uint? nativeDriverLabel,
         uint warthogDriverLabel)
     {
-        if (pelicanDriverLabel is uint pelicanLabel)
+        if (nativeDriverLabel is uint nativeLabel)
         {
-            SeatPatchField[] byPelicanLabel = seats
-                .Where(seat => seat.Label == pelicanLabel)
+            SeatPatchField[] byNativeLabel = seats
+                .Where(seat => seat.Label == nativeLabel)
                 .ToArray();
-            if (byPelicanLabel.Length > 0) return byPelicanLabel;
+            if (byNativeLabel.Length > 0) return byNativeLabel;
         }
 
         SeatPatchField[] alreadyWarthog = seats
@@ -345,7 +665,7 @@ public sealed class VehicleWorkshopService : IDisposable
             .ToArray();
         if (byAi.Length > 0) return byAi;
 
-        // Campaign Pelican seats often omit the driver flag; seat 0 is the cockpit.
+        // Campaign aircraft often omit the driver flag; seat 0 is the cockpit.
         return seats.Count > 0 ? [seats[0]] : [];
     }
 
@@ -441,16 +761,52 @@ public sealed class VehicleWorkshopService : IDisposable
         if (_definitions.SchemaCount == 0)
             _definitions.LoadDirectory(
                 RuntimeTagDefinitionLocator.ResolveCampaignEvolved());
-        if (!_definitions.HasSchema("vehi"))
+        if (!_definitions.HasSchema("vehi") || !_definitions.HasSchema("hlmt"))
             throw new InvalidDataException(
                 L.Get("vehicle_workshop.error_no_vehi_schema"));
+    }
+
+    private string FriendlyVariantName(uint stringId, int index)
+    {
+        if (_memory.TryGetStringIdName(stringId, out string? name) &&
+            !string.IsNullOrWhiteSpace(name))
+            return name!;
+        return index == 0
+            ? L.Get("vehicle_workshop.variant_default")
+            : L.Format("vehicle_workshop.variant_numbered", index + 1);
     }
 
     private long? ResolveOrNull(uint encoded) =>
         _memory.TryResolveOffset(encoded, out long address) ? address : null;
 
+    private uint? ResolveNativeDriverLabel(LoadableVehicle selected)
+    {
+        if (IsPelican(selected) &&
+            _memory.TryResolveStringId("pelican_d", out uint pelicanId))
+            return pelicanId;
+        return null;
+    }
+
     private static bool IsPelicanPath(string path) =>
         path.Contains("pelican", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBurdenOfProofTurretPath(string path)
+    {
+        string value = path.Replace('\\', '/');
+        return value.Contains("burden_of_proof_turret", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAgTurretTwoPath(string path)
+    {
+        string value = path.Replace('\\', '/');
+        return value.Contains("ag_turret_two", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSeraphPath(string path)
+    {
+        string value = path.Replace('\\', '/');
+        return value.Contains("seraph", StringComparison.OrdinalIgnoreCase);
+    }
 
     private sealed record SeatPatchField(
         int Index,

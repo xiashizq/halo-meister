@@ -187,11 +187,10 @@
 
                             <Border
                                 x:Name="AutocompletePanel"
-                                Width="560"
                                 MaxHeight="205"
                                 Margin="12"
                                 Padding="0,8,0,6"
-                                HorizontalAlignment="Left"
+                                HorizontalAlignment="Stretch"
                                 VerticalAlignment="Bottom"
                                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                                 BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
@@ -220,10 +219,14 @@
                                             <DataTemplate>
                                                 <Grid Padding="4,2" ColumnSpacing="12">
                                                     <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="150" />
+                                                        <ColumnDefinition Width="260" />
                                                         <ColumnDefinition Width="*" />
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="{Binding Name}" />
+                                                    <TextBlock
+                                                        FontFamily="Cascadia Mono, Consolas"
+                                                        FontWeight="SemiBold"
+                                                        Text="{Binding Name}"
+                                                        TextTrimming="CharacterEllipsis" />
                                                     <TextBlock
                                                         Grid.Column="1"
                                                         FontFamily="Cascadia Mono, Consolas"

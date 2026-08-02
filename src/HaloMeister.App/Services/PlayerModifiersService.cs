@@ -122,7 +122,7 @@ public sealed class PlayerModifiersService
             Options(
                 ("player_mod.opt_default", -1), ("player_mod.opt_disabled", 0), ("50%", 50), ("75%", 75),
                 ("100%", 100), ("125%", 125), ("150%", 150), ("200%", 200),
-                ("300%", 300), ("500%", 500))),
+                ("300%", 300))),
         new(
             "gravity",
             "player_mod.gravity",
