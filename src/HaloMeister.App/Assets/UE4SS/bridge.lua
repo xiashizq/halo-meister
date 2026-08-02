@@ -1,5 +1,5 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 87
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 88
 do
     local hm_ok, hm_error = pcall(function()
         local UEHelpers = require("UEHelpers")
@@ -11,7 +11,14 @@ do
         -- Keep in step with the VERSION marker above; Halo Meister compares the
         -- version reported here against the copy it ships so it can tell you when
         -- the game is still running a stale bridge.
-        local bridge_version = 87
+        local bridge_version = 88
+        -- User scripts execute in a dedicated environment. Expose the UE4SS
+        -- helper module there while retaining normal access to global UE4SS
+        -- APIs and preserving the historical global assignment behavior.
+        local user_script_environment = setmetatable(
+            { UEHelpers = UEHelpers },
+            { __index = _ENV, __newindex = _ENV }
+        )
 
         local root = local_app_data .. "\\Meteorite\\Saved\\HaloMeister\\Scripting\\"
         local request_path = root .. "request.hm"
@@ -181,7 +188,7 @@ do
                 code,
                 "@HaloMeister/" .. request_id,
                 "t",
-                _ENV
+                user_script_environment
             )
             if not chunk then
                 write_result(request_id, "error", compile_error)

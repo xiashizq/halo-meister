@@ -65,6 +65,7 @@ public sealed class VehicleWorkshopService : IDisposable
     private readonly RuntimeTagDefinitionService _definitions = new();
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
     private IReadOnlyList<RuntimeTagEntry> _tags = [];
+    private int _warmedProcessId;
 
     public int ProcessId => _memory.ProcessId;
     public ScriptingBridgeStatus BridgeStatus => _bridge.GetStatus();
@@ -116,13 +117,20 @@ public sealed class VehicleWorkshopService : IDisposable
         if (status.IsStale)
             throw new InvalidOperationException(status.Summary);
 
-        _tags = _memory.ReadTags();
-        RuntimeTagEntry live = _tags.FirstOrDefault(tag =>
+        RuntimeTagEntry? live = _tags.FirstOrDefault(tag =>
                 tag.Index == selected.Tag.Index &&
                 string.Equals(tag.Group, "vehi", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(tag.Name, selected.Tag.Name, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException(
-                L.Get("vehicle_workshop.error_tag_unloaded"));
+                string.Equals(tag.Name, selected.Tag.Name, StringComparison.OrdinalIgnoreCase));
+        if (live is null)
+        {
+            _tags = _memory.ReadTags();
+            live = _tags.FirstOrDefault(tag =>
+                tag.Index == selected.Tag.Index &&
+                string.Equals(tag.Group, "vehi", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(tag.Name, selected.Tag.Name, StringComparison.OrdinalIgnoreCase));
+        }
+        if (live is null)
+            throw new InvalidOperationException(L.Get("vehicle_workshop.error_tag_unloaded"));
         if (live.DataAddress <= 0 || live.RootCount <= 0)
             throw new InvalidOperationException(
                 L.Get("vehicle_workshop.error_tag_not_ready"));
@@ -136,6 +144,38 @@ public sealed class VehicleWorkshopService : IDisposable
         if (result.Outcome != ScriptOutcome.Confirmed)
             throw new InvalidOperationException(result.Message);
         return result;
+    }
+
+    public void WarmUpDefinitions() => EnsureDefinitions();
+
+    public async Task WarmUpAsync(CancellationToken cancellationToken = default)
+    {
+        if (_warmedProcessId == _memory.ProcessId && _warmedProcessId != 0)
+            return;
+
+        ScriptingBridgeStatus status = _bridge.GetStatus();
+        if (!status.IsRuntimeReady || status.IsStale)
+            return;
+
+        try
+        {
+            ScriptExecutionResult result = await _bridge.ExecuteAsync(
+                ScriptLanguage.PlayerPosition,
+                "read",
+                TimeSpan.FromSeconds(5),
+                cancellationToken);
+            if (result.Outcome == ScriptOutcome.Confirmed)
+                _warmedProcessId = _memory.ProcessId;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Prewarming is optional; spawning remains available on builds
+            // without the player-position capability.
+        }
     }
 
     public VehiclePlayerControlResult EnablePelicanPlayerControl(LoadableVehicle selected)

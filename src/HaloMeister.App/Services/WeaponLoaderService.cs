@@ -75,6 +75,7 @@ public sealed class WeaponLoaderService : IDisposable
     private readonly RuntimeTagDefinitionService _definitions = new();
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
     private IReadOnlyList<RuntimeTagEntry> _tags = [];
+    private int _warmedProcessId;
 
     public int ProcessId => _memory.ProcessId;
 
@@ -104,6 +105,12 @@ public sealed class WeaponLoaderService : IDisposable
         return weapons;
     }
 
+    /// <summary>
+    /// Loads the schemas used by the variant inspector before the user selects
+    /// a weapon, preventing a full definitions-directory parse on the UI thread.
+    /// </summary>
+    public void WarmUpDefinitions() => EnsureDefinitions();
+
     public async Task<ScriptExecutionResult> LoadAsync(
         LoadableWeapon selected,
         CancellationToken cancellationToken = default)
@@ -130,6 +137,42 @@ public sealed class WeaponLoaderService : IDisposable
         if (result.Outcome != ScriptOutcome.Confirmed)
             throw new InvalidOperationException(result.Message);
         return result;
+    }
+
+    /// <summary>
+    /// Loads the native Blam bridge with a read-only player-position request.
+    /// This moves the one-time DLL and bridge initialization work out of the
+    /// first weapon pickup, where it otherwise stalls the simulation.
+    /// </summary>
+    public async Task WarmUpAsync(CancellationToken cancellationToken = default)
+    {
+        if (_warmedProcessId == _memory.ProcessId && _warmedProcessId != 0)
+            return;
+
+        ScriptingBridgeStatus status = _bridge.GetStatus();
+        if (!status.IsRuntimeReady || status.IsStale)
+            return;
+
+        try
+        {
+            ScriptExecutionResult result = await _bridge.ExecuteAsync(
+                ScriptLanguage.PlayerPosition,
+                "read",
+                TimeSpan.FromSeconds(5),
+                cancellationToken);
+            if (result.Outcome == ScriptOutcome.Confirmed)
+                _warmedProcessId = _memory.ProcessId;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // A build can expose weapon loading without the optional player
+            // position capability. Keep loading functional when optional
+            // prewarming is unavailable.
+        }
     }
 
     public WeaponVariantCatalog ReadVariants(LoadableWeapon selected)

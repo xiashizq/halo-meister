@@ -44,6 +44,7 @@ public sealed partial class ChangeBipedPage : Page
                 await Task.Run(_game.Connect);
 
             PlayerBipedSession session = await Task.Run(_bipeds.Connect);
+            await _bipeds.WarmUpAsync();
             _hasScanned = true;
             ShowSession(session);
             ShowStatus(

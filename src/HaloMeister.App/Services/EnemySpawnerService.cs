@@ -100,18 +100,14 @@ public sealed class EnemySpawnerService : IDisposable
     private readonly RuntimeTagDefinitionService _definitions = new();
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
     private IReadOnlyList<RuntimeTagEntry> _tags = [];
+    private int _warmedProcessId;
 
     public int ProcessId => _memory.ProcessId;
     public ScriptingBridgeStatus BridgeStatus => _bridge.GetStatus();
 
     public SpawnerCatalog Connect()
     {
-        if (_definitions.SchemaCount == 0)
-            _definitions.LoadDirectory(
-                RuntimeTagDefinitionLocator.ResolveCampaignEvolved());
-        if (!_definitions.HasSchema("char") || !_definitions.HasSchema("scnr"))
-            throw new InvalidDataException(
-                "The loaded definitions do not provide both [char] and [scnr] schemas.");
+        WarmUpDefinitions();
 
         if (!_memory.IsConnected)
             throw new InvalidOperationException(
@@ -164,7 +160,7 @@ public sealed class EnemySpawnerService : IDisposable
                 "One native AI batch can contain between one and five actors.");
         WorldPoint playerPosition =
             await ReadPlayerPositionAsync(cancellationToken);
-        string payload = BuildPayload(
+        string payload = await Task.Run(() => BuildPayload(
             choice,
             variant,
             playerPosition,
@@ -172,7 +168,7 @@ public sealed class EnemySpawnerService : IDisposable
             formationOffsetX,
             formationOffsetY,
             weapon,
-            followPlayer);
+            followPlayer), cancellationToken);
         return await _bridge.ExecuteAsync(
             count == 1
                 ? ScriptLanguage.BlamAiSpawn
@@ -180,6 +176,46 @@ public sealed class EnemySpawnerService : IDisposable
             payload,
             TimeSpan.FromSeconds(20),
             cancellationToken: cancellationToken);
+    }
+
+    public void WarmUpDefinitions()
+    {
+        if (_definitions.SchemaCount == 0)
+            _definitions.LoadDirectory(
+                RuntimeTagDefinitionLocator.ResolveCampaignEvolved());
+        if (!_definitions.HasSchema("char") || !_definitions.HasSchema("scnr"))
+            throw new InvalidDataException(
+                "The loaded definitions do not provide both [char] and [scnr] schemas.");
+    }
+
+    public async Task WarmUpAsync(CancellationToken cancellationToken = default)
+    {
+        if (_warmedProcessId == _memory.ProcessId && _warmedProcessId != 0)
+            return;
+
+        ScriptingBridgeStatus status = _bridge.GetStatus();
+        if (!status.IsRuntimeReady || status.IsStale)
+            return;
+
+        try
+        {
+            ScriptExecutionResult result = await _bridge.ExecuteAsync(
+                ScriptLanguage.PlayerPosition,
+                "read",
+                TimeSpan.FromSeconds(5),
+                cancellationToken);
+            if (result.Outcome == ScriptOutcome.Confirmed)
+                _warmedProcessId = _memory.ProcessId;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Optional prewarm; spawning remains available if this build does
+            // not expose the player-position capability.
+        }
     }
 
     public async Task<ScriptExecutionResult> SpawnTeamAsync(

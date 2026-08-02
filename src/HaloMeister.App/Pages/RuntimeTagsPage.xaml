@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
-    <Grid Padding="24,20,24,16" ColumnSpacing="14" RowSpacing="12">
+    <Grid Padding="16,12,16,12" ColumnSpacing="12" RowSpacing="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -16,7 +16,7 @@
         </Grid.ColumnDefinitions>
 
         <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Spacing="8">
-            <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='runtime_tags.realtime_tags'}" />
+            <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='runtime_tags.realtime_tags'}" />
             <TextBlock
                 HorizontalAlignment="Left"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -187,7 +187,7 @@
                 TabCloseRequested="OnOpenTagCloseRequested"
                 TabWidthMode="SizeToContent" />
 
-            <StackPanel Grid.Row="1" Spacing="8">
+            <StackPanel Grid.Row="1" Spacing="5">
                 <TextBlock
                     x:Name="SelectedTagText"
                     Style="{ThemeResource SubtitleTextBlockStyle}"
@@ -195,10 +195,59 @@
                     TextWrapping="Wrap" />
                 <TextBlock
                     x:Name="SelectedTagDetail"
-                    FontFamily="Consolas"
                     FontSize="12"
-                    Opacity="0.72"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap" />
+                <Expander Header="{i18n:Loc Key='runtime_tags.technical_details'}" FontSize="12">
+                    <TextBlock
+                        x:Name="SelectedTagTechnicalDetail"
+                        FontFamily="Consolas"
+                        FontSize="11"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        TextWrapping="Wrap" />
+                </Expander>
+                <Border
+                    x:Name="EditSessionPanel"
+                    Padding="10"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    CornerRadius="4">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="EditSessionStatusText"
+                                VerticalAlignment="Center"
+                                Text="{i18n:Loc Key='runtime_tags.no_staged_changes'}"
+                                TextWrapping="Wrap" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <Button
+                                    x:Name="CommitStagedButton"
+                                    Click="OnCommitStaged"
+                                    Content="{i18n:Loc Key='runtime_tags.commit_changes'}"
+                                    IsEnabled="False"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                                <Button
+                                    x:Name="UndoCommitButton"
+                                    Click="OnUndoCommit"
+                                    Content="{i18n:Loc Key='runtime_tags.undo_last_commit'}"
+                                    IsEnabled="False" />
+                                <Button
+                                    x:Name="DiscardStagedButton"
+                                    Click="OnDiscardStaged"
+                                    Content="{i18n:Loc Key='runtime_tags.discard_changes'}"
+                                    IsEnabled="False" />
+                            </StackPanel>
+                        </Grid>
+                        <ListView
+                            x:Name="StagedChangesList"
+                            MaxHeight="64"
+                            DisplayMemberPath="DisplayName"
+                            SelectionMode="None" />
+                    </StackPanel>
+                </Border>
                 <Border
                     x:Name="SpawnActionPanel"
                     Padding="10"
@@ -340,31 +389,40 @@
                             SelectionMode="Single">
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Padding="2,5" ColumnSpacing="8">
+                                    <Grid Padding="8,7" ColumnSpacing="12">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="2*" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="1.3*" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
                                             <TextBlock
-                                                FontFamily="Consolas"
-                                                FontSize="11"
-                                                Text="{Binding OffsetDisplay}" />
+                                                FontWeight="SemiBold"
+                                                Text="{Binding Name}"
+                                                TextTrimming="CharacterEllipsis" />
                                             <TextBlock
                                                 FontSize="11"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                 Opacity="0.65"
-                                                Text="{Binding Type}" />
+                                                Text="{Binding TypeDisplay}"
+                                                ToolTipService.ToolTip="{Binding OffsetDisplay}" />
                                         </StackPanel>
                                         <TextBlock
                                             Grid.Column="1"
-                                            Text="{Binding Name}"
-                                            TextTrimming="CharacterEllipsis" />
-                                        <TextBlock
-                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
                                             FontFamily="Consolas"
                                             Text="{Binding Value}"
                                             TextTrimming="CharacterEllipsis" />
+                                        <Border
+                                            Grid.Column="2"
+                                            Padding="6,2"
+                                            VerticalAlignment="Center"
+                                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                            CornerRadius="4">
+                                            <TextBlock
+                                                FontSize="11"
+                                                Text="{Binding SizeDisplay}" />
+                                        </Border>
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
@@ -427,7 +485,7 @@
                     Grid.Column="1"
                     VerticalAlignment="Bottom"
                     Click="OnInjectField"
-                    Content="{i18n:Loc Key='runtime_tags.inject_field'}"
+                    Content="{i18n:Loc Key='runtime_tags.stage_field'}"
                     IsEnabled="False"
                     Style="{StaticResource AccentButtonStyle}" />
                 <Grid
@@ -476,7 +534,7 @@
                         Grid.Column="1"
                         VerticalAlignment="Bottom"
                         Click="OnInjectReference"
-                        Content="{i18n:Loc Key='runtime_tags.swap_reference'}"
+                        Content="{i18n:Loc Key='runtime_tags.stage_reference'}"
                         IsEnabled="False"
                         Style="{StaticResource AccentButtonStyle}" />
                     <Button

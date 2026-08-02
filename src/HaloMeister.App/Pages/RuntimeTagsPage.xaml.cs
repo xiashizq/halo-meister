@@ -18,6 +18,7 @@ public sealed partial class RuntimeTagsPage : Page
     private readonly RuntimeTagModService _tagMods = new();
     private readonly NativeTagModExportService _nativeTagMods = new();
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
+    private readonly RuntimeTagEditSessionService _editSessions;
     private readonly RuntimeTagViewState _state = new();
     private readonly DispatcherQueueTimer _tagFilterTimer;
     private IReadOnlyList<RuntimeTagEntry> _allTags = [];
@@ -39,15 +40,19 @@ public sealed partial class RuntimeTagsPage : Page
     private int _statusVersion;
     private readonly Dictionary<string, RuntimeTagModTag> _pendingModTags =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, RuntimeTagEditSession> _tagEditSessions =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public RuntimeTagsPage()
     {
         InitializeComponent();
+        _editSessions = new RuntimeTagEditSessionService(_memory);
         _tagFilterTimer = DispatcherQueue.CreateTimer();
         _tagFilterTimer.Interval = TimeSpan.FromMilliseconds(250);
         _tagFilterTimer.IsRepeating = false;
         _tagFilterTimer.Tick += OnTagFilterTimerTick;
         FieldList.ItemsSource = _state.Fields;
+        StagedChangesList.ItemsSource = Array.Empty<RuntimeTagEditPatch>();
         _memory.ConnectionChanged += OnGameConnectionChanged;
         Unloaded += OnUnloaded;
         UpdateConnectionButtons();
@@ -76,6 +81,7 @@ public sealed partial class RuntimeTagsPage : Page
             });
             _hasScanned = true;
             _fullTagTreeNodes = [];
+            _tagEditSessions.Clear();
             ClearOpenTags();
             ApplyFilter();
             ConnectionText.Text = L.Format(
@@ -155,7 +161,7 @@ public sealed partial class RuntimeTagsPage : Page
         foreach (TreeViewNode node in nodes) TagTree.RootNodes.Add(node);
     }
 
-    private static IReadOnlyList<TreeViewNode> CreateTagTreeNodes(
+    private IReadOnlyList<TreeViewNode> CreateTagTreeNodes(
         IEnumerable<RuntimeTagEntry> tags,
         bool expandMatches)
     {
@@ -190,7 +196,7 @@ public sealed partial class RuntimeTagsPage : Page
         return nodes;
     }
 
-    private static TreeViewNode BuildFolderNode(TagFolder folder, bool expanded)
+    private TreeViewNode BuildFolderNode(TagFolder folder, bool expanded)
     {
         int count = CountTags(folder);
         var node = new TreeViewNode
@@ -208,12 +214,12 @@ public sealed partial class RuntimeTagsPage : Page
         return node;
     }
 
-    private static TreeViewNode BuildTagNode(string leaf, RuntimeTagEntry tag)
+    private TreeViewNode BuildTagNode(string leaf, RuntimeTagEntry tag)
         => new()
         {
             Content = new RuntimeTagTreeItem(
                 $"{leaf}  [{tag.Group}]",
-                tag.AddressDisplay,
+                _definitions.GetGroupDisplayName(tag.Group),
                 tag),
         };
 
@@ -269,6 +275,8 @@ public sealed partial class RuntimeTagsPage : Page
         TabView sender,
         TabViewTabCloseRequestedEventArgs args)
     {
+        if (args.Item is TabViewItem { Tag: RuntimeTagEntry closing })
+            _tagEditSessions.Remove(TagKey(closing));
         int index = sender.TabItems.IndexOf(args.Item);
         _changingOpenTagSelection = true;
         sender.TabItems.Remove(args.Item);
@@ -322,8 +330,50 @@ public sealed partial class RuntimeTagsPage : Page
     private static string TagKey(RuntimeTagEntry tag) =>
         $"{tag.Group}\0{tag.Name}".ToUpperInvariant();
 
+    private RuntimeTagEditSession GetOrCreateEditSession(RuntimeTagEntry tag)
+    {
+        string key = TagKey(tag);
+        if (!_tagEditSessions.TryGetValue(key, out RuntimeTagEditSession? session))
+        {
+            session = new RuntimeTagEditSession(tag);
+            _tagEditSessions[key] = session;
+        }
+        return session;
+    }
+
+    private RuntimeTagEditSession? SelectedEditSession() =>
+        _selectedTag is { } tag && _tagEditSessions.TryGetValue(TagKey(tag), out RuntimeTagEditSession? session)
+            ? session
+            : null;
+
+    private void UpdateEditSessionUi(RuntimeTagEditSession? session = null)
+    {
+        session ??= SelectedEditSession();
+        IReadOnlyCollection<RuntimeTagEditPatch> patches = session?.Patches
+            ?? Array.Empty<RuntimeTagEditPatch>();
+        StagedChangesList.ItemsSource = patches;
+        StagedChangesList.Visibility = patches.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        bool isSupported = _editSessions.IsSupportedBuild;
+        bool canCommit = !_busy && isSupported && patches.Count > 0;
+        CommitStagedButton.IsEnabled = canCommit;
+        DiscardStagedButton.IsEnabled = !_busy && patches.Count > 0;
+        UndoCommitButton.IsEnabled = !_busy && isSupported && session?.CanUndo == true;
+        EditSessionStatusText.Text = patches.Count == 0
+            ? _editSessions.SupportMessage
+            : L.Format("runtime_tags.staged_change_count", patches.Count);
+
+        if (_selectedTag is not { } selected) return;
+        TabViewItem? tab = OpenTagsTabView.TabItems.OfType<TabViewItem>()
+            .FirstOrDefault(item => item.Tag is RuntimeTagEntry tag && TagKey(tag) == TagKey(selected));
+        if (tab is not null)
+            tab.Header = $"{selected.LeafName} [{selected.Group}]{(patches.Count > 0 ? " *" : string.Empty)}";
+    }
+
     private void ClearOpenTags()
     {
+        _tagEditSessions.Clear();
         _changingOpenTagSelection = true;
         OpenTagsTabView.TabItems.Clear();
         _changingOpenTagSelection = false;
@@ -335,6 +385,11 @@ public sealed partial class RuntimeTagsPage : Page
         _selectedTag = null;
         _selectedField = null;
         _fieldIndexCancellation?.Cancel();
+        StagedChangesList.ItemsSource = Array.Empty<RuntimeTagEditPatch>();
+        EditSessionStatusText.Text = L.Get("runtime_tags.no_staged_changes");
+        CommitStagedButton.IsEnabled = false;
+        UndoCommitButton.IsEnabled = false;
+        DiscardStagedButton.IsEnabled = false;
         EditorWorkspace.Visibility = Visibility.Collapsed;
         TagEmptyState.Visibility = Visibility.Visible;
     }
@@ -344,6 +399,7 @@ public sealed partial class RuntimeTagsPage : Page
         TagEmptyState.Visibility = Visibility.Collapsed;
         EditorWorkspace.Visibility = Visibility.Visible;
         _selectedTag = tag;
+        RuntimeTagEditSession session = GetOrCreateEditSession(tag);
         uint runtimeDatum = RuntimeTagMemoryService.BuildRuntimeDatum(tag);
         _selectedField = null;
         _fieldHistory.Clear();
@@ -356,16 +412,23 @@ public sealed partial class RuntimeTagsPage : Page
         FieldSearchStatusText.Text = "";
         SelectedTagText.Text = $"{tag.Name} [{tag.Group}]";
         SelectedTagDetail.Text = L.Format(
-            "runtime_tags.tag_detail",
+            "runtime_tags.tag_summary",
+            _definitions.GetGroupDisplayName(tag.Group),
+            tag.RootCount,
+            _definitions.HasSchema(tag.Group)
+                ? L.Get("runtime_tags.schema_available")
+                : L.Get("runtime_tags.schema_unavailable"));
+        SelectedTagTechnicalDetail.Text = L.Format(
+            "runtime_tags.tag_technical_detail",
             tag.Index,
             $"0x{runtimeDatum:X8}",
-            tag.RootCount,
             $"0x{tag.DataOffset:X8}",
             $"0x{tag.DataAddress:X}",
             $"0x{tag.DefinitionOffset:X8}",
             $"0x{tag.DefinitionAddress:X}");
         UpdateWeaponActions(tag);
         UpdateTagModActions();
+        UpdateEditSessionUi(session);
         FieldValueBox.Text = "";
         FieldValueBox.IsEnabled = false;
         InjectFieldButton.IsEnabled = false;
@@ -706,13 +769,9 @@ public sealed partial class RuntimeTagsPage : Page
         {
             RuntimeTagFieldValue field = _selectedField;
             byte[] bytes = _definitions.ParseValue(field, FieldValueBox.Text);
-            _memory.WriteVerified(field.Address, bytes);
-            RecordPatch(field, bytes, null);
-            FieldSearchBox.Text = "";
-            LoadFieldContext();
-            ReadRaw();
+            StageEdit(field, bytes, null);
             ShowStatus(
-                L.Format("runtime_tags.injected_bytes", bytes.Length, field.AddressDisplay),
+                L.Format("runtime_tags.staged_field", field.Name, bytes.Length, field.AddressDisplay),
                 InfoBarSeverity.Success);
         }
         catch (Exception ex)
@@ -770,13 +829,9 @@ public sealed partial class RuntimeTagsPage : Page
                         string.Join(", ", field.AllowedTagGroups.Select(group => $"[{group}]"))));
 
             byte[] reference = _memory.BuildTagReference(target);
-            _memory.WriteVerified(field.Address, reference);
-            RecordPatch(field, reference, target);
-            FieldSearchBox.Text = "";
-            LoadFieldContext();
-            ReadRaw();
+            StageEdit(field, reference, target);
             ShowStatus(
-                L.Format("runtime_tags.changed_reference", field.Name, target.Name, target.Group),
+                L.Format("runtime_tags.staged_reference", field.Name, target.Name, target.Group),
                 InfoBarSeverity.Success);
         }
         catch (Exception ex)
@@ -857,14 +912,10 @@ public sealed partial class RuntimeTagsPage : Page
         try
         {
             byte[] reference = _memory.BuildTagReference(target);
-            _memory.WriteVerified(field.Address, reference);
-            RecordPatch(field, reference, target);
-            FieldSearchBox.Text = "";
-            LoadFieldContext();
-            ReadRaw();
+            StageEdit(field, reference, target);
             ShowStatus(
                 L.Format(
-                    "runtime_tags.experimentally_changed_reference",
+                    "runtime_tags.experimentally_staged_reference",
                     field.Name,
                     target.Name,
                     target.Group),
@@ -874,6 +925,79 @@ public sealed partial class RuntimeTagsPage : Page
         {
             ShowStatus(ex.Message, InfoBarSeverity.Error);
         }
+    }
+
+    private void StageEdit(
+        RuntimeTagFieldValue field,
+        byte[] value,
+        RuntimeTagEntry? referenceTarget)
+    {
+        RuntimeTagEditSession session = SelectedEditSession()
+            ?? throw new InvalidOperationException("Open a runtime tag before staging an edit.");
+        IReadOnlyList<RuntimeTagModBlockStep> blocks = _fieldContext?.Blocks
+            .Select(step => new RuntimeTagModBlockStep
+            {
+                Offset = step.Offset,
+                Definition = step.Definition,
+                Element = step.Element,
+                ElementSize = step.ElementSize,
+            })
+            .ToArray()
+            ?? [];
+        _editSessions.Stage(session, field, value, blocks, referenceTarget);
+        UpdateEditSessionUi(session);
+    }
+
+    private async void OnCommitStaged(object sender, RoutedEventArgs e)
+    {
+        RuntimeTagEditSession? session = SelectedEditSession();
+        if (session is null || !session.HasChanges) return;
+
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = L.Get("runtime_tags.commit_changes"),
+            Content = L.Format("runtime_tags.commit_changes_confirm", session.Patches.Count),
+            PrimaryButtonText = L.Get("runtime_tags.commit_changes"),
+            CloseButtonText = L.Get("common.cancel"),
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+
+        RuntimeTagEditPatch[] patches = session.Patches.ToArray();
+        await RunBusy(async () =>
+        {
+            IReadOnlyList<RuntimeMemoryWrite> writes = await Task.Run(() => _editSessions.Commit(session));
+            foreach (RuntimeTagEditPatch patch in patches)
+                RecordPatch(patch.Field, patch.Value, patch.ReferenceTarget, patch.Blocks);
+            FieldSearchBox.Text = "";
+            if (_selectedTag is { } tag) LoadSelectedTag(tag);
+            UpdateEditSessionUi(session);
+            ShowStatus(L.Format("runtime_tags.committed_change_count", writes.Count), InfoBarSeverity.Success);
+        });
+    }
+
+    private async void OnUndoCommit(object sender, RoutedEventArgs e)
+    {
+        RuntimeTagEditSession? session = SelectedEditSession();
+        if (session?.CanUndo != true) return;
+
+        await RunBusy(async () =>
+        {
+            IReadOnlyList<RuntimeMemoryWrite> writes = await Task.Run(() => _editSessions.Undo(session));
+            if (_selectedTag is { } tag) LoadSelectedTag(tag);
+            UpdateEditSessionUi(session);
+            ShowStatus(L.Format("runtime_tags.undone_change_count", writes.Count), InfoBarSeverity.Success);
+        });
+    }
+
+    private void OnDiscardStaged(object sender, RoutedEventArgs e)
+    {
+        RuntimeTagEditSession? session = SelectedEditSession();
+        if (session is null || !session.HasChanges) return;
+        session.Discard();
+        UpdateEditSessionUi(session);
+        ShowStatus(L.Get("runtime_tags.discarded_staged_changes"), InfoBarSeverity.Informational);
     }
 
     private static bool IsExactReferenceText(RuntimeTagEntry tag, string text)
@@ -954,7 +1078,8 @@ public sealed partial class RuntimeTagsPage : Page
     private void RecordPatch(
         RuntimeTagFieldValue field,
         byte[] bytes,
-        RuntimeTagEntry? referenceTarget)
+        RuntimeTagEntry? referenceTarget,
+        IReadOnlyList<RuntimeTagModBlockStep>? blocks = null)
     {
         if (_selectedTag is null || _fieldContext is null) return;
         string tagKey = $"{_selectedTag.Group}\0{_selectedTag.Name}";
@@ -974,7 +1099,7 @@ public sealed partial class RuntimeTagsPage : Page
             Type = field.Type,
             Offset = field.Offset,
             Size = bytes.Length,
-            Blocks = _fieldContext.Blocks.Select(step => new RuntimeTagModBlockStep
+            Blocks = (blocks ?? _fieldContext!.Blocks).Select(step => new RuntimeTagModBlockStep
             {
                 Offset = step.Offset,
                 Definition = step.Definition,
@@ -1241,6 +1366,9 @@ public sealed partial class RuntimeTagsPage : Page
         ScanButton.IsEnabled = false;
         RefreshButton.IsEnabled = false;
         InjectFieldButton.IsEnabled = false;
+        CommitStagedButton.IsEnabled = false;
+        UndoCommitButton.IsEnabled = false;
+        DiscardStagedButton.IsEnabled = false;
         try { await operation(); }
         catch (Exception ex)
         {
@@ -1252,6 +1380,7 @@ public sealed partial class RuntimeTagsPage : Page
             UpdateConnectionButtons();
             InjectFieldButton.IsEnabled = _selectedField?.CanWrite == true;
             UpdateTagModActions();
+            UpdateEditSessionUi();
         }
     }
 
@@ -1268,6 +1397,7 @@ public sealed partial class RuntimeTagsPage : Page
             InjectFieldButton.IsEnabled = false;
         }
         UpdateTagModActions();
+        UpdateEditSessionUi();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

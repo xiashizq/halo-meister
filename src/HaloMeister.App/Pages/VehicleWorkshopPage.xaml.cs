@@ -27,6 +27,8 @@ public sealed partial class VehicleWorkshopPage : Page
         await RunBusy(async () =>
         {
             _all = await Task.Run(_vehicles.Connect);
+            await Task.Run(_vehicles.WarmUpDefinitions);
+            await _vehicles.WarmUpAsync();
             _hasScanned = true;
             SearchBox.IsEnabled = true;
             ApplyFilter();

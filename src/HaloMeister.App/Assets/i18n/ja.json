@@ -105,6 +105,7 @@
   "bridge.error_not_responding_restart": "ゲーム内 bridge が応答していません。ゲームを再起動し、オフラインキャンペーンミッションを読み込んでください。",
   "bridge.error_scripting_not_responding": "ゲーム内 scripting bridge が応答していません。ゲームを起動または再起動し、bridge 状態を更新してください。",
   "bridge.summary_game_running_no_heartbeat": "ゲームは実行中ですが、bridge からのハートビートがありません。再確認し、続く場合は bridge を修復するか UE4SS ログを確認してください。",
+  "bridge.summary_installed_stale": "bridge v{0} がインストールされていますが、このビルド同梱は v{1} です。「修復 / 更新」で新バージョンを書き込み、ゲームを再起動してください。",
   "bridge.summary_installed_not_running": "インストール済みですが、ゲーム内 bridge が動作していません。ゲームを起動または再起動してください。",
   "bridge.summary_not_installed": "UE4SS scripting bridge がインストールされていません。",
   "bridge.summary_ready": "準備完了。Bridge v{0} が {1} に応答しました。",

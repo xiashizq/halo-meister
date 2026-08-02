@@ -10,6 +10,8 @@ public sealed class RuntimeTagDefinitionService
 {
     private readonly Dictionary<string, TagSchema> _schemas =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _groupNames =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public string? DirectoryPath { get; private set; }
     public int SchemaCount => _schemas.Count;
@@ -47,6 +49,20 @@ public sealed class RuntimeTagDefinitionService
         }
 
         _schemas.Clear();
+        _groupNames.Clear();
+        string metadataPath = Path.Combine(path, "_meta.json");
+        if (File.Exists(metadataPath))
+        {
+            using JsonDocument metadata = JsonDocument.Parse(File.ReadAllBytes(metadataPath));
+            if (metadata.RootElement.TryGetProperty("tag_index", out JsonElement tagIndex))
+            {
+                foreach (JsonProperty entry in tagIndex.EnumerateObject())
+                {
+                    if (entry.Value.GetString() is { Length: > 0 } name)
+                        _groupNames[NormalizeGroup(entry.Name)] = ToDisplayName(name);
+                }
+            }
+        }
         foreach (string tag in rawSchemas.Keys)
             BuildSchema(tag, rawSchemas, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         DirectoryPath = path;
@@ -59,6 +75,15 @@ public sealed class RuntimeTagDefinitionService
     }
 
     public bool HasSchema(string group) => _schemas.ContainsKey(NormalizeGroup(group));
+
+    /// <summary>Returns the schema's human-readable tag group name when known.</summary>
+    public string GetGroupDisplayName(string group)
+    {
+        string normalized = NormalizeGroup(group);
+        return _groupNames.TryGetValue(normalized, out string? name)
+            ? name
+            : ToDisplayName(normalized);
+    }
 
     /// <summary>
     /// Returns whether a concrete runtime tag group satisfies one of a
@@ -459,6 +484,14 @@ public sealed class RuntimeTagDefinitionService
         int help = name.IndexOf('#');
         if (help >= 0) name = name[..help];
         return name.TrimEnd('!', '*', '^', '~', '`').Trim();
+    }
+
+    private static string ToDisplayName(string value)
+    {
+        string[] words = value.Replace('_', ' ')
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(" ", words.Select(word =>
+            char.ToUpperInvariant(word[0]) + word[1..]));
     }
 
     private static string NormalizeGroup(string group)

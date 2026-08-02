@@ -22,6 +22,7 @@ public sealed partial class WeaponLoaderPage : Page
     private StanchionImportPreview? _stanchionPreview;
     private bool _busy;
     private bool _hasScanned;
+    private int _variantRequestVersion;
 
     public WeaponLoaderPage()
     {
@@ -38,6 +39,8 @@ public sealed partial class WeaponLoaderPage : Page
         {
             _weapons = await Task.Run(_loader.Connect);
             _projectileSession = await Task.Run(_swapper.Connect);
+            await Task.Run(_loader.WarmUpDefinitions);
+            await _loader.WarmUpAsync();
             _hasScanned = true;
             SearchBox.IsEnabled = true;
             RefreshButton.IsEnabled = true;
@@ -114,7 +117,7 @@ public sealed partial class WeaponLoaderPage : Page
                 weapon.Tag.Index == _selected.Tag.Index);
         CurrentProjectileText.Text = _projectileWeapon?.CurrentProjectileText ??
             L.Get("weapon_loader.no_editable_projectile");
-        ShowVariants();
+        _ = ShowVariantsAsync(_selected, ++_variantRequestVersion);
         UpdateLoadButton();
         UpdateImportButtons();
         UpdateProjectileControls();
@@ -223,16 +226,16 @@ public sealed partial class WeaponLoaderPage : Page
         ProjectileSwapperService.FriendlyName(projectile)
             .Equals(text, StringComparison.OrdinalIgnoreCase);
 
-    private void ShowVariants()
+    private async Task ShowVariantsAsync(LoadableWeapon? selected, int requestVersion)
     {
         _weaponVariants = [];
         _selectedVariant = null;
         VariantPicker.ItemsSource = null;
-        VariantSummaryText.Text = _selected is null
+        VariantSummaryText.Text = selected is null
             ? ""
             : L.Get("weapon_loader.reading_variants");
 
-        if (_selected is null)
+        if (selected is null)
         {
             UpdateVariantControls();
             return;
@@ -240,7 +243,12 @@ public sealed partial class WeaponLoaderPage : Page
 
         try
         {
-            WeaponVariantCatalog catalog = _loader.ReadVariants(_selected);
+            WeaponVariantCatalog catalog = await Task.Run(() => _loader.ReadVariants(selected));
+            if (requestVersion != _variantRequestVersion ||
+                _selected?.Tag.Index != selected.Tag.Index)
+            {
+                return;
+            }
             _weaponVariants = BuildPolicy.EnforceCustomizationOwnership
                 ? catalog.Variants.Where(variant => variant.Index == 0).ToArray()
                 : catalog.Variants;
@@ -259,6 +267,11 @@ public sealed partial class WeaponLoaderPage : Page
         }
         catch (Exception ex)
         {
+            if (requestVersion != _variantRequestVersion ||
+                _selected?.Tag.Index != selected.Tag.Index)
+            {
+                return;
+            }
             VariantSummaryText.Text = L.Format("weapon_loader.variants_unavailable", ex.Message);
         }
 

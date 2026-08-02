@@ -97,7 +97,7 @@ public sealed partial class SetupPage : Page
             }
         }
 
-        BridgeStatusText.Text = status.IsRuntimeReady
+        BridgeStatusText.Text = status.IsRuntimeReady && !status.IsStale
             ? L.Get("setup.bridge_ready")
             : status.Summary;
         InstallButton.Content = status.IsInstalled

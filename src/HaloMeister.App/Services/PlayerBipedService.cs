@@ -30,6 +30,7 @@ public sealed class PlayerBipedService : IDisposable
     private RuntimeTagEntry? _playerBiped;
     private long _capturedPlayerNameAddress;
     private int _activeBipedIndex = -1;
+    private int _warmedProcessId;
 
     public int ProcessId => _memory.ProcessId;
     public ScriptingBridgeStatus BridgeStatus => _bridge.GetStatus();
@@ -184,6 +185,36 @@ public sealed class PlayerBipedService : IDisposable
         if (result.Outcome != ScriptOutcome.Confirmed)
             throw new InvalidOperationException(result.Message);
         return result;
+    }
+
+    public async Task WarmUpAsync(CancellationToken cancellationToken = default)
+    {
+        if (_warmedProcessId == _memory.ProcessId && _warmedProcessId != 0)
+            return;
+
+        ScriptingBridgeStatus status = _bridge.GetStatus();
+        if (!status.IsRuntimeReady || status.IsStale)
+            return;
+
+        try
+        {
+            ScriptExecutionResult result = await _bridge.ExecuteAsync(
+                ScriptLanguage.PlayerPosition,
+                "read",
+                TimeSpan.FromSeconds(5),
+                cancellationToken);
+            if (result.Outcome == ScriptOutcome.Confirmed)
+                _warmedProcessId = _memory.ProcessId;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Optional prewarm; a player-position bridge operation is not
+            // available on every supported build.
+        }
     }
 
     public void Dispose() { }

@@ -49,6 +49,7 @@ public sealed partial class SpawnerPage : Page
             {
                 _vehicles = [];
             }
+            await _spawner.WarmUpAsync();
 
             SearchBox.IsEnabled = true;
             SpawnTypePicker.IsEnabled = true;
@@ -412,13 +413,14 @@ public sealed partial class SpawnerPage : Page
             {
                 IReadOnlyList<EnemySpawnChoice> familyCharacters =
                     item.Character is not null && item.RandomizeVariants
-                        ? _spawner.GetCharacterFamilyVariants(item.Character)
+                        ? await Task.Run(() =>
+                            _spawner.GetCharacterFamilyVariants(item.Character))
                         : item.Character is not null
                             ? [item.Character]
                             : [];
                 IReadOnlyList<AiWeaponChoice> johnsonWeapons =
                     item.Armor is not null && item.RandomizeWeapons
-                        ? _spawner.GetJohnsonCompatibleWeapons()
+                        ? await Task.Run(_spawner.GetJohnsonCompatibleWeapons)
                         : [];
                 var weaponCache =
                     new Dictionary<int, IReadOnlyList<AiWeaponChoice>>();
@@ -451,7 +453,9 @@ public sealed partial class SpawnerPage : Page
                                 character.CharacterTag.Index,
                                 out weapons!))
                         {
-                            weapons = _spawner.GetCompatibleWeapons(character);
+                            EnemySpawnChoice selectedCharacter = character;
+                            weapons = await Task.Run(
+                                () => _spawner.GetCompatibleWeapons(selectedCharacter));
                             weaponCache[character.CharacterTag.Index] = weapons;
                         }
                     }
