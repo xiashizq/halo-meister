@@ -7,115 +7,35 @@ using Windows.System;
 
 namespace HaloMeister.App.Services;
 
-public sealed record WgsSaveSlot(
-    string ContainerId,
-    string DataPath,
-    string MetadataPath,
-    int MetadataRevision,
-    WgsGameSaveInfo Save)
+public sealed class SteamGameSaveStore : IGameSaveStore
 {
-    public string DisplayName => Save.Kind == WgsGameSaveKind.Checkpoint
-        ? Save.ScenarioTitle ?? Save.ScenarioCode ?? "Unknown mission"
-        : Save.KindLabel;
+    public const string Platform = "steam";
+    public const int SteamAppId = 2806050;
 
-    public string MissionCodeDisplay => Save.ScenarioCode?.ToUpperInvariant() ?? "SAVE";
-
-    public string ThumbnailSource
+    public SteamGameSaveStore()
     {
-        get
-        {
-            string difficulty = Save.Difficulty?.ToLowerInvariant() switch
-            {
-                "easy" => "easy",
-                "normal" => "normal",
-                "heroic" => "heroic",
-                "legendary" or "laso" => "legendary",
-                _ => "unknown",
-            };
-            return $"ms-appx:///Assets/DifficultyIcons/{difficulty}.jpg";
-        }
-    }
-
-    public string MetadataSummary
-    {
-        get
-        {
-            var parts = new List<string>
-            {
-                Save.KindLabel,
-                Save.Difficulty ?? "Unknown difficulty",
-            };
-            if (!string.IsNullOrWhiteSpace(Save.InternalCheckpoint))
-                parts.Add(Catalog.Humanize(Save.InternalCheckpoint));
-            if (Save.ActiveSkulls.Count > 0)
-                parts.Add($"{Save.ActiveSkulls.Count} skull{(Save.ActiveSkulls.Count == 1 ? "" : "s")}");
-            return string.Join(" · ", parts);
-        }
-    }
-
-    public string UpdatedDisplay => File.GetLastWriteTime(DataPath).ToString("yyyy-MM-dd HH:mm:ss");
-    public string SizeDisplay => $"{Save.Size / 1024d:N1} KiB";
-    public string HashDisplay => Save.Sha256[..16] + "…";
-}
-
-public sealed record WgsBackupEntry(
-    string Id,
-    string SourcePath,
-    string? ContainerId,
-    WgsGameSaveInfo Save,
-    DateTime CreatedLocal,
-    string Reason,
-    string OriginLabel,
-    bool IsArchive)
-{
-    public string DisplayName =>
-        $"{Save.ScenarioTitle ?? Save.ScenarioCode ?? Save.KindLabel} · " +
-        $"{Save.Difficulty ?? "Unknown difficulty"} · {CreatedLocal:yyyy-MM-dd HH:mm}";
-
-    public string Detail =>
-        $"{OriginLabel} · {Reason} · " +
-        $"{Save.Size / 1024d:N1} KiB · {Save.Sha256[..12]}…";
-}
-
-public sealed record WgsBackupResult(string DirectoryPath, int FileCount);
-public sealed record WgsReplaceResult(string BackupPath, WgsSaveSlot UpdatedSlot);
-
-public sealed class WgsGameSaveStore : IGameSaveStore
-{
-    public const string PackageFamilyName = "Microsoft.198377053870B_8wekyb3d8bbwe";
-    public const string TitleId = "7C27BAE7";
-    public const string Platform = "store";
-
-    public WgsGameSaveStore()
-    {
-        PackageRoot = Path.Combine(
+        LiveRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Packages",
-            PackageFamilyName);
-        WgsRoot = Path.Combine(PackageRoot, "SystemAppData", "wgs");
+            "Meteorite",
+            "Saved",
+            "SaveGames");
         BackupRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "HaloMeister",
-            "GameSaveBackups");
+            "GameSaveBackupsSteam");
     }
 
     public string PlatformId => Platform;
-    public string PackageRoot { get; }
-    public string WgsRoot { get; }
-    public string LiveRoot => WgsRoot;
+    public string LiveRoot { get; }
     public string BackupRoot { get; }
-    public bool LiveRootExists => Directory.Exists(WgsRoot);
+    public bool LiveRootExists => Directory.Exists(LiveRoot);
+    public bool IsGameRunning => Process.GetProcessesByName("HaloCampaignEvolved").Length > 0;
 
     private string ExportRoot => Path.Combine(BackupRoot, "Exports");
     private string ImportRoot => Path.Combine(BackupRoot, "Imports");
 
-    public bool IsGameRunning => Process.GetProcessesByName("HaloCampaignEvolved").Length > 0;
-
     public IReadOnlyList<WgsSaveSlot> Discover()
-        => DiscoverSlotsFromRoot(WgsRoot);
-
-    public async Task<bool> LaunchGameAsync()
-        => await Launcher.LaunchUriAsync(new Uri("ms-xbl-7c27bae7:"));
+        => DiscoverSlotsFromDirectory(LiveRoot);
 
     public IReadOnlyList<WgsBackupEntry> DiscoverBackups()
     {
@@ -132,7 +52,7 @@ public sealed class WgsGameSaveStore : IGameSaveStore
                 continue;
 
             BackupManifest manifest = ReadBackupManifest(directory);
-            foreach (WgsSaveSlot slot in DiscoverSlotsFromRoot(directory)
+            foreach (WgsSaveSlot slot in DiscoverSlotsFromDirectory(directory)
                          .Where(slot => slot.Save.Kind == WgsGameSaveKind.Checkpoint))
             {
                 results.Add(new WgsBackupEntry(
@@ -142,7 +62,7 @@ public sealed class WgsGameSaveStore : IGameSaveStore
                     slot.Save,
                     manifest.CreatedUtc.ToLocalTime(),
                     manifest.Reason,
-                    "Full WGS snapshot",
+                    L.Get("game_saves.origin_steam_snapshot"),
                     IsArchive: false));
             }
         }
@@ -150,16 +70,17 @@ public sealed class WgsGameSaveStore : IGameSaveStore
         foreach (string library in new[] { ExportRoot, ImportRoot })
         {
             if (!Directory.Exists(library)) continue;
-            string origin = library.Equals(ExportRoot, StringComparison.OrdinalIgnoreCase)
-                ? "Exported archive"
-                : "Imported archive";
+            bool imported = library.Equals(ImportRoot, StringComparison.OrdinalIgnoreCase);
+            string origin = imported
+                ? L.Get("game_saves.origin_imported_archive")
+                : L.Get("game_saves.origin_exported_archive");
 
             foreach (string archive in Directory.EnumerateFiles(library, "*", SearchOption.TopDirectoryOnly)
                          .Where(IsArchivePath))
             {
                 try
                 {
-                    results.Add(InspectArchive(archive, origin));
+                    results.Add(InspectArchive(archive, origin, imported));
                 }
                 catch
                 {
@@ -176,22 +97,19 @@ public sealed class WgsGameSaveStore : IGameSaveStore
 
     public WgsBackupResult BackupAll(string reason)
     {
-        if (!Directory.Exists(WgsRoot))
-            throw new DirectoryNotFoundException(L.Format("game_saves.live_folder_missing", WgsRoot));
+        if (!Directory.Exists(LiveRoot))
+            throw new DirectoryNotFoundException(L.Format("game_saves.live_folder_missing", LiveRoot));
 
         Directory.CreateDirectory(BackupRoot);
-        string safeReason = SafeName(reason);
         string destination = Path.Combine(
             BackupRoot,
-            $"{DateTime.Now:yyyyMMdd-HHmmssfff}-{safeReason}");
+            $"{DateTime.Now:yyyyMMdd-HHmmssfff}-{SafeName(reason)}");
         Directory.CreateDirectory(destination);
 
         int count = 0;
-        foreach (string source in Directory.EnumerateFiles(WgsRoot, "*", SearchOption.AllDirectories))
+        foreach (string source in Directory.EnumerateFiles(LiveRoot, "*", SearchOption.TopDirectoryOnly))
         {
-            string relative = Path.GetRelativePath(WgsRoot, source);
-            string target = Path.Combine(destination, relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            string target = Path.Combine(destination, Path.GetFileName(source));
             File.Copy(source, target, overwrite: false);
             count++;
         }
@@ -199,11 +117,11 @@ public sealed class WgsGameSaveStore : IGameSaveStore
         var manifest = new
         {
             format = 1,
+            platform = Platform,
             createdUtc = DateTime.UtcNow,
             reason,
-            source = WgsRoot,
-            packageFamily = PackageFamilyName,
-            titleId = TitleId,
+            source = LiveRoot,
+            steamAppId = SteamAppId,
             fileCount = count,
         };
         File.WriteAllText(
@@ -221,22 +139,21 @@ public sealed class WgsGameSaveStore : IGameSaveStore
             ExportRoot,
             $"{DateTime.Now:yyyyMMdd-HHmmss}-{mission}.halo-wgs");
         ExportSlot(slot, destination);
-        return InspectArchive(destination, "Exported archive");
+        return InspectArchive(destination, L.Get("game_saves.origin_exported_archive"), imported: false);
     }
 
     public WgsBackupEntry ImportToLibrary(string sourcePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         if (!File.Exists(sourcePath))
-            throw new FileNotFoundException("The selected archive no longer exists.", sourcePath);
+            throw new FileNotFoundException(L.Get("game_saves.archive_missing"), sourcePath);
         if (!IsArchivePath(sourcePath))
-            throw new InvalidDataException("Select a .halo-wgs or .zip archive.");
+            throw new InvalidDataException(L.Get("game_saves.select_halo_wgs_or_zip"));
 
         byte[] data = ReadImportData(sourcePath);
         WgsGameSaveInfo info = WgsGameSave.Inspect(sourcePath, data);
         if (info.Kind != WgsGameSaveKind.Checkpoint)
-            throw new InvalidDataException(
-                "The archive does not contain a Campaign Evolved HALOCEVO checkpoint.");
+            throw new InvalidDataException(L.Get("game_saves.archive_not_checkpoint"));
 
         Directory.CreateDirectory(ImportRoot);
         string baseName = SafeName(Path.GetFileNameWithoutExtension(sourcePath));
@@ -244,7 +161,7 @@ public sealed class WgsGameSaveStore : IGameSaveStore
             ImportRoot,
             $"{DateTime.Now:yyyyMMdd-HHmmss}-{baseName}.halo-wgs");
         File.Copy(sourcePath, destination, overwrite: false);
-        return InspectArchive(destination, "Imported archive");
+        return InspectArchive(destination, L.Get("game_saves.origin_imported_archive"), imported: true);
     }
 
     public WgsReplaceResult RestoreBackup(WgsSaveSlot target, WgsBackupEntry backup)
@@ -256,7 +173,10 @@ public sealed class WgsGameSaveStore : IGameSaveStore
         return ReplaceSlotData(target, replacement, "before-backup-restore");
     }
 
-    public void ExportSlot(WgsSaveSlot slot, string destination)
+    public async Task<bool> LaunchGameAsync()
+        => await Launcher.LaunchUriAsync(new Uri($"steam://rungameid/{SteamAppId}"));
+
+    private void ExportSlot(WgsSaveSlot slot, string destination)
     {
         ArgumentNullException.ThrowIfNull(slot);
         ArgumentException.ThrowIfNullOrWhiteSpace(destination);
@@ -267,15 +187,13 @@ public sealed class WgsGameSaveStore : IGameSaveStore
         using FileStream output = new(destination, FileMode.Create, FileAccess.Write, FileShare.None);
         using var archive = new ZipArchive(output, ZipArchiveMode.Create);
         AddFile(archive, slot.DataPath, "Data");
-        AddFile(archive, slot.MetadataPath, "container");
 
         var manifest = new
         {
             format = 1,
-            packageFamily = PackageFamilyName,
-            titleId = TitleId,
+            platform = Platform,
+            steamAppId = SteamAppId,
             slot.ContainerId,
-            slot.MetadataRevision,
             kind = slot.Save.Kind.ToString(),
             slot.Save.ScenarioCode,
             slot.Save.ScenarioTitle,
@@ -290,10 +208,10 @@ public sealed class WgsGameSaveStore : IGameSaveStore
         writer.Write(JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    public WgsReplaceResult ReplaceSlotData(
+    private WgsReplaceResult ReplaceSlotData(
         WgsSaveSlot target,
         ReadOnlySpan<byte> replacement,
-        string backupReason = "before-save-replace")
+        string backupReason)
     {
         if (IsGameRunning)
             throw new InvalidOperationException(L.Get("game_saves.close_game_before_restore"));
@@ -307,7 +225,7 @@ public sealed class WgsGameSaveStore : IGameSaveStore
 
         WgsBackupResult safetyBackup = BackupAll(backupReason);
         string targetDirectory = Path.GetDirectoryName(target.DataPath)
-            ?? throw new InvalidOperationException("The target slot has no parent directory.");
+            ?? throw new InvalidOperationException(L.Get("game_saves.target_slot_missing_directory"));
         string tempPath = Path.Combine(targetDirectory, $".halomeister-{Guid.NewGuid():N}.tmp");
 
         try
@@ -336,44 +254,36 @@ public sealed class WgsGameSaveStore : IGameSaveStore
         return new WgsReplaceResult(safetyBackup.DirectoryPath, updated);
     }
 
-    private static IReadOnlyList<WgsSaveSlot> DiscoverSlotsFromRoot(string root)
+    private static IReadOnlyList<WgsSaveSlot> DiscoverSlotsFromDirectory(string directory)
     {
-        if (!Directory.Exists(root))
+        if (!Directory.Exists(directory))
             return [];
 
         var slots = new List<WgsSaveSlot>();
-        foreach (FileInfo metadata in new DirectoryInfo(root)
-                     .EnumerateFiles("container.*", SearchOption.AllDirectories)
-                     .OrderByDescending(file => ParseRevision(file.Name)))
+        foreach (string path in Directory.EnumerateFiles(directory, "*.sav", SearchOption.TopDirectoryOnly)
+                     .OrderByDescending(File.GetLastWriteTimeUtc))
         {
-            DirectoryInfo? containerDirectory = metadata.Directory;
-            if (containerDirectory is null) continue;
-            if (slots.Any(slot =>
-                    slot.DataPath.StartsWith(containerDirectory.FullName, StringComparison.OrdinalIgnoreCase)))
+            string fileName = Path.GetFileName(path);
+            if (!fileName.StartsWith("CoreSave_", StringComparison.OrdinalIgnoreCase) &&
+                !fileName.Equals("Progress.sav", StringComparison.OrdinalIgnoreCase))
                 continue;
-
-            FileInfo? data = containerDirectory
-                .EnumerateFiles()
-                .Where(file =>
-                    !file.Name.StartsWith("container.", StringComparison.OrdinalIgnoreCase) &&
-                    !file.Name.StartsWith(".halomeister-", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(file => file.LastWriteTimeUtc)
-                .FirstOrDefault();
-            if (data is null) continue;
 
             try
             {
-                WgsGameSaveInfo info = WgsGameSave.Inspect(data.FullName);
+                WgsGameSaveInfo info = WgsGameSave.Inspect(path);
+                if (info.Kind == WgsGameSaveKind.Unknown)
+                    continue;
+
                 slots.Add(new WgsSaveSlot(
-                    containerDirectory.Name,
-                    data.FullName,
-                    metadata.FullName,
-                    ParseRevision(metadata.Name),
+                    Path.GetFileNameWithoutExtension(path),
+                    path,
+                    path,
+                    MetadataRevision: 0,
                     info));
             }
             catch
             {
-                // Ignore unrelated or transient WGS files.
+                // Ignore unrelated or transient save files.
             }
         }
 
@@ -383,11 +293,13 @@ public sealed class WgsGameSaveStore : IGameSaveStore
             .ToList();
     }
 
-    private static WgsBackupEntry InspectArchive(string path, string origin)
+    private static WgsBackupEntry InspectArchive(string path, string origin, bool imported)
     {
         byte[] data = ReadImportData(path);
         DateTime created = File.GetCreationTime(path);
-        string reason = origin == "Imported archive" ? "Imported by user" : "Portable slot copy";
+        string reason = imported
+            ? L.Get("game_saves.reason_imported_by_user")
+            : L.Get("game_saves.reason_portable_slot_copy");
         string? containerId = null;
 
         using ZipArchive archive = ZipFile.OpenRead(path);
@@ -443,7 +355,7 @@ public sealed class WgsGameSaveStore : IGameSaveStore
     {
         using ZipArchive archive = ZipFile.OpenRead(path);
         ZipArchiveEntry entry = archive.GetEntry("Data")
-            ?? throw new InvalidDataException("The archive does not contain a Data entry.");
+            ?? throw new InvalidDataException(L.Get("game_saves.archive_missing_data"));
         using Stream stream = entry.Open();
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
@@ -471,9 +383,6 @@ public sealed class WgsGameSaveStore : IGameSaveStore
             $"{Path.GetFileNameWithoutExtension(fileName)}-{Guid.NewGuid():N}" +
             Path.GetExtension(fileName));
     }
-
-    private static int ParseRevision(string name)
-        => int.TryParse(Path.GetExtension(name).TrimStart('.'), out int revision) ? revision : 0;
 
     private static string SafeName(string value)
     {

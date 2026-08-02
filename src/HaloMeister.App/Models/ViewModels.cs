@@ -335,16 +335,28 @@ public sealed class RawRow
         Property = property;
         Depth = depth;
         Path = path;
-        Indent = new Thickness(depth * 18, 0, 0, 0);
+        NameIndent = new Thickness(depth * 16, 0, 0, 0);
     }
 
     public BlamProperty Property { get; }
     public int Depth { get; }
     public string Path { get; }
-    public Thickness Indent { get; }
+    public Thickness NameIndent { get; }
+    public Visibility GuideVisibility => Depth > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     public string Name => Property.DisplayName;
     public string TypeLabel => Property.StructTypeName is { } s ? $"{Property.TypeName}<{s}>" : Property.TypeName;
+    public string TypeBadge
+    {
+        get
+        {
+            string type = Property.TypeName;
+            return type.EndsWith("Property", StringComparison.Ordinal)
+                ? type[..^"Property".Length]
+                : type;
+        }
+    }
+    public string? TypeDetail => Property.StructTypeName;
     public string FlagsLabel => $"0x{Property.Flags:X2}";
     public string Value => Property.ValuePreview;
 

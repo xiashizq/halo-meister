@@ -111,6 +111,47 @@ FUNCTION_PATTERNS = {
     ),
 }
 
+# A capability is never enabled merely because its build fingerprint matched.
+# This table makes the static evidence emitted by the analyzer reviewable by
+# feature, while final promotion remains a separate live-validation decision.
+CAPABILITY_REQUIREMENTS = {
+    "ObjectSpawn": ["placementInitialize", "objectNew", "objectGetPosition", "objectGetOrientation"],
+    "WeaponLoad": ["placementInitialize", "objectNew", "objectDelete", "unitAddWeapon"],
+    "ObjectAppearance": ["objectSetVariant", "objectSetColors", "objectChanged"],
+    "AiPlacement": ["aiPlace", "actorNew", "actorStartingLocationsBuild"],
+    "GameplayCheats": ["skullMaskApply"],
+    "PlayerTools": [
+        "objectGetPosition",
+        "objectGetOrientation",
+        "objectTeleport",
+        "objectSetPhysics",
+        "playerEnableInput",
+    ],
+    "PlayerAllegiance": ["objectGet"],
+    "Machinima": ["machinimaCameraToggle"],
+    "SavedFilm": ["savedFilmOpen", "commandPump"],
+}
+
+# These are native ABI assumptions which cannot yet be recovered from a
+# byte-pattern alone. They remain visible in every report so a new build cannot
+# be promoted without an explicit review of the remaining manual evidence.
+MANUAL_NATIVE_ASSUMPTIONS = {
+    "aiHooks": [
+        "HsArgumentsEvaluate",
+        "HsReturn",
+        "AiPlayerAddFireteamSquad",
+        "AiObjectStateResolve",
+        "AiObjectSetTeam",
+        "AiPlacePreObjectReturn",
+    ],
+    "layouts": [
+        "thread TLS offsets",
+        "placement data size and position offset",
+        "actor record and starting-location layout",
+        "scenario trigger-volume and kill-trigger layout",
+    ],
+}
+
 CPP_NAMES = {
     "savedFilmOpen": "kSavedFilmOpenRva",
     "commandPump": "kCommandPumpRva",
@@ -378,6 +419,20 @@ def analyze(
         recover_cheat(pe, file_data, name)
         for name in CHEAT_NAMES + ["soft_ceilings_disable"]
     ]
+    capability_evidence = {}
+    for capability, required in CAPABILITY_REQUIREMENTS.items():
+        unresolved = [
+            name for name in required if functions[name]["selected"] is None
+        ]
+        ambiguous = [
+            name for name in required if len(functions[name]["candidates"]) != 1
+        ]
+        capability_evidence[capability] = {
+            "requiredFunctions": required,
+            "staticVerified": not unresolved and not ambiguous,
+            "unresolvedFunctions": unresolved,
+            "ambiguousFunctions": ambiguous,
+        }
     report = {
         "dll": str(dll),
         "sha256": digest,
@@ -397,6 +452,8 @@ def analyze(
             None,
         ),
         "functions": functions,
+        "capabilities": capability_evidence,
+        "manualReviewRequired": MANUAL_NATIVE_ASSUMPTIONS,
         "cheatGlobals": cheats,
         "profileAnchors": {
             "runtimeTags": base_profile.get("runtimeTags", {}),

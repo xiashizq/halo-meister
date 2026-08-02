@@ -26,12 +26,16 @@
                     TextWrapping="Wrap"
                     Text="{i18n:Loc Key='customization.choose_an_owned_armor_or_weapon_appearanc_4cce75'}" />
             </StackPanel>
-            <StackPanel Grid.Column="1" MinWidth="280" Spacing="5">
+            <StackPanel Grid.Column="1" MinWidth="360" Spacing="5">
                 <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{i18n:Loc Key='customization.game_profile'}" />
                 <ComboBox
                     x:Name="ProfilePicker"
+                    MinWidth="360"
                     DisplayMemberPath="DisplayName"
                     HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    DropDownClosed="OnProfileDropDownClosed"
+                    DropDownOpened="OnProfileDropDownOpened"
                     SelectionChanged="OnProfileChanged" />
             </StackPanel>
         </Grid>
@@ -67,8 +71,8 @@
 
         <Grid Grid.Row="3" ColumnSpacing="18">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="340" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" MinWidth="300" />
+                <ColumnDefinition Width="1.6*" MinWidth="420" />
             </Grid.ColumnDefinitions>
 
             <Border
@@ -144,8 +148,8 @@
                 </Grid>
             </Border>
 
-            <ScrollViewer Grid.Column="1">
-                <StackPanel MaxWidth="920" Spacing="14">
+            <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel HorizontalAlignment="Stretch" Spacing="14">
                     <Border
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -206,11 +210,13 @@
                             <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='customization.equipped_appearance'}" />
                             <ComboBox
                                 x:Name="DetailsChoiceCombo"
+                                Height="64"
                                 HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
                                 SelectionChanged="OnChoiceChanged">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid MinWidth="500" ColumnSpacing="12">
+                                        <Grid ColumnSpacing="12">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="82" />
                                                 <ColumnDefinition Width="*" />
@@ -224,7 +230,12 @@
                                             </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding Name}" />
-                                                <TextBlock FontSize="12" Opacity="0.65" Text="{Binding Availability}" />
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    Opacity="0.65"
+                                                    Text="{Binding Availability}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    TextWrapping="NoWrap" />
                                             </StackPanel>
                                         </Grid>
                                     </DataTemplate>

@@ -47,6 +47,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <Border Style="{StaticResource DashboardCardStyle}">
@@ -79,6 +80,29 @@
                         </StackPanel>
                         <TextBlock x:Name="CloudStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.checking'}" TextWrapping="Wrap" />
                         <Button HorizontalAlignment="Left" Click="OnOpenProgress" Content="{i18n:Loc Key='home.open_progress'}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource DashboardCardStyle}">
+                    <StackPanel Spacing="9">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Ellipse x:Name="GamePathStatusDot" Width="8" Height="8" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='home.game_path'}" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="GamePathText"
+                            FontFamily="Consolas"
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            IsTextSelectionEnabled="True"
+                            Text="{i18n:Loc Key='home.game_path_disconnected'}"
+                            TextWrapping="Wrap" />
+                        <Button
+                            x:Name="OpenGamePathButton"
+                            HorizontalAlignment="Left"
+                            Click="OnOpenGamePath"
+                            Content="{i18n:Loc Key='home.open_game_folder'}"
+                            IsEnabled="False" />
                     </StackPanel>
                 </Border>
             </Grid>

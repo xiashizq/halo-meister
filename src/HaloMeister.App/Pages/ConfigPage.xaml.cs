@@ -210,7 +210,33 @@ public sealed partial class ConfigPage : Page
             return L.Format("config.enum_percent", percent);
         }
 
-        return value switch
+        if (value.StartsWith("LookSensitivity", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(value["LookSensitivity".Length..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int lookSensitivity))
+        {
+            return L.Format("config.enum_look_sensitivity_n", lookSensitivity);
+        }
+
+        if (value.StartsWith("LookAcceleration", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(value["LookAcceleration".Length..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int lookAcceleration))
+        {
+            return L.Format("config.enum_look_acceleration_n", lookAcceleration);
+        }
+
+        if (value.Length > 1 &&
+            value.EndsWith('s') &&
+            int.TryParse(value[..^1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int seconds) &&
+            value.AsSpan(0, value.Length - 1).IndexOfAnyExcept("0123456789") < 0)
+        {
+            return L.Format("config.enum_seconds_n", seconds);
+        }
+
+        if (value.EndsWith("Seconds", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(value[..^"Seconds".Length], NumberStyles.Integer, CultureInfo.InvariantCulture, out int namedSeconds))
+        {
+            return L.Format("config.enum_seconds_n", namedSeconds);
+        }
+
+        string? mapped = value switch
         {
             "Low" => L.Get("config.quality_low"),
             "Medium" => L.Get("config.quality_medium"),
@@ -236,8 +262,15 @@ public sealed partial class ConfigPage : Page
             "Invulnerable" => L.Get("config.enum_invulnerable"),
             "Fatality" => L.Get("config.enum_fatality"),
             "BottomlessClip" => L.Get("config.enum_bottomless_clip"),
-            _ => Humanize(value),
+            _ => null,
         };
+        if (mapped is not null)
+            return mapped;
+
+        string enumKey = $"config.enum_{ToConfigLocSuffix(value)}";
+        return LocalizationService.Current.Has(enumKey)
+            ? L.Get(enumKey)
+            : Humanize(value);
     }
 
     private static string LocalizeFieldName(string? name)
@@ -245,17 +278,52 @@ public sealed partial class ConfigPage : Page
         if (string.IsNullOrEmpty(name))
             return L.Get("config.value");
 
-        string key = name;
-        if (key.StartsWith('b') && key.Length > 1 && char.IsUpper(key[1]))
-            key = key[1..];
-
-        return key switch
+        if (name.StartsWith("PlayerTraits", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(name["PlayerTraits".Length..], NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
         {
-            "AllowInCoop" => L.Get("config.field_allow_in_coop"),
-            "ModifierPreset" => L.Get("config.field_modifier_preset"),
-            "FriendlyFire" => L.Get("config.field_friendly_fire"),
-            _ => Humanize(name),
-        };
+            return Humanize(name);
+        }
+
+        string fieldKey = $"config.field_{ToConfigLocSuffix(name)}";
+        return LocalizationService.Current.Has(fieldKey)
+            ? L.Get(fieldKey)
+            : Humanize(name);
+    }
+
+    private static string LocalizeDocumentTitle(string tabTitle)
+    {
+        string stem = Path.GetFileNameWithoutExtension(tabTitle);
+        string documentKey = $"config.document_{ToConfigLocSuffix(stem)}";
+        return LocalizationService.Current.Has(documentKey)
+            ? L.Get(documentKey)
+            : Humanize(stem);
+    }
+
+    private static string LocalizeSectionName(string section)
+    {
+        string cleaned = section.Replace("/Script/", string.Empty, StringComparison.Ordinal);
+        string sectionKey = $"config.section_{ToConfigLocSuffix(cleaned)}";
+        return LocalizationService.Current.Has(sectionKey)
+            ? L.Get(sectionKey)
+            : Humanize(cleaned);
+    }
+
+    private static string ToConfigLocSuffix(string name)
+    {
+        string text = name.Trim();
+        if (text.StartsWith('b') && text.Length > 1 && char.IsUpper(text[1]))
+            text = text[1..];
+
+        text = text.Replace("sg.", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("/Script/", string.Empty, StringComparison.Ordinal)
+            .Replace('-', '_')
+            .Replace('.', '_')
+            .Replace(' ', '_');
+        text = Regex.Replace(text, "([A-Z]+)([A-Z][a-z])", "$1_$2");
+        text = Regex.Replace(text, "([a-z0-9])([A-Z])", "$1_$2");
+        text = Regex.Replace(text, "([A-Za-z])([0-9])", "$1_$2");
+        text = Regex.Replace(text, "_+", "_").Trim('_');
+        return text.ToLowerInvariant();
     }
 
     private void OnDocumentSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -267,7 +335,7 @@ public sealed partial class ConfigPage : Page
         _selectedDocument = document;
         EditorContent.Content = view.Content;
         EmptyState.Visibility = Visibility.Collapsed;
-        SelectedDocumentTitle.Text = Humanize(Path.GetFileNameWithoutExtension(document.TabTitle));
+        SelectedDocumentTitle.Text = LocalizeDocumentTitle(document.TabTitle);
         SelectedDocumentPath.Text = document.RelativePath;
         SettingCountText.Text = L.Format("config.settings_count", view.SettingCount);
         SearchSettings.Text = string.Empty;
@@ -772,11 +840,28 @@ public sealed partial class ConfigPage : Page
             "ReflectionsQuality" or "GlobalIlluminationQuality" or "LightingQuality" or
             "EffectsQuality" or "AtmosphericsQuality" or "PostprocessingQuality"
                 => ["Low", "Medium", "High", "Ultra", "Custom"],
-            "VisualLanguage" or "AudioLanguage" => ["SystemDefault", "English"],
+            "VisualLanguage" or "AudioLanguage"
+                => ["SystemDefault", "English", "TraditionalChinese", "SimplifiedChinese", "Japanese", "Korean"],
             "DynamicRange" => ["Standard", "Compressed", "Wide"],
             "GlobalTextSize" or "HudTextSize" or "SubtitleTextSize" or
             "SplitscreenHudTextSize" or "VoiceChatTextSize"
                 => ["Default", "UseGlobal", "Minimum", "Maximum"],
+            "DistanceUnits" => ["Meters", "Feet"],
+            "Upscaler" => ["None", "DLSS", "FSR", "XeSS", "TSR"],
+            "UpscalingQuality" => ["Low", "Medium", "High", "Ultra", "Custom"],
+            "LowLatencyMode" => ["Default", "On", "Off"],
+            "VoiceChatMode" => ["pushtotalk", "openmic", "None"],
+            "ShowingHUDBanners" or "ShowingMenuToasts" => ["5s", "15s", "permanent", "Off"],
+            "ShowingHUDObjectives" => ["permanent", "5s", "15s", "Off"],
+            "ControllerThumbstickLayout" => ["Standard", "Southpaw", "Legacy", "LegacySouthpaw"],
+            "ControllerWarthogDrivingMode" or "MouseKeyboardWarthogDrivingMode"
+                => ["AimBased", "DriverBased"],
+            "HUDAnchoring" => ["Center", "Left", "Right"],
+            "ColorCorrectionFilter" => ["NormalVision", "Deuteranopia", "Protanopia", "Tritanopia"],
+            "FireteamSettings" => ["FriendsCanJoin", "InviteOnly", "Open"],
+            "SubtitleFontWeight" => ["Regular", "Bold"],
+            "SubtitleTextCaps" => ["Speaker", "All", "None"],
+            "SubtitleBackingColor" => ["Black", "None"],
             _ => null,
         };
 
@@ -883,7 +968,7 @@ public sealed partial class ConfigPage : Page
             return L.Get("config.category_window_layout");
 
         if (!setting.Section.Equals("HaloUserSettings", StringComparison.OrdinalIgnoreCase))
-            return Humanize(setting.Section.Replace("/Script/", string.Empty, StringComparison.Ordinal));
+            return LocalizeSectionName(setting.Section);
 
         string key = setting.Key;
         if (ContainsAny(key, "Subtitle")) return L.Get("config.category_subtitles");

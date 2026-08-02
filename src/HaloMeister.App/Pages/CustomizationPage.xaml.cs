@@ -39,6 +39,16 @@ public sealed partial class CustomizationPage : Page
         _autoApplyTimer.Tick += OnAutoApplyTick;
     }
 
+    // Keep the closed width while open. Setting Width causes clipping; MinWidth does not.
+    private void OnProfileDropDownOpened(object sender, object e)
+    {
+        if (ProfilePicker.ActualWidth > ProfilePicker.MinWidth)
+            ProfilePicker.MinWidth = ProfilePicker.ActualWidth;
+    }
+
+    private void OnProfileDropDownClosed(object sender, object e)
+        => ProfilePicker.MinWidth = 360;
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (!_initialized)

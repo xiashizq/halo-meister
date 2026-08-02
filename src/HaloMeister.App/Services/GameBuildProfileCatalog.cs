@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Collections.Concurrent;
 using HaloMeister.App.Localization;
 
 namespace HaloMeister.App.Services;
@@ -11,17 +12,21 @@ internal sealed record GameBuildProfile(
     string Sha256,
     int PeTimestamp,
     int ImageSize,
+    string? NativeLayout,
     long TagTablePointerOffset,
     long ArenaTableOffset,
     long StringIdStorageRva,
     long StringIdStorageUsedRva,
     long StringIdStringsRva,
     long StringIdCountRva,
-    long StringIdBuiltinTableRva);
+    long StringIdBuiltinTableRva,
+    IReadOnlyDictionary<LiveToolCapability, CapabilityValidationLevel> Capabilities);
 
 internal static class GameBuildProfileCatalog
 {
     private const string RelativeCatalogPath = "Assets/GameBuildProfiles.json";
+    private static readonly ConcurrentDictionary<string, GameBuildProfile> ResolvedProfiles =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public static GameBuildProfile Resolve(string modulePath)
     {
@@ -34,6 +39,11 @@ internal static class GameBuildProfileCatalog
                 L.Get("build_profile.catalog_missing"),
                 catalogPath);
         }
+
+        FileInfo module = new(modulePath);
+        string cacheKey = $"{module.FullName}|{module.Length}|{module.LastWriteTimeUtc.Ticks}";
+        if (ResolvedProfiles.TryGetValue(cacheKey, out GameBuildProfile? cached))
+            return cached;
 
         string hash;
         int timestamp;
@@ -55,6 +65,7 @@ internal static class GameBuildProfileCatalog
                 profile.PeTimestamp == timestamp &&
                 profile.ImageSize == imageSize)
             {
+                ResolvedProfiles[cacheKey] = profile;
                 return profile;
             }
         }
@@ -65,6 +76,26 @@ internal static class GameBuildProfileCatalog
                 hash,
                 $"0x{timestamp:X8}",
                 $"0x{imageSize:X8}"));
+    }
+
+    public static CapabilityValidationLevel GetCapability(
+        GameBuildProfile profile,
+        LiveToolCapability capability)
+    {
+        if (profile.Capabilities.TryGetValue(capability, out CapabilityValidationLevel level))
+            return level;
+
+        if (string.IsNullOrWhiteSpace(profile.NativeLayout))
+            return CapabilityValidationLevel.Unsupported;
+
+        string catalogPath = Path.Combine(
+            AppContext.BaseDirectory,
+            RelativeCatalogPath.Replace('/', Path.DirectorySeparatorChar));
+        GameBuildProfile? layout = Load(catalogPath).FirstOrDefault(candidate =>
+            candidate.Id.Equals(profile.NativeLayout, StringComparison.OrdinalIgnoreCase));
+        return layout?.Capabilities.TryGetValue(capability, out level) == true
+            ? level
+            : CapabilityValidationLevel.Unsupported;
     }
 
     private static IReadOnlyList<GameBuildProfile> Load(string path)
@@ -82,6 +113,23 @@ internal static class GameBuildProfileCatalog
                     $"Build profile '{item.GetProperty("id").GetString()}' is missing researchAnchors.");
             }
 
+            var capabilities = new Dictionary<LiveToolCapability, CapabilityValidationLevel>();
+            if (item.TryGetProperty("capabilities", out JsonElement capabilityElement))
+            {
+                foreach (JsonProperty capability in capabilityElement.EnumerateObject())
+                {
+                    if (!Enum.TryParse(capability.Name, ignoreCase: true,
+                            out LiveToolCapability parsedCapability) ||
+                        !Enum.TryParse(capability.Value.GetString(), ignoreCase: true,
+                            out CapabilityValidationLevel parsedLevel))
+                    {
+                        throw new InvalidDataException(
+                            $"Build profile '{item.GetProperty("id").GetString()}' has an invalid capability declaration.");
+                    }
+                    capabilities.Add(parsedCapability, parsedLevel);
+                }
+            }
+
             profiles.Add(new GameBuildProfile(
                 item.GetProperty("id").GetString()
                     ?? throw new InvalidDataException("A build profile has no id."),
@@ -89,13 +137,17 @@ internal static class GameBuildProfileCatalog
                     ?? throw new InvalidDataException("A build profile has no SHA-256."),
                 checked((int)ParseHex(item.GetProperty("peTimestamp"))),
                 checked((int)ParseHex(item.GetProperty("imageSize"))),
+                item.TryGetProperty("nativeLayout", out JsonElement nativeLayout)
+                    ? nativeLayout.GetString()
+                    : null,
                 checked((long)ParseHex(runtimeTags.GetProperty("tagTablePointer"))),
                 checked((long)ParseHex(runtimeTags.GetProperty("arenaTable"))),
                 checked((long)ParseHex(anchors.GetProperty("stringIdStorage"))),
                 checked((long)ParseHex(anchors.GetProperty("stringIdStorageUsed"))),
                 checked((long)ParseHex(anchors.GetProperty("stringIdStrings"))),
                 checked((long)ParseHex(anchors.GetProperty("stringIdCount"))),
-                checked((long)ParseHex(anchors.GetProperty("stringIdBuiltinTable")))));
+                checked((long)ParseHex(anchors.GetProperty("stringIdBuiltinTable"))),
+                capabilities));
         }
         return profiles;
     }

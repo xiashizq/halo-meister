@@ -5,7 +5,7 @@
     xmlns:i18n="using:HaloMeister.App.Localization"
     xmlns:pages="using:HaloMeister.App.Pages">
 
-    <Grid Padding="16" RowSpacing="12">
+    <Grid Padding="20,16,20,16" RowSpacing="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -15,60 +15,198 @@
 
         <pages:SaveDataAlert Grid.Row="0" />
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <TextBox
                 x:Name="Filter"
-                Width="320"
+                MinWidth="280"
+                MaxWidth="480"
+                HorizontalAlignment="Left"
                 PlaceholderText="{i18n:Loc Key='raw.filter_by_name_type_or_value'}"
                 TextChanged="OnFilterChanged" />
-            <TextBlock
-                x:Name="CountText"
+            <Border
+                Grid.Column="1"
+                Padding="10,5"
                 VerticalAlignment="Center"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-        </StackPanel>
+                Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                CornerRadius="999">
+                <TextBlock
+                    x:Name="CountText"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Border>
+        </Grid>
 
-        <TextBlock
-            Grid.Row="2"
-            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            Style="{ThemeResource CaptionTextBlockStyle}"
-            TextWrapping="Wrap"
-            Text="{i18n:Loc Key='raw.read_only_view_of_every_property_in_the_d_c0f643'}" />
+        <Border Grid.Row="2" Style="{StaticResource LiveToolInsetStyle}">
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <FontIcon
+                    VerticalAlignment="Top"
+                    FontSize="14"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE946;" />
+                <TextBlock
+                    Grid.Column="1"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    TextWrapping="Wrap"
+                    Text="{i18n:Loc Key='raw.read_only_view_of_every_property_in_the_d_c0f643'}" />
+            </Grid>
+        </Border>
 
-        <ListView
-            x:Name="RawList"
+        <Border
             Grid.Row="3"
-            SelectionMode="Single">
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <Grid Padding="0,3" Margin="{Binding Indent}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="280" />
-                            <ColumnDefinition Width="220" />
-                            <ColumnDefinition Width="60" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock
-                            Grid.Column="0"
-                            FontFamily="Consolas"
-                            Text="{Binding Name}"
-                            TextTrimming="CharacterEllipsis" />
-                        <TextBlock
-                            Grid.Column="1"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="{Binding TypeLabel}"
-                            TextTrimming="CharacterEllipsis" />
-                        <TextBlock
-                            Grid.Column="2"
-                            FontFamily="Consolas"
-                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                            Text="{Binding FlagsLabel}" />
-                        <TextBlock
-                            Grid.Column="3"
-                            Text="{Binding Value}"
-                            TextTrimming="CharacterEllipsis" />
-                    </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid
+                    Padding="14,10,14,10"
+                    Background="{ThemeResource LayerFillColorAltBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,0,1"
+                    ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2.2*" MinWidth="220" />
+                        <ColumnDefinition Width="1.1*" MinWidth="110" />
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="1.6*" MinWidth="140" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='raw.column_name'}" />
+                    <TextBlock
+                        Grid.Column="1"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='raw.column_type'}" />
+                    <TextBlock
+                        Grid.Column="2"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='raw.column_flags'}" />
+                    <TextBlock
+                        Grid.Column="3"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='raw.column_value'}" />
+                </Grid>
+
+                <ListView
+                    x:Name="RawList"
+                    Grid.Row="1"
+                    Padding="4,4,4,8"
+                    SelectionMode="Single">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,1" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid
+                                MinHeight="34"
+                                Padding="10,6"
+                                ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2.2*" MinWidth="220" />
+                                    <ColumnDefinition Width="1.1*" MinWidth="110" />
+                                    <ColumnDefinition Width="72" />
+                                    <ColumnDefinition Width="1.6*" MinWidth="140" />
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Margin="{Binding NameIndent}" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle
+                                        Width="2"
+                                        Margin="0,3,0,3"
+                                        RadiusX="1"
+                                        RadiusY="1"
+                                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                                        Opacity="0.55"
+                                        Visibility="{Binding GuideVisibility}" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontWeight="SemiBold"
+                                        Text="{Binding Name}"
+                                        TextTrimming="CharacterEllipsis"
+                                        ToolTipService.ToolTip="{Binding Path}" />
+                                </Grid>
+
+                                <StackPanel
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Spacing="2">
+                                    <Border
+                                        Padding="7,2"
+                                        HorizontalAlignment="Left"
+                                        Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                        CornerRadius="4">
+                                        <TextBlock
+                                            FontSize="11"
+                                            FontWeight="SemiBold"
+                                            Text="{Binding TypeBadge}" />
+                                    </Border>
+                                    <TextBlock
+                                        FontSize="10"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Text="{Binding TypeDetail}"
+                                        TextTrimming="CharacterEllipsis"
+                                        ToolTipService.ToolTip="{Binding TypeLabel}" />
+                                </StackPanel>
+
+                                <Border
+                                    Grid.Column="2"
+                                    Padding="6,2"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Left"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                    CornerRadius="4">
+                                    <TextBlock
+                                        FontFamily="Consolas"
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding FlagsLabel}" />
+                                </Border>
+
+                                <TextBlock
+                                    Grid.Column="3"
+                                    VerticalAlignment="Center"
+                                    FontFamily="Consolas"
+                                    FontSize="12"
+                                    Text="{Binding Value}"
+                                    TextTrimming="CharacterEllipsis"
+                                    ToolTipService.ToolTip="{Binding Value}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </Border>
     </Grid>
 </Page>

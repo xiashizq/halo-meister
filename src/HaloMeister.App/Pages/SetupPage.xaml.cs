@@ -11,6 +11,8 @@ public sealed partial class SetupPage : Page
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private bool _languageComboReady;
+    private bool _checkingBridge;
+    private bool _bridgeWasGameRunning;
 
     public SetupPage()
     {
@@ -23,12 +25,12 @@ public sealed partial class SetupPage : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         PopulateLanguageCombo();
-        RefreshStatus();
+        _ = RefreshStatusAsync(retryForHeartbeat: true);
         _refreshTimer.Start();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e) => _refreshTimer.Stop();
-    private void OnRefreshTick(object? sender, object e) => RefreshStatus();
+    private void OnRefreshTick(object? sender, object e) => _ = RefreshStatusAsync();
 
     private void PopulateLanguageCombo()
     {
@@ -67,7 +69,7 @@ public sealed partial class SetupPage : Page
         MainWindow.Instance?.SetLanguage(code);
     }
 
-    private void RefreshStatus()
+    private async Task RefreshStatusAsync(bool retryForHeartbeat = false)
     {
         bool connected = _game.IsConnected;
         GameStatusText.Text = connected
@@ -76,11 +78,28 @@ public sealed partial class SetupPage : Page
         ConnectButton.Content = connected ? L.Get("common.reconnect") : L.Get("common.connect");
 
         ScriptingBridgeStatus status = _bridge.GetStatus();
+        bool startedSinceLastCheck = status.IsGameProcessRunning && !_bridgeWasGameRunning;
+        _bridgeWasGameRunning = status.IsGameProcessRunning;
+        if (!_checkingBridge && !status.IsRuntimeReady &&
+            status.IsGameProcessRunning && (retryForHeartbeat || startedSinceLastCheck))
+        {
+            _checkingBridge = true;
+            RecheckBridgeButton.IsEnabled = false;
+            BridgeStatusText.Text = L.Get("setup.waiting_for_bridge_heartbeat");
+            try
+            {
+                status = await _bridge.WaitForHeartbeatAsync();
+            }
+            finally
+            {
+                _checkingBridge = false;
+                RecheckBridgeButton.IsEnabled = true;
+            }
+        }
+
         BridgeStatusText.Text = status.IsRuntimeReady
             ? L.Get("setup.bridge_ready")
-            : status.IsInstalled
-                ? L.Get("setup.bridge_installed_not_ready")
-                : L.Get("setup.bridge_not_installed");
+            : status.Summary;
         InstallButton.Content = status.IsInstalled
             ? L.Get("common.repair_update")
             : L.Get("common.install");
@@ -93,15 +112,18 @@ public sealed partial class SetupPage : Page
     private async void OnConnect(object sender, RoutedEventArgs e)
     {
         await (MainWindow.Instance?.ConnectToGameAsync() ?? Task.CompletedTask);
-        RefreshStatus();
+        await RefreshStatusAsync(retryForHeartbeat: true);
     }
+
+    private async void OnRecheckBridge(object sender, RoutedEventArgs e)
+        => await RefreshStatusAsync(retryForHeartbeat: true);
 
     private async void OnInstall(object sender, RoutedEventArgs e)
     {
         InstallButton.IsEnabled = false;
         InstallButton.Content = L.Get("common.working");
         await (MainWindow.Instance?.InstallLiveToolsAsync() ?? Task.CompletedTask);
-        RefreshStatus();
+        await RefreshStatusAsync(retryForHeartbeat: true);
     }
 
     private void OnOpenLiveTools(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("live-gameplay");

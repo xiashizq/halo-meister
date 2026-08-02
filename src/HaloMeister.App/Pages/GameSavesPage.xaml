@@ -7,6 +7,7 @@
     <Grid Padding="28,24,28,28" RowSpacing="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -47,7 +48,10 @@
                 <Button Content="{i18n:Loc Key='game_saves.more'}">
                     <Button.Flyout>
                         <MenuFlyout>
-                            <MenuFlyoutItem Click="OnOpenWgsFolder" Text="{i18n:Loc Key='game_saves.open_live_wgs_folder'}">
+                            <MenuFlyoutItem
+                                x:Name="OpenLiveFolderItem"
+                                Click="OnOpenLiveFolder"
+                                Text="{i18n:Loc Key='game_saves.open_live_save_folder'}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE838;" />
                                 </MenuFlyoutItem.Icon>
@@ -63,8 +67,23 @@
             </StackPanel>
         </Grid>
 
-        <Border
+        <SelectorBar
+            x:Name="PlatformBar"
             Grid.Row="1"
+            SelectionChanged="OnPlatformChanged">
+            <SelectorBarItem
+                x:Name="SteamPlatformItem"
+                IsSelected="True"
+                Tag="steam"
+                Text="{i18n:Loc Key='game_saves.platform_steam'}" />
+            <SelectorBarItem
+                x:Name="StorePlatformItem"
+                Tag="store"
+                Text="{i18n:Loc Key='game_saves.platform_microsoft_store'}" />
+        </SelectorBar>
+
+        <Border
+            Grid.Row="2"
             MinHeight="500"
             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -94,9 +113,10 @@
                                 Style="{ThemeResource SubtitleTextBlockStyle}"
                                 Text="{i18n:Loc Key='game_saves.live_save_slots'}" />
                             <TextBlock
+                                x:Name="StorageSourceText"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 FontSize="12"
-                                Text="{i18n:Loc Key='game_saves.stored_by_windows_gaming_services'}" />
+                                Text="{i18n:Loc Key='game_saves.stored_by_steam_savegames'}" />
                         </StackPanel>
                         <Border
                             Grid.Column="1"
@@ -385,7 +405,7 @@
                                     <TextBlock x:Name="KindText" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" />
                                     <TextBlock Grid.Row="1" FontWeight="SemiBold" Text="{i18n:Loc Key='game_saves.build'}" />
                                     <TextBlock x:Name="BuildText" Grid.Row="1" Grid.Column="1" FontFamily="Consolas" TextWrapping="Wrap" />
-                                    <TextBlock Grid.Row="2" FontWeight="SemiBold" Text="{i18n:Loc Key='game_saves.container'}" />
+                                    <TextBlock x:Name="ContainerLabelText" Grid.Row="2" FontWeight="SemiBold" Text="{i18n:Loc Key='game_saves.container'}" />
                                     <TextBlock x:Name="ContainerText" Grid.Row="2" Grid.Column="1" FontFamily="Consolas" TextWrapping="Wrap" />
                                     <TextBlock Grid.Row="3" FontWeight="SemiBold" Text="{i18n:Loc Key='game_saves.updated'}" />
                                     <TextBlock x:Name="UpdatedText" Grid.Row="3" Grid.Column="1" />
@@ -492,7 +512,7 @@
 
         <InfoBar
             x:Name="PageStatus"
-            Grid.Row="2"
+            Grid.Row="3"
             IsClosable="True"
             IsOpen="False" />
     </Grid>

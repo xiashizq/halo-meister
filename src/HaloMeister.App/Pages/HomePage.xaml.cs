@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
 using HaloMeister.App.Services;
@@ -15,6 +16,7 @@ public sealed partial class HomePage : Page
     private readonly PlayFabProxyService _cloud = PlayFabProxyService.Current;
     private readonly AppState _state = AppState.Current;
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+    private string? _gameDirectory;
 
     public HomePage()
     {
@@ -55,6 +57,33 @@ public sealed partial class HomePage : Page
         CloudStatusText.Text = _state.IsLoaded
             ? _state.IsDirty ? L.Get("home.cloud_dirty") : L.Get("home.cloud_clean")
             : cloudReady ? L.Get("home.cloud_auth") : L.Get("home.cloud_need_auth");
+
+        _gameDirectory = connected ? ResolveGameDirectory(_game.ModulePath) : null;
+        bool hasGamePath = !string.IsNullOrWhiteSpace(_gameDirectory) && Directory.Exists(_gameDirectory);
+        GamePathStatusDot.Fill = StatusBrush(hasGamePath);
+        GamePathText.Text = hasGamePath
+            ? _gameDirectory!
+            : connected
+                ? L.Get("home.game_path_unavailable")
+                : L.Get("home.game_path_disconnected");
+        OpenGamePathButton.IsEnabled = hasGamePath;
+    }
+
+    private static string? ResolveGameDirectory(string? modulePath)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            return null;
+
+        string? current = Path.GetDirectoryName(Path.GetFullPath(modulePath));
+        while (!string.IsNullOrEmpty(current))
+        {
+            if (File.Exists(Path.Combine(current, "HaloCampaignEvolved.exe")))
+                return current;
+            current = Path.GetDirectoryName(current);
+        }
+
+        string? moduleDirectory = Path.GetDirectoryName(modulePath);
+        return Directory.Exists(moduleDirectory) ? moduleDirectory : null;
     }
 
     private static Brush StatusBrush(bool ready) => new SolidColorBrush(
@@ -74,4 +103,15 @@ public sealed partial class HomePage : Page
     private void OnOpenLiveTools(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("live-gameplay");
     private void OnOpenSetup(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("setup");
     private void OnOpenHelp(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("help");
+
+    private void OnOpenGamePath(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_gameDirectory) || !Directory.Exists(_gameDirectory))
+            return;
+
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_gameDirectory}\"")
+        {
+            UseShellExecute = true,
+        });
+    }
 }

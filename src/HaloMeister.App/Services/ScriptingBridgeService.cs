@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Diagnostics;
 using HaloMeister.App.Localization;
 
 namespace HaloMeister.App.Services;
@@ -69,6 +70,7 @@ public sealed record ScriptExecutionResult(
 public sealed record ScriptingBridgeStatus(
     string? InstalledMainPath,
     bool IsInstalled,
+    bool IsGameProcessRunning,
     bool IsRuntimeReady,
     DateTimeOffset? LastHeartbeat,
     int? RunningVersion,
@@ -85,6 +87,8 @@ public sealed class ScriptingBridgeService
     private const string MarkerVersion = "-- HALOMEISTER SCRIPTING BRIDGE:VERSION";
     private const int MaximumCodeBytes = 64 * 1024;
     private static readonly TimeSpan HeartbeatLifetime = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan[] HeartbeatRetryDelays =
+        [TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)];
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(15);
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private readonly SemaphoreSlim _executionGate = new(1, 1);
@@ -141,6 +145,7 @@ public sealed class ScriptingBridgeService
     {
         string? mainPath = FindInstalledMainPath();
         bool installed = mainPath is not null && ContainsBridge(mainPath);
+        bool gameRunning = IsGameProcessRunning();
         (DateTimeOffset? heartbeat, int? runningVersion) = ReadStatusFile();
         bool ready = heartbeat is { } time && DateTimeOffset.UtcNow - time <= HeartbeatLifetime;
 
@@ -150,25 +155,49 @@ public sealed class ScriptingBridgeService
         bool stale = ready && packaged is { } expected &&
                      (runningVersion is null || runningVersion < expected);
 
-        string summary = (installed, ready, stale) switch
+        string summary = (installed, gameRunning, ready, stale) switch
         {
-            (_, true, true) => L.Format(
+            (_, _, true, true) => L.Format(
                 "bridge.summary_stale",
                 runningVersion?.ToString() ?? "1",
                 packaged),
-            (true, true, false) => L.Format(
+            (true, _, true, false) => L.Format(
                 "bridge.summary_ready",
                 runningVersion,
                 heartbeat?.ToLocalTime().ToString("HH:mm:ss")),
-            (true, false, _) => L.Get("bridge.summary_installed_not_running"),
-            (false, true, false) => L.Format(
+            (true, true, false, _) => L.Get("bridge.summary_game_running_no_heartbeat"),
+            (true, false, false, _) => L.Get("bridge.summary_installed_not_running"),
+            (false, _, true, false) => L.Format(
                 "bridge.summary_running_install_missing",
                 heartbeat?.ToLocalTime().ToString("HH:mm:ss")),
             _ => L.Get("bridge.summary_not_installed"),
         };
 
         return new ScriptingBridgeStatus(
-            mainPath, installed, ready, heartbeat, runningVersion, stale, summary);
+            mainPath, installed, gameRunning, ready, heartbeat, runningVersion, stale, summary);
+    }
+
+    /// <summary>
+    /// Waits through the short period between the game process appearing and
+    /// UE4SS writing its first bridge heartbeat. It intentionally retries only
+    /// status reads, never a game operation.
+    /// </summary>
+    public async Task<ScriptingBridgeStatus> WaitForHeartbeatAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ScriptingBridgeStatus status = GetStatus();
+        if (status.IsRuntimeReady || !status.IsGameProcessRunning)
+            return status;
+
+        foreach (TimeSpan delay in HeartbeatRetryDelays)
+        {
+            await Task.Delay(delay, cancellationToken);
+            status = GetStatus();
+            if (status.IsRuntimeReady || !status.IsGameProcessRunning)
+                return status;
+        }
+
+        return status;
     }
 
     public async Task<ScriptExecutionResult> ExecuteAsync(
@@ -189,6 +218,7 @@ public sealed class ScriptingBridgeService
             ScriptingBridgeStatus status = GetStatus();
             if (!status.IsRuntimeReady)
                 throw new InvalidOperationException(L.Get("bridge.error_scripting_not_responding"));
+            EnsureCapabilityReady(language);
 
             string requestId = Guid.NewGuid().ToString("N");
             string kind = language switch
@@ -269,6 +299,38 @@ public sealed class ScriptingBridgeService
         finally
         {
             _executionGate.Release();
+        }
+    }
+
+    private static void EnsureCapabilityReady(ScriptLanguage language)
+    {
+        LiveToolCapability? capability = LiveToolCapabilityCatalog.For(language);
+        if (capability is null)
+            return;
+
+        Process process = Process.GetProcessesByName("HaloCampaignEvolved").SingleOrDefault()
+            ?? throw new InvalidOperationException(L.Get("shell.game_not_running"));
+        try
+        {
+            ProcessModule module = process.Modules.Cast<ProcessModule>().SingleOrDefault(candidate =>
+                candidate.ModuleName.Equals(
+                    "HaloSimulation_tag_release.dll",
+                    StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException(
+                    "Load an offline campaign mission before using this live tool.");
+            GameBuildProfile profile = GameBuildProfileCatalog.Resolve(module.FileName);
+            CapabilityValidationLevel level =
+                GameBuildProfileCatalog.GetCapability(profile, capability.Value);
+            if (level < CapabilityValidationLevel.Integrated)
+            {
+                throw new NotSupportedException(
+                    $"{capability} is {level} for build '{profile.Id}' and is not enabled. " +
+                    "Update the build profile after static and live validation.");
+            }
+        }
+        finally
+        {
+            process.Dispose();
         }
     }
 
@@ -368,7 +430,7 @@ public sealed class ScriptingBridgeService
             string[] lines = File.ReadAllLines(StatusPath, Utf8);
             if (lines.Length < 2 || lines[0] != StatusMagic ||
                 !long.TryParse(lines[1], out long unixTime))
-                return (null, null);
+                return _lastStatus;
 
             int? version = lines.Length >= 4 && int.TryParse(lines[3].Trim(), out int parsed)
                 ? parsed
@@ -388,6 +450,14 @@ public sealed class ScriptingBridgeService
         {
             return (null, null);
         }
+    }
+
+    private static bool IsGameProcessRunning()
+    {
+        Process[] processes = Process.GetProcessesByName("HaloCampaignEvolved");
+        foreach (Process process in processes)
+            process.Dispose();
+        return processes.Length > 0;
     }
 
     private static int? ReadBridgeVersion(string path)

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
 using Microsoft.Win32.SafeHandles;
 
@@ -16,6 +17,9 @@ public sealed class RuntimeTagMemoryService : IDisposable
     private const uint ProcessVmRead = 0x0010;
     private const uint ProcessVmWrite = 0x0020;
     private const uint ProcessQueryInformation = 0x0400;
+    private const uint MemCommit = 0x1000;
+    private const uint PageGuard = 0x100;
+    private const uint PageNoAccess = 0x01;
 
     // Layout constants from Baboon's Campaign Evolved runtime poker.
     private const int StringIdMaxEntries = 523_264;
@@ -29,6 +33,9 @@ public sealed class RuntimeTagMemoryService : IDisposable
     private long _moduleBase;
     private string? _modulePath;
     private GameBuildProfile? _buildProfile;
+    private RuntimeIdentity? _identity;
+    private IReadOnlyList<RuntimeTagEntry>? _tagCache;
+    private DateTimeOffset _tagCacheExpires;
 
     public static RuntimeTagMemoryService Current { get; } = new();
 
@@ -58,7 +65,7 @@ public sealed class RuntimeTagMemoryService : IDisposable
     {
         Disconnect();
         Process process = Process.GetProcessesByName(ProcessName).SingleOrDefault()
-            ?? throw new InvalidOperationException("Halo: Campaign Evolved is not running.");
+            ?? throw new InvalidOperationException(L.Get("shell.game_not_running"));
         ProcessModule module = process.Modules.Cast<ProcessModule>()
             .SingleOrDefault(candidate =>
                 candidate.ModuleName.Equals(SimulationModule, StringComparison.OrdinalIgnoreCase))
@@ -87,12 +94,21 @@ public sealed class RuntimeTagMemoryService : IDisposable
         long table = checked((long)ReadUInt64(
             _moduleBase + _buildProfile.TagTablePointerOffset));
         ValidateTagTable(table);
+        _identity = new RuntimeIdentity(
+            process.Id,
+            process.StartTime.ToUniversalTime().Ticks,
+            _moduleBase,
+            table);
         ConnectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public IReadOnlyList<RuntimeTagEntry> ReadTags()
     {
         EnsureConnected();
+        EnsureRuntimeIdentity();
+        if (_tagCache is not null && DateTimeOffset.UtcNow < _tagCacheExpires)
+            return _tagCache;
+
         long table = checked((long)ReadUInt64(
             _moduleBase + BuildProfile.TagTablePointerOffset));
         (int elementSize, long first, int capacity) = ValidateTagTable(table);
@@ -131,7 +147,9 @@ public sealed class RuntimeTagMemoryService : IDisposable
                     dataOffset, definitionOffset, dataAddress, definitionAddress));
             }
         }
-        return result;
+        _tagCache = result;
+        _tagCacheExpires = DateTimeOffset.UtcNow.AddMilliseconds(500);
+        return _tagCache;
     }
 
     public long ResolveOffset(uint encodedOffset)
@@ -359,15 +377,101 @@ public sealed class RuntimeTagMemoryService : IDisposable
     public void WriteVerified(long address, ReadOnlySpan<byte> bytes)
     {
         EnsureConnected();
-        if (address <= 0) throw new ArgumentOutOfRangeException(nameof(address));
-        if (bytes.Length == 0) throw new ArgumentException("No bytes supplied.", nameof(bytes));
-        byte[] buffer = bytes.ToArray();
-        if (!WriteProcessMemory(_handle!, new IntPtr(address), buffer, buffer.Length, out nuint written) ||
-            written != (nuint)buffer.Length)
-            throw Win32($"WriteProcessMemory at 0x{address:X}");
-        byte[] verification = ReadBytes(address, buffer.Length);
-        if (!verification.AsSpan().SequenceEqual(buffer))
-            throw new IOException($"The game did not retain the write at 0x{address:X}.");
+        EnsureRuntimeIdentity();
+        byte[] expected = ReadBytes(address, bytes.Length);
+        WriteVerified(address, expected, bytes);
+    }
+
+    /// <summary>
+    /// Applies a single compare-and-swap style memory patch. The target must
+    /// still contain <paramref name="expected"/> immediately before the write.
+    /// </summary>
+    public void WriteVerified(
+        long address,
+        ReadOnlySpan<byte> expected,
+        ReadOnlySpan<byte> bytes)
+    {
+        ApplyTransaction([new RuntimeMemoryWrite(address, expected.ToArray(), bytes.ToArray())]);
+    }
+
+    /// <summary>
+    /// Applies non-overlapping patches with preflight checks and conservative
+    /// rollback. A rollback never overwrites bytes another game system changed
+    /// after this transaction's write.
+    /// </summary>
+    public void ApplyTransaction(IEnumerable<RuntimeMemoryWrite> requestedWrites)
+    {
+        EnsureConnected();
+        EnsureRuntimeIdentity();
+        RuntimeMemoryWrite[] writes = requestedWrites
+            .OrderBy(write => write.Address)
+            .ToArray();
+        if (writes.Length == 0)
+            throw new ArgumentException("No memory writes supplied.", nameof(requestedWrites));
+
+        long previousEnd = 0;
+        foreach (RuntimeMemoryWrite write in writes)
+        {
+            if (write.Address <= 0)
+                throw new ArgumentOutOfRangeException(nameof(requestedWrites));
+            if (write.Expected.Length == 0 || write.Expected.Length != write.Value.Length)
+                throw new ArgumentException(
+                    "Each memory write needs equally sized expected and replacement bytes.",
+                    nameof(requestedWrites));
+            long end = checked(write.Address + write.Value.Length);
+            if (previousEnd > write.Address)
+                throw new InvalidOperationException(
+                    $"Memory patches overlap at 0x{write.Address:X}.");
+            previousEnd = end;
+            EnsureWritable(write.Address, write.Value.Length);
+            byte[] live = ReadBytes(write.Address, write.Expected.Length);
+            if (!live.AsSpan().SequenceEqual(write.Expected))
+            {
+                throw new IOException(
+                    $"The game changed memory at 0x{write.Address:X}; refusing a stale write.");
+            }
+        }
+
+        int completed = 0;
+        try
+        {
+            foreach (RuntimeMemoryWrite write in writes)
+            {
+                WriteUnchecked(write.Address, write.Value);
+                byte[] verification = ReadBytes(write.Address, write.Value.Length);
+                if (!verification.AsSpan().SequenceEqual(write.Value))
+                    throw new IOException(
+                        $"The game did not retain the write at 0x{write.Address:X}.");
+                completed++;
+            }
+        }
+        catch (Exception error)
+        {
+            var rollbackErrors = new List<string>();
+            for (int index = completed - 1; index >= 0; index--)
+            {
+                RuntimeMemoryWrite write = writes[index];
+                try
+                {
+                    if (ReadBytes(write.Address, write.Value.Length).AsSpan()
+                        .SequenceEqual(write.Value))
+                    {
+                        WriteUnchecked(write.Address, write.Expected);
+                    }
+                }
+                catch (Exception rollbackError)
+                {
+                    rollbackErrors.Add($"0x{write.Address:X}: {rollbackError.Message}");
+                }
+            }
+            string rollback = rollbackErrors.Count == 0
+                ? "Earlier writes were rolled back where still owned by this transaction."
+                : $"Rollback errors: {string.Join("; ", rollbackErrors)}";
+            throw new IOException($"{error.Message} {rollback}", error);
+        }
+
+        _tagCache = null;
+        _tagCacheExpires = default;
     }
 
     public void Disconnect()
@@ -382,6 +486,9 @@ public sealed class RuntimeTagMemoryService : IDisposable
         _moduleBase = 0;
         _modulePath = null;
         _buildProfile = null;
+        _identity = null;
+        _tagCache = null;
+        _tagCacheExpires = default;
         if (wasConnected)
             ConnectionChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -473,12 +580,91 @@ public sealed class RuntimeTagMemoryService : IDisposable
             throw new InvalidOperationException("Not connected to Halo: Campaign Evolved.");
     }
 
+    private void EnsureRuntimeIdentity()
+    {
+        RuntimeIdentity expected = _identity
+            ?? throw new InvalidOperationException("No runtime identity is active.");
+        if (_process is null || _process.Id != expected.ProcessId ||
+            _process.StartTime.ToUniversalTime().Ticks != expected.ProcessStartTimeTicks ||
+            _moduleBase != expected.ModuleBase)
+        {
+            throw new InvalidOperationException(
+                "The game process identity changed; reconnect before writing live tags.");
+        }
+
+        long currentTable = checked((long)ReadUInt64(
+            _moduleBase + BuildProfile.TagTablePointerOffset));
+        if (currentTable != expected.TagTable)
+        {
+            _tagCache = null;
+            _tagCacheExpires = default;
+            throw new InvalidOperationException(
+                "The runtime tag table changed; reconnect before using cached tag addresses.");
+        }
+    }
+
+    private void EnsureWritable(long address, int count)
+    {
+        if (VirtualQueryEx(
+                _handle!,
+                new IntPtr(address),
+                out MemoryBasicInformation memory,
+                (nuint)Marshal.SizeOf<MemoryBasicInformation>()) == 0 ||
+            memory.State != MemCommit ||
+            (memory.Protect & (PageGuard | PageNoAccess)) != 0 ||
+            !IsWritableProtection(memory.Protect))
+        {
+            throw new UnauthorizedAccessException(
+                $"The target memory page at 0x{address:X} is not writable.");
+        }
+
+        long pageEnd = checked(memory.BaseAddress.ToInt64() + (long)memory.RegionSize);
+        if (checked(address + count) > pageEnd)
+        {
+            throw new UnauthorizedAccessException(
+                $"The write at 0x{address:X} crosses a memory page boundary.");
+        }
+    }
+
+    private void WriteUnchecked(long address, byte[] bytes)
+    {
+        if (!WriteProcessMemory(_handle!, new IntPtr(address), bytes, bytes.Length, out nuint written) ||
+            written != (nuint)bytes.Length)
+        {
+            throw Win32($"WriteProcessMemory at 0x{address:X}");
+        }
+    }
+
+    private static bool IsWritableProtection(uint protection)
+        => protection is 0x04 or 0x08 or 0x40 or 0x80;
+
     private GameBuildProfile BuildProfile => _buildProfile
         ?? throw new InvalidOperationException(
             "No supported game build profile is active.");
 
     private static Win32Exception Win32(string operation)
         => new(Marshal.GetLastWin32Error(), $"{operation} failed");
+
+    private sealed record RuntimeIdentity(
+        int ProcessId,
+        long ProcessStartTimeTicks,
+        long ModuleBase,
+        long TagTable);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MemoryBasicInformation
+    {
+        public IntPtr BaseAddress;
+        public IntPtr AllocationBase;
+        public uint AllocationProtect;
+        public ushort PartitionId;
+        public ushort _padding;
+        public nuint RegionSize;
+        public uint State;
+        public uint Protect;
+        public uint Type;
+        public uint _padding2;
+    }
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern SafeProcessHandle OpenProcess(
@@ -503,4 +689,13 @@ public sealed class RuntimeTagMemoryService : IDisposable
         byte[] buffer,
         int size,
         out nuint numberOfBytesWritten);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nuint VirtualQueryEx(
+        SafeProcessHandle process,
+        IntPtr address,
+        out MemoryBasicInformation buffer,
+        nuint length);
 }
+
+public sealed record RuntimeMemoryWrite(long Address, byte[] Expected, byte[] Value);

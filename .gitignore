@@ -19,6 +19,8 @@ artifacts/
 .tools/
 steam-dlls/
 .codex-remote-attachments/
+**/__pycache__/
+*.py[cod]
 
 # Machine-specific project material (kept locally, never published)
 docs/project-routes.md

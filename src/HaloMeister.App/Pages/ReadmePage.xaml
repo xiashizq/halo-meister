@@ -72,7 +72,10 @@
                 </Border>
             </Grid>
 
-            <Expander IsExpanded="True">
+            <Expander
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                IsExpanded="True">
                 <Expander.Header>
                     <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.first_time_live_tools_setup'}" />
                 </Expander.Header>
@@ -85,7 +88,10 @@
                 </StackPanel>
             </Expander>
 
-            <Expander IsExpanded="True">
+            <Expander
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                IsExpanded="True">
                 <Expander.Header>
                     <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.haloscript_scripting_guide'}" />
                 </Expander.Header>
@@ -129,7 +135,9 @@
                 </StackPanel>
             </Expander>
 
-            <Expander>
+            <Expander
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch">
                 <Expander.Header>
                     <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.realtime_tag_configurations'}" />
                 </Expander.Header>
@@ -140,7 +148,10 @@
                 </StackPanel>
             </Expander>
 
-            <Expander IsExpanded="True">
+            <Expander
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                IsExpanded="True">
                 <Expander.Header>
                     <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.troubleshooting'}" />
                 </Expander.Header>

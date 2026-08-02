@@ -12,6 +12,9 @@
         "tagTablePointer": "0x0182D1E8",
         "arenaTable": "0x02C2CC90"
       },
+      "capabilities": {
+        "RuntimeTags": "LiveValidated"
+      },
       "researchAnchors": {
         "source": "https://github.com/Zoephie/Baboon/blob/main/src/app/runtime_poke.rs",
         "attribution": "Steam runtime profile measurements by Zoephie (Baboon).",
@@ -32,6 +35,21 @@
       "runtimeTags": {
         "tagTablePointer": "0x0182D1E8",
         "arenaTable": "0x02C2CC90"
+      },
+      "capabilities": {
+        "RuntimeTags": "LiveValidated",
+        "ObjectSpawn": "LiveValidated",
+        "WeaponLoad": "LiveValidated",
+        "ObjectAppearance": "LiveValidated",
+        "BipedPossession": "Integrated",
+        "AiPlacement": "Integrated",
+        "GameplayCheats": "Integrated",
+        "SoftCeilings": "Integrated",
+        "RuntimeBoundaries": "Integrated",
+        "PlayerTools": "Integrated",
+        "PlayerAllegiance": "Integrated",
+        "Machinima": "Integrated",
+        "SavedFilm": "StaticVerified"
       },
       "researchAnchors": {
         "pulseHook": "0x001AF990",

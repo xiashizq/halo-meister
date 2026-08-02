@@ -6,7 +6,6 @@
     xmlns:pages="using:HaloMeister.App.Pages">
 
     <Grid
-        MaxWidth="1120"
         Padding="28,24,28,28"
         HorizontalAlignment="Stretch"
         RowSpacing="16">
@@ -23,7 +22,6 @@
                 Text="{i18n:Loc Key='profile.profile_entitlements'}" />
             <TextBlock
                 x:Name="PageDescription"
-                MaxWidth="760"
                 HorizontalAlignment="Left"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Text="{i18n:Loc Key='profile.review_every_entitlement_supported_by_the_3bbd57'}"
@@ -164,104 +162,130 @@
             </Grid>
         </Border>
 
-        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="12">
-                <Expander x:Name="CustomEntitlementExpander" Header="{i18n:Loc Key='profile.add_a_custom_or_future_entitlement'}" IsExpanded="False">
-                    <StackPanel Padding="0,12,0,4" Spacing="8">
-                        <TextBlock
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="{i18n:Loc Key='profile.unknown_values_are_preserved_and_appear_a_be37bb'}"
-                            TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBox
-                                x:Name="NewEntitlement"
-                                Width="360"
-                                PlaceholderText="{i18n:Loc Key='profile.entitlement_id'}" />
-                            <Button
-                                x:Name="AddEntitlementButton"
-                                Click="OnAddEntitlement"
-                                Content="{i18n:Loc Key='profile.add_entitlement'}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Expander>
+        <StackPanel Grid.Row="3" Spacing="12">
+            <StackPanel.Resources>
+                <Style TargetType="Expander">
+                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </StackPanel.Resources>
 
-                <Expander Header="{i18n:Loc Key='profile.advanced_profile_data'}" IsExpanded="False">
-                    <StackPanel Padding="0,16,0,4" Spacing="18">
-                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='profile.profile_flags'}" />
-                        <ItemsControl x:Name="FlagList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border
-                                        Margin="0,0,0,8"
-                                        Padding="14,10"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                        CornerRadius="8">
-                                        <Grid ColumnSpacing="12">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding Display}" />
-                                                <TextBlock
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Style="{ThemeResource CaptionTextBlockStyle}"
-                                                    Text="{Binding Path}" />
-                                            </StackPanel>
-                                            <ToggleSwitch
-                                                Grid.Column="1"
-                                                MinWidth="0"
-                                                IsOn="{Binding Value, Mode=TwoWay}" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+            <Expander
+                x:Name="CustomEntitlementExpander"
+                IsExpanded="False">
+                <Expander.Header>
+                    <TextBlock
+                        HorizontalAlignment="Stretch"
+                        Text="{i18n:Loc Key='profile.add_a_custom_or_future_entitlement'}"
+                        TextWrapping="Wrap" />
+                </Expander.Header>
+                <StackPanel Padding="0,12,0,4" Spacing="8">
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='profile.unknown_values_are_preserved_and_appear_a_be37bb'}"
+                        TextWrapping="Wrap" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox
+                            x:Name="NewEntitlement"
+                            HorizontalAlignment="Stretch"
+                            PlaceholderText="{i18n:Loc Key='profile.entitlement_id'}" />
+                        <Button
+                            x:Name="AddEntitlementButton"
+                            Grid.Column="1"
+                            Click="OnAddEntitlement"
+                            Content="{i18n:Loc Key='profile.add_entitlement'}" />
+                    </Grid>
+                </StackPanel>
+            </Expander>
 
-                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='profile.training_bitvectors'}" />
-                        <TextBlock
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{ThemeResource CaptionTextBlockStyle}"
-                            TextWrapping="Wrap"
-                            Text="{i18n:Loc Key='profile.packed_tutorial_prompt_flags_decimal_and_d9cda2'}" />
-                        <ItemsControl x:Name="NumberList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border
-                                        Margin="0,0,0,8"
-                                        Padding="14"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                        CornerRadius="8">
-                                        <Grid ColumnSpacing="16">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="180" />
-                                                <ColumnDefinition Width="110" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding Display}" />
-                                                <TextBlock
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Style="{ThemeResource CaptionTextBlockStyle}"
-                                                    Text="{Binding Path}" />
-                                            </StackPanel>
-                                            <TextBox
-                                                Grid.Column="1"
-                                                Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <Expander IsExpanded="False">
+                <Expander.Header>
+                    <TextBlock
+                        HorizontalAlignment="Stretch"
+                        Text="{i18n:Loc Key='profile.advanced_profile_data'}"
+                        TextWrapping="Wrap" />
+                </Expander.Header>
+                <StackPanel Padding="0,16,0,4" Spacing="18">
+                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='profile.profile_flags'}" />
+                    <ItemsControl x:Name="FlagList" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Margin="0,0,0,8"
+                                    Padding="14,10"
+                                    HorizontalAlignment="Stretch"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    CornerRadius="8">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding Display}" />
                                             <TextBlock
-                                                Grid.Column="2"
-                                                VerticalAlignment="Center"
-                                                FontFamily="Consolas"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Text="{Binding Hex}" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Expander>
-            </StackPanel>
-        </ScrollViewer>
+                                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                                Text="{Binding Path}" />
+                                        </StackPanel>
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            MinWidth="0"
+                                            IsOn="{Binding Value, Mode=TwoWay}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='profile.training_bitvectors'}" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        TextWrapping="Wrap"
+                        Text="{i18n:Loc Key='profile.packed_tutorial_prompt_flags_decimal_and_d9cda2'}" />
+                    <ItemsControl x:Name="NumberList" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Margin="0,0,0,8"
+                                    Padding="14"
+                                    HorizontalAlignment="Stretch"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    CornerRadius="8">
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="180" />
+                                            <ColumnDefinition Width="110" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding Display}" />
+                                            <TextBlock
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                                Text="{Binding Path}" />
+                                        </StackPanel>
+                                        <TextBox
+                                            Grid.Column="1"
+                                            Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
+                                            FontFamily="Consolas"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding Hex}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Expander>
+        </StackPanel>
     </Grid>
 </Page>

@@ -1,0 +1,33 @@
+name: Live tools validation
+
+on:
+  pull_request:
+    paths:
+      - "src/HaloMeister.App/Assets/GameBuildProfiles.json"
+      - "src/HaloMeister.App/Services/GameBuildProfileCatalog.cs"
+      - "src/HaloMeister.App/Services/LiveToolCapability.cs"
+      - "tools/game_build_analyzer.py"
+      - "tools/validate_live_tools_catalog.py"
+      - "native/HaloMeister.BlamBridge/**"
+  push:
+    branches: [master]
+    paths:
+      - "src/HaloMeister.App/Assets/GameBuildProfiles.json"
+      - "src/HaloMeister.App/Services/GameBuildProfileCatalog.cs"
+      - "src/HaloMeister.App/Services/LiveToolCapability.cs"
+      - "tools/game_build_analyzer.py"
+      - "tools/validate_live_tools_catalog.py"
+      - "native/HaloMeister.BlamBridge/**"
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate capability catalog
+        run: python tools/validate_live_tools_catalog.py
+      - name: Check analyzer syntax
+        run: python -m py_compile tools/game_build_analyzer.py

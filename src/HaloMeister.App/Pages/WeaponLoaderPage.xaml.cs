@@ -158,9 +158,16 @@ public sealed partial class WeaponLoaderPage : Page
     private void OnProjectilePickerGotFocus(object sender, RoutedEventArgs e)
     {
         if (sender is not AutoSuggestBox picker ||
+            !picker.IsEnabled ||
             _projectileSession is null ||
             _projectileWeapon is null)
             return;
+
+        // Disabled controls above this box (e.g. Pick up and equip) are not hit-testable, so
+        // a click on them can move focus here. Only open suggestions for a direct pointer focus.
+        if (picker.FocusState != FocusState.Pointer)
+            return;
+
         if (picker.Text.Trim().Length == 0)
             picker.ItemsSource = _projectileSession.Projectiles;
         picker.IsSuggestionListOpen = true;

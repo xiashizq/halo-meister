@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using HaloMeister.App.Localization;
 
 namespace HaloMeister.App.Services;
 
@@ -79,7 +80,7 @@ public sealed partial class LiveGameSaveEditorService
 
         string response = result.Message[(markerOffset + marker.Length)..].Trim();
         Process process = Process.GetProcessesByName("HaloCampaignEvolved").SingleOrDefault()
-            ?? throw new InvalidOperationException("Halo: Campaign Evolved is not running.");
+            ?? throw new InvalidOperationException(L.Get("shell.game_not_running"));
         nint handle = OpenProcess(
             ProcessVmRead | ProcessQueryLimitedInformation,
             inheritHandle: false,

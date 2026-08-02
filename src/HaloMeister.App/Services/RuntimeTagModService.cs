@@ -120,34 +120,15 @@ public sealed class RuntimeTagModService
             appliedTags++;
         }
 
-        int completed = 0;
         try
         {
-            foreach (PlannedWrite write in writes)
-            {
-                memory.WriteVerified(write.Address, write.Value);
-                completed++;
-            }
+            memory.ApplyTransaction(writes.Select(write =>
+                new RuntimeMemoryWrite(write.Address, write.Original, write.Value)));
         }
         catch (Exception applyError)
         {
-            var rollbackErrors = new List<string>();
-            for (int index = completed - 1; index >= 0; index--)
-            {
-                PlannedWrite write = writes[index];
-                try { memory.WriteVerified(write.Address, write.Original); }
-                catch (Exception rollbackError)
-                {
-                    rollbackErrors.Add(
-                        $"0x{write.Address:X}: {rollbackError.Message}");
-                }
-            }
-
-            string rollback = rollbackErrors.Count == 0
-                ? "All earlier writes were rolled back."
-                : "Rollback also failed at " + string.Join("; ", rollbackErrors) + ".";
             throw new IOException(
-                $"The mod failed after {completed:N0} write(s): {applyError.Message} {rollback}",
+                $"The transactional tag mod failed: {applyError.Message}",
                 applyError);
         }
 
