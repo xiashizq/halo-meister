@@ -10,12 +10,6 @@ a phone-friendly remote into one WinUI 3 app.
 > up important data, close the game before file or setup operations, and never
 > force a live action when build verification fails.
 
-[Download the latest release](https://github.com/NicmeisteR/halo-meister/releases) ·
-[Nexus Mods](https://www.nexusmods.com/halocampaignevolved/mods/115?tab=description) ·
-[Report a bug](https://github.com/NicmeisteR/halo-meister/issues) ·
-[Join the Discord](https://discord.gg/tyQvGDCEvG) ·
-[Follow @NicmeistaR on X](https://x.com/NicmeistaR) ·
-[Visit @NicmeisteR on GitHub](https://github.com/NicmeisteR)
 
 ## What Halo Meister can do
 
