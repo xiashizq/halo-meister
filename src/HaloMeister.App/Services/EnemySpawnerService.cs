@@ -150,6 +150,7 @@ public sealed class EnemySpawnerService : IDisposable
         float formationOffsetY = 0,
         AiWeaponChoice? weapon = null,
         bool followPlayer = false,
+        bool clearSquadObjective = false,
         CancellationToken cancellationToken = default)
     {
         if (!_memory.IsConnected)
@@ -160,22 +161,144 @@ public sealed class EnemySpawnerService : IDisposable
                 "One native AI batch can contain between one and five actors.");
         WorldPoint playerPosition =
             await ReadPlayerPositionAsync(cancellationToken);
-        string payload = await Task.Run(() => BuildPayload(
-            choice,
-            variant,
-            playerPosition,
-            count,
-            formationOffsetX,
-            formationOffsetY,
-            weapon,
-            followPlayer), cancellationToken);
-        return await _bridge.ExecuteAsync(
-            count == 1
-                ? ScriptLanguage.BlamAiSpawn
-                : ScriptLanguage.BlamAiTeamSpawn,
-            payload,
-            TimeSpan.FromSeconds(20),
-            cancellationToken: cancellationToken);
+        IReadOnlyList<MemoryPatch> objectivePatches = [];
+        if (clearSquadObjective)
+        {
+            objectivePatches = await Task.Run(
+                () => BeginClearNearestSquadObjective(playerPosition),
+                cancellationToken);
+        }
+        try
+        {
+            string payload = await Task.Run(() => BuildPayload(
+                choice,
+                variant,
+                playerPosition,
+                count,
+                formationOffsetX,
+                formationOffsetY,
+                weapon,
+                followPlayer), cancellationToken);
+            // Friendly companions always use the team-inclusive ai_team payload so
+            // native code can patch the borrowed squad team before actor_new.
+            return await _bridge.ExecuteAsync(
+                followPlayer || count > 1
+                    ? ScriptLanguage.BlamAiTeamSpawn
+                    : ScriptLanguage.BlamAiSpawn,
+                payload,
+                TimeSpan.FromSeconds(20),
+                cancellationToken: cancellationToken);
+        }
+        finally
+        {
+            RestorePatches(objectivePatches);
+        }
+    }
+
+    /// <summary>
+    /// Temporarily writes <c>&lt;none&gt;</c> (-1) into the nearest borrowed
+    /// squad's authored <c>initial objective</c> / <c>initial task</c> fields
+    /// so <c>actor_new</c> does not inherit a combat encounter hook.
+    /// </summary>
+    private List<MemoryPatch> BeginClearNearestSquadObjective(WorldPoint playerPosition)
+    {
+        if (_tags.Count == 0)
+            _tags = _memory.ReadTags();
+        RuntimeTagEntry scenario = _tags.FirstOrDefault(tag =>
+            string.Equals(tag.Group, "scnr", StringComparison.OrdinalIgnoreCase) &&
+            tag.DataAddress > 0)
+            ?? throw new InvalidOperationException(
+                "No loaded [scnr] tag with readable data was found. Load a campaign mission first.");
+        IReadOnlyList<RuntimeTagFieldValue> root = ReadRoot(scenario);
+        RuntimeTagFieldValue squads = root.FirstOrDefault(field =>
+            field.ChildBlockDefinition == "squads_block")
+            ?? throw new InvalidDataException("The loaded scenario has no readable squads.");
+
+        long objectiveAddress = 0;
+        long taskAddress = 0;
+        double nearestDistance = double.MaxValue;
+        for (int squadIndex = 0; squadIndex < Math.Min(squads.ChildCount, 2048); squadIndex++)
+        {
+            IReadOnlyList<RuntimeTagFieldValue> squad = ReadBlock(
+                scenario, squads, squadIndex);
+            RuntimeTagFieldValue? objectiveField = squad.FirstOrDefault(field =>
+                field.Type == "short_block_index" &&
+                string.Equals(
+                    CleanFieldName(field.Name),
+                    "initial objective",
+                    StringComparison.OrdinalIgnoreCase));
+            RuntimeTagFieldValue? taskField = squad.FirstOrDefault(field =>
+                string.Equals(
+                    CleanFieldName(field.Name),
+                    "initial task",
+                    StringComparison.OrdinalIgnoreCase));
+            if (objectiveField is null || taskField is null ||
+                objectiveField.Size < 2 || taskField.Size < 2)
+                continue;
+
+            RuntimeTagFieldValue? spawnPoints = squad.FirstOrDefault(field =>
+                field.ChildBlockDefinition == "spawn_points_block" &&
+                field.CanOpenBlock);
+            if (spawnPoints is null || spawnPoints.ChildCount <= 0)
+                continue;
+
+            double bestPointDistance = double.MaxValue;
+            for (int pointIndex = 0;
+                 pointIndex < Math.Min(spawnPoints.ChildCount, 32);
+                 pointIndex++)
+            {
+                IReadOnlyList<RuntimeTagFieldValue> point = ReadBlock(
+                    scenario, spawnPoints, pointIndex);
+                RuntimeTagFieldValue? position = point.FirstOrDefault(field =>
+                    field.Type == "real_point_3d" &&
+                    field.Name.StartsWith("position", StringComparison.OrdinalIgnoreCase));
+                if (position is null)
+                    continue;
+                WorldPoint templatePosition = ReadPoint(position.Address);
+                double distanceSquared =
+                    Math.Pow(templatePosition.X - playerPosition.X, 2) +
+                    Math.Pow(templatePosition.Y - playerPosition.Y, 2) +
+                    Math.Pow(templatePosition.Z - playerPosition.Z, 2);
+                if (distanceSquared < bestPointDistance)
+                    bestPointDistance = distanceSquared;
+            }
+            if (bestPointDistance >= nearestDistance)
+                continue;
+            nearestDistance = bestPointDistance;
+            objectiveAddress = objectiveField.Address;
+            taskAddress = taskField.Address;
+        }
+
+        if (objectiveAddress == 0 || taskAddress == 0)
+            return [];
+
+        var patches = new List<MemoryPatch>(2);
+        byte[] none = BitConverter.GetBytes((short)-1);
+        foreach (long address in new[] { objectiveAddress, taskAddress })
+        {
+            byte[] original = _memory.ReadBytes(address, 2);
+            if (original.AsSpan().SequenceEqual(none))
+                continue;
+            _memory.WriteVerified(address, none);
+            patches.Add(new MemoryPatch(address, original));
+        }
+        return patches;
+    }
+
+    private void RestorePatches(IReadOnlyList<MemoryPatch> patches)
+    {
+        for (int index = patches.Count - 1; index >= 0; index--)
+        {
+            MemoryPatch patch = patches[index];
+            try
+            {
+                _memory.WriteVerified(patch.Address, patch.Original);
+            }
+            catch
+            {
+                // Best-effort restore after spawn; authored squad data is temporary.
+            }
+        }
     }
 
     public void WarmUpDefinitions()
@@ -314,6 +437,40 @@ public sealed class EnemySpawnerService : IDisposable
             .ToArray();
     }
 
+    /// <summary>
+    /// Matches <c>actor_type_enum</c> in the Campaign Evolved character schema.
+    /// </summary>
+    public static IReadOnlyList<string> ActorTypeNames { get; } =
+    [
+        "none",
+        "player",
+        "marine",
+        "crew",
+        "spartan",
+        "elite",
+        "jackal",
+        "grunt",
+        "brute",
+        "hunter",
+        "prophet",
+        "bugger",
+        "scarab",
+        "engineer",
+        "skirmisher",
+        "combat_form",
+        "infection_form",
+        "carrier_form",
+        "pure_form_stealth",
+        "pure_form_tank",
+        "pure_form_ranged",
+        "sentinel",
+        "mule",
+        "mounted_weapon",
+    ];
+
+    public const int ActorTypeMarine = 2;
+    public const int ActorTypeSpartan = 4;
+
     public async Task<ScriptExecutionResult> SpawnArmorWithJohnsonAiAsync(
         ArmorSpawnChoice armor,
         SpawnVariantChoice armorVariant,
@@ -322,89 +479,269 @@ public sealed class EnemySpawnerService : IDisposable
         float formationOffsetY = 0,
         AiWeaponChoice? weapon = null,
         bool followPlayer = true,
+        int? actorTypeIndex = null,
         CancellationToken cancellationToken = default)
     {
         if (!_memory.IsConnected)
             throw new InvalidOperationException("Connect to the running mission first.");
         _tags = _memory.ReadTags();
-
-        RuntimeTagEntry johnson = FindJohnsonCharacter()
-            ?? throw new InvalidOperationException(
-                "No loaded Johnson [char] AI tag was found in this mission.");
         RuntimeTagEntry spartan = _tags.FirstOrDefault(tag =>
                 tag.Index == armor.BipedTag.Index &&
                 string.Equals(tag.Group, "bipd", StringComparison.OrdinalIgnoreCase) &&
                 tag.DataAddress > 0)
             ?? throw new InvalidOperationException(
                 "The selected Spartan biped is no longer loaded. Rescan the mission.");
-        RuntimeTagFieldValue johnsonUnit = ReadRoot(johnson).FirstOrDefault(field =>
+        RuntimeTagEntry donor = RequireFriendlyDonorCharacter();
+        // Armor has no selected [char]; borrow voice (and combat, when present)
+        // from a loaded spartan/marine character so the shell does not keep the
+        // donor's default marine lines.
+        RuntimeTagEntry? voiceDonor =
+            FindCharacterWithVoice(ActorTypeSpartan)
+            ?? FindCharacterWithVoice(ActorTypeMarine);
+        return await SpawnWithFriendlyDonorAiAsync(
+            donor,
+            spartan,
+            armorVariant,
+            count,
+            formationOffsetX,
+            formationOffsetY,
+            weapon,
+            followPlayer,
+            applySpartanShields: true,
+            actorTypeIndex ?? ActorTypeSpartan,
+            combatDonor: voiceDonor,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Friendly character spawning via a loaded [char] donor. Prefers
+    /// <c>ai/generic.character</c>, then common UNSC ranks; never unique story
+    /// NPCs like Johnson. Temporarily retargets the donor unit [bipd] and
+    /// combat/voice blocks to the selected character, then restores.
+    /// </summary>
+    public async Task<ScriptExecutionResult> SpawnCharacterWithJohnsonAiAsync(
+        EnemySpawnChoice choice,
+        SpawnVariantChoice variant,
+        int count,
+        float formationOffsetX = 0,
+        float formationOffsetY = 0,
+        AiWeaponChoice? weapon = null,
+        bool followPlayer = true,
+        int? actorTypeIndex = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_memory.IsConnected)
+            throw new InvalidOperationException("Connect to the running mission first.");
+        _tags = _memory.ReadTags();
+        RuntimeTagEntry character = _tags.FirstOrDefault(tag =>
+                tag.Index == choice.CharacterTag.Index &&
+                string.Equals(tag.Group, "char", StringComparison.OrdinalIgnoreCase) &&
+                tag.DataAddress > 0)
+            ?? throw new InvalidOperationException(
+                "That character tag is no longer loaded. Rescan the mission.");
+        RuntimeTagFieldValue unit = ReadRoot(character).FirstOrDefault(field =>
                 field.IsTagReference &&
                 string.Equals(
                     CleanFieldName(field.Name),
                     "unit",
                     StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidDataException(
-                $"The Johnson character {johnson.Name} has no unit reference.");
-        RuntimeTagFieldValue defaultVariant = ReadRoot(spartan).FirstOrDefault(field =>
+                $"The selected character {character.Name} has no authored unit reference.");
+        RuntimeTagEntry biped = _tags.FirstOrDefault(tag =>
+                tag.Index == unit.ReferencedTagIndex &&
+                string.Equals(tag.Group, "bipd", StringComparison.OrdinalIgnoreCase) &&
+                tag.DataAddress > 0)
+            ?? throw new InvalidDataException(
+                "The selected character's [bipd] unit is not published in the live tag table.");
+        // Character variants are actor variants on [char], not biped model
+        // variants. Appearance comes from the swapped [bipd] defaults; the
+        // donor keeps its own actor variant for AI placement.
+        _ = variant;
+
+        RuntimeTagEntry donor = RequireFriendlyDonorCharacter();
+        int resolvedType = actorTypeIndex
+            ?? TryReadCharacterActorType(character)
+            ?? ActorTypeMarine;
+        return await SpawnWithFriendlyDonorAiAsync(
+            donor,
+            biped,
+            modelVariant: null,
+            count,
+            formationOffsetX,
+            formationOffsetY,
+            weapon,
+            followPlayer,
+            applySpartanShields: false,
+            resolvedType,
+            combatDonor: character,
+            cancellationToken);
+    }
+
+    public int? TryReadCharacterActorType(EnemySpawnChoice choice)
+    {
+        if (!_memory.IsConnected)
+            return null;
+        _tags = _memory.ReadTags();
+        RuntimeTagEntry? character = _tags.FirstOrDefault(tag =>
+            tag.Index == choice.CharacterTag.Index &&
+            string.Equals(tag.Group, "char", StringComparison.OrdinalIgnoreCase) &&
+            tag.DataAddress > 0);
+        return character is null ? null : TryReadCharacterActorType(character);
+    }
+
+    private async Task<ScriptExecutionResult> SpawnWithFriendlyDonorAiAsync(
+        RuntimeTagEntry donor,
+        RuntimeTagEntry biped,
+        SpawnVariantChoice? modelVariant,
+        int count,
+        float formationOffsetX,
+        float formationOffsetY,
+        AiWeaponChoice? weapon,
+        bool followPlayer,
+        bool applySpartanShields,
+        int actorTypeIndex,
+        RuntimeTagEntry? combatDonor,
+        CancellationToken cancellationToken)
+    {
+        RuntimeTagFieldValue donorUnit = ReadRoot(donor).FirstOrDefault(field =>
+                field.IsTagReference &&
+                string.Equals(
+                    CleanFieldName(field.Name),
+                    "unit",
+                    StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException(
+                $"The friendly donor character {donor.Name} has no unit reference.");
+        RuntimeTagFieldValue? defaultVariant = modelVariant is null
+            ? null
+            : ReadRoot(biped).FirstOrDefault(field =>
                 field.Type == "string_id" &&
                 string.Equals(
                     CleanFieldName(field.Name),
                     "default model variant",
-                    StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidDataException(
-                $"The Spartan biped {spartan.Name} has no default model variant.");
+                    StringComparison.OrdinalIgnoreCase));
+        if (modelVariant is not null && defaultVariant is null)
+            throw new InvalidDataException(
+                $"The biped {biped.Name} has no default model variant.");
 
-        byte[] originalUnit = _memory.ReadBytes(johnsonUnit.Address, 16);
-        byte[] spartanReference = _memory.BuildTagReference(spartan);
-        byte[] originalVariant = _memory.ReadBytes(
-            defaultVariant.Address,
-            sizeof(uint));
+        byte[] originalUnit = _memory.ReadBytes(donorUnit.Address, 16);
+        byte[] bipedReference = _memory.BuildTagReference(biped);
+        byte[]? originalVariant = defaultVariant is null
+            ? null
+            : _memory.ReadBytes(defaultVariant.Address, sizeof(uint));
         IReadOnlyList<MemoryPatch> shieldPatches = [];
+        IReadOnlyList<MemoryPatch> combatPatches = [];
+        IReadOnlyList<MemoryPatch> typePatches = [];
         bool patchedUnit =
-            !originalUnit.AsSpan().SequenceEqual(spartanReference);
+            !originalUnit.AsSpan().SequenceEqual(bipedReference);
         bool patchedVariant =
-            !originalVariant.AsSpan().SequenceEqual(armorVariant.StringIdBytes);
+            modelVariant is not null &&
+            originalVariant is not null &&
+            !originalVariant.AsSpan().SequenceEqual(modelVariant.StringIdBytes);
         if (patchedUnit)
-            _memory.WriteVerified(johnsonUnit.Address, spartanReference);
+            _memory.WriteVerified(donorUnit.Address, bipedReference);
         try
         {
-            shieldPatches = ApplyAuthoredSpartanShields(johnson);
-            if (patchedVariant)
+            if (combatDonor is not null)
+                combatPatches = ApplyCombatDonorProperties(donor, combatDonor);
+            typePatches = ApplyDonorActorType(donor, actorTypeIndex);
+            if (applySpartanShields)
+                shieldPatches = ApplyAuthoredSpartanShields(donor);
+            if (patchedVariant && defaultVariant is not null && modelVariant is not null)
                 _memory.WriteVerified(
                     defaultVariant.Address,
-                    armorVariant.StringIdBytes);
-            var johnsonChoice = new EnemySpawnChoice(
-                johnson,
-                ReadVariants(johnson));
-            SpawnVariantChoice johnsonVariant =
-                johnsonChoice.Variants.FirstOrDefault()
+                    modelVariant.StringIdBytes);
+            var donorChoice = new EnemySpawnChoice(
+                donor,
+                ReadVariants(donor));
+            SpawnVariantChoice donorVariant =
+                donorChoice.Variants.FirstOrDefault()
                 ?? throw new InvalidDataException(
-                    "The loaded Johnson character exposes no actor variant.");
+                    $"The friendly donor character {donor.Name} exposes no actor variant.");
             return await SpawnGroupAsync(
-                johnsonChoice,
-                johnsonVariant,
+                donorChoice,
+                donorVariant,
                 count,
                 formationOffsetX,
                 formationOffsetY,
                 weapon,
                 followPlayer,
-                cancellationToken);
+                cancellationToken: cancellationToken);
         }
         finally
         {
             if (_memory.IsConnected)
             {
                 RestorePatches(shieldPatches);
-                if (patchedVariant)
+                RestorePatches(typePatches);
+                RestorePatches(combatPatches);
+                if (patchedVariant && defaultVariant is not null && originalVariant is not null)
                     _memory.WriteVerified(
                         defaultVariant.Address,
                         originalVariant);
                 if (patchedUnit)
                     _memory.WriteVerified(
-                        johnsonUnit.Address,
+                        donorUnit.Address,
                         originalUnit);
             }
         }
+    }
+
+    private int? TryReadCharacterActorType(RuntimeTagEntry character)
+    {
+        RuntimeTagFieldValue? general = ReadRoot(character).FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            field.ChildCount > 0 &&
+            string.Equals(
+                field.ChildBlockDefinition,
+                "character_general_block",
+                StringComparison.OrdinalIgnoreCase));
+        if (general is null)
+            return null;
+        RuntimeTagFieldValue? typeField = ReadBlock(character, general, 0)
+            .FirstOrDefault(field =>
+                field.Type == "short_enum" &&
+                string.Equals(
+                    CleanFieldName(field.Name),
+                    "type",
+                    StringComparison.OrdinalIgnoreCase));
+        if (typeField is null || typeField.Size < sizeof(short))
+            return null;
+        short value = ReadInt16(typeField.Address);
+        return value >= 0 && value < ActorTypeNames.Count ? value : null;
+    }
+
+    private IReadOnlyList<MemoryPatch> ApplyDonorActorType(
+        RuntimeTagEntry donor,
+        int actorTypeIndex)
+    {
+        if (actorTypeIndex < 0 || actorTypeIndex >= ActorTypeNames.Count)
+            throw new ArgumentOutOfRangeException(nameof(actorTypeIndex));
+        RuntimeTagFieldValue? general = ReadRoot(donor).FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            field.ChildCount > 0 &&
+            string.Equals(
+                field.ChildBlockDefinition,
+                "character_general_block",
+                StringComparison.OrdinalIgnoreCase));
+        if (general is null)
+            return [];
+        RuntimeTagFieldValue? typeField = ReadBlock(donor, general, 0)
+            .FirstOrDefault(field =>
+                field.Type == "short_enum" &&
+                string.Equals(
+                    CleanFieldName(field.Name),
+                    "type",
+                    StringComparison.OrdinalIgnoreCase));
+        if (typeField is null || typeField.Size < sizeof(short))
+            return [];
+
+        short current = ReadInt16(typeField.Address);
+        if (current == actorTypeIndex)
+            return [];
+        byte[] original = _memory.ReadBytes(typeField.Address, sizeof(short));
+        byte[] replacement = BitConverter.GetBytes((short)actorTypeIndex);
+        _memory.WriteVerified(typeField.Address, replacement);
+        return [new MemoryPatch(typeField.Address, original)];
     }
 
     public async Task<ScriptExecutionResult> SpawnBodyAsync(
@@ -573,7 +910,10 @@ public sealed class EnemySpawnerService : IDisposable
                 scenario, squads, squadIndex);
             RuntimeTagFieldValue? team = squad.FirstOrDefault(field =>
                 field.Type == "short_enum" &&
-                field.Name.StartsWith("team", StringComparison.OrdinalIgnoreCase));
+                string.Equals(
+                    CleanFieldName(field.Name),
+                    "team",
+                    StringComparison.OrdinalIgnoreCase));
             if (team is null ||
                 !short.TryParse(
                     team.Value,
@@ -581,12 +921,16 @@ public sealed class EnemySpawnerService : IDisposable
                     CultureInfo.InvariantCulture,
                     out short teamIndex))
                 continue;
-            bool isHostile = teamIndex is not (0 or 1 or 2 or 7);
+            // Only explicit ally teams are non-hostile. "default" (0) is the
+            // authored fallback for many Covenant encounters and must not be
+            // treated as friendly when borrowing spawn templates.
+            bool isFriendlyTeam = teamIndex is 1 or 2 or 7;
+            bool isHostile = !isFriendlyTeam;
             if (isHostile)
                 hostileSquads++;
             bool followsPlayer =
                 followPlayer &&
-                !isHostile &&
+                isFriendlyTeam &&
                 objectives is not null &&
                 SquadFollowsPlayer(scenario, squad, objectives);
 
@@ -689,13 +1033,18 @@ public sealed class EnemySpawnerService : IDisposable
             }
         }
 
-        if (placementCount > 1 && nearest is not null)
+        if (nearest is not null && (followPlayer || placementCount > 1))
         {
+            // actor_new inherits the borrowed scenario squad's team at birth.
+            // Hostile batches temporarily force Covenant (3). Friendly
+            // companions force Player (1) before creation; post-spawn configure
+            // then mirrors the live controlled-player team onto each unit.
+            ushort teamOverride = followPlayer ? (ushort)1 : (ushort)3;
             var parts = new List<string>(4 + placementCount * 3)
             {
                 nearest.SquadIndex.ToString("X4", CultureInfo.InvariantCulture),
                 nearest.TeamAddress.ToString("X16", CultureInfo.InvariantCulture),
-                3.ToString("X4", CultureInfo.InvariantCulture),
+                teamOverride.ToString("X4", CultureInfo.InvariantCulture),
             };
             for (int index = 0; index < placementCount; index++)
             {
@@ -811,20 +1160,119 @@ public sealed class EnemySpawnerService : IDisposable
             : normalized[familyStart..familyEnd];
     }
 
-    private RuntimeTagEntry? FindJohnsonCharacter() =>
+    private RuntimeTagEntry RequireFriendlyDonorCharacter() =>
+        FindFriendlyDonorCharacter()
+        ?? throw new InvalidOperationException(
+            "No friendly [char] AI donor is loaded in this mission. " +
+            "Prefer ai/generic.character, otherwise a common marine/ODST/crewman AI tag. " +
+            "Unique story characters such as Johnson are not used.");
+
+    /// <summary>
+    /// Picks a generic friendly AI shell. Prefers <c>ai/generic</c>, then common
+    /// UNSC ranks. Unique story characters (Johnson, Keyes, Noble Team, etc.)
+    /// are excluded because mission scripts often respawn or specially voice
+    /// those identities.
+    /// </summary>
+    private RuntimeTagEntry? FindFriendlyDonorCharacter() =>
         _tags
             .Where(tag =>
                 string.Equals(tag.Group, "char", StringComparison.OrdinalIgnoreCase) &&
                 tag.DataAddress > 0 &&
-                tag.Name.Contains("johnson", StringComparison.OrdinalIgnoreCase) &&
-                tag.Name.Contains(@"\ai\", StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(tag =>
-                string.Equals(
-                    tag.LeafName,
-                    "johnson",
-                    StringComparison.OrdinalIgnoreCase))
+                tag.Name.Contains(@"\ai\", StringComparison.OrdinalIgnoreCase) &&
+                IsFriendlyDonorCandidate(tag.Name) &&
+                !IsStoryExclusiveCharacter(tag.Name) &&
+                HasUnitReference(tag))
+            .OrderByDescending(tag => FriendlyDonorScore(tag.Name))
             .ThenBy(tag => tag.Name.Length)
             .FirstOrDefault();
+
+    private bool HasUnitReference(RuntimeTagEntry character) =>
+        ReadRoot(character).Any(field =>
+            field.IsTagReference &&
+            string.Equals(
+                CleanFieldName(field.Name),
+                "unit",
+                StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsFriendlyDonorCandidate(string path)
+    {
+        string value = path.Replace('\\', '/').ToLowerInvariant();
+        if (IsAiGenericCharacter(value))
+            return true;
+        return PathContainsAny(
+            value,
+            "marine",
+            "odst",
+            "crewman",
+            "pilot",
+            "trooper",
+            "army");
+    }
+
+    private static bool PathContainsAny(string value, params string[] terms) =>
+        terms.Any(term => value.Contains(term, StringComparison.Ordinal));
+
+    private static bool IsAiGenericCharacter(string normalizedPath) =>
+        normalizedPath.EndsWith("/ai/generic", StringComparison.Ordinal) ||
+        normalizedPath.Contains("/ai/generic/", StringComparison.Ordinal) ||
+        (normalizedPath.Contains("/ai/", StringComparison.Ordinal) &&
+         normalizedPath.EndsWith("/generic", StringComparison.Ordinal));
+
+    private static bool IsStoryExclusiveCharacter(string path)
+    {
+        string value = path.Replace('\\', '/').ToLowerInvariant();
+        return PathContainsAny(
+            value,
+            "johnson",
+            "keyes",
+            "miranda",
+            "halsey",
+            "cortana",
+            "spark",
+            "guilty",
+            "carter",
+            "kat",
+            "emile",
+            "jun",
+            "jorge",
+            "noble",
+            "buck",
+            "dare",
+            "dutch",
+            "mickey",
+            "romeo",
+            "arbiter",
+            "halfjaw",
+            "masterchief",
+            "master_chief",
+            "/chief/",
+            "chief_");
+    }
+
+    private static int FriendlyDonorScore(string path)
+    {
+        string value = path.Replace('\\', '/').ToLowerInvariant();
+        string leaf = value[(value.LastIndexOf('/') + 1)..];
+        // Engine-provided blank AI shell: no story respawn hooks, intended for
+        // retargeting unit/combat/voice onto another body.
+        if (IsAiGenericCharacter(value) || leaf is "generic")
+            return 200;
+        if (leaf is "marine" or "marine_odst" or "odst")
+            return 100;
+        if (leaf.Contains("odst", StringComparison.Ordinal))
+            return 95;
+        if (leaf.Contains("crewman", StringComparison.Ordinal))
+            return 90;
+        if (leaf.StartsWith("marine", StringComparison.Ordinal))
+            return 85;
+        if (leaf.Contains("trooper", StringComparison.Ordinal))
+            return 80;
+        if (leaf.Contains("pilot", StringComparison.Ordinal))
+            return 70;
+        if (leaf.Contains("army", StringComparison.Ordinal))
+            return 60;
+        return 10;
+    }
 
     private bool SquadFollowsPlayer(
         RuntimeTagEntry scenario,
@@ -870,6 +1318,308 @@ public sealed class EnemySpawnerService : IDisposable
             return false;
         short followMode = ReadInt16(follow.Address);
         return followMode is 1 or 3 or 4;
+    }
+
+    private IReadOnlyList<MemoryPatch> ApplyCombatDonorProperties(
+        RuntimeTagEntry johnson,
+        RuntimeTagEntry donor)
+    {
+        var patches = new List<MemoryPatch>();
+        try
+        {
+            RuntimeTagFieldValue? johnsonStyle = ReadRoot(johnson).FirstOrDefault(
+                field =>
+                    field.IsTagReference &&
+                    string.Equals(
+                        CleanFieldName(field.Name),
+                        "style",
+                        StringComparison.OrdinalIgnoreCase));
+            RuntimeTagFieldValue? donorStyle = ReadRoot(donor).FirstOrDefault(
+                field =>
+                    field.IsTagReference &&
+                    string.Equals(
+                        CleanFieldName(field.Name),
+                        "style",
+                        StringComparison.OrdinalIgnoreCase));
+            if (johnsonStyle is not null &&
+                donorStyle is not null &&
+                johnsonStyle.Size == donorStyle.Size &&
+                johnsonStyle.Size > 0)
+            {
+                byte[] original = _memory.ReadBytes(
+                    johnsonStyle.Address,
+                    johnsonStyle.Size);
+                byte[] replacement = _memory.ReadBytes(
+                    donorStyle.Address,
+                    donorStyle.Size);
+                if (!original.AsSpan().SequenceEqual(replacement))
+                {
+                    _memory.WriteVerified(johnsonStyle.Address, replacement);
+                    patches.Add(new MemoryPatch(johnsonStyle.Address, original));
+                }
+            }
+
+            string[] combatBlocks =
+            [
+                "character_engage_block",
+                "character_charge_block",
+                "character_weapons_block",
+                "character_target_block",
+                "character_firing_pattern_properties_block",
+                "character_grenades_block",
+            ];
+            foreach (string blockDefinition in combatBlocks)
+                patches.AddRange(
+                    CloneMatchingBlockElements(johnson, donor, blockDefinition));
+            // Voice uses nested dialogue tag refs; shallow-copying the parent
+            // block only rewires pointers and often leaves the marine donor
+            // udlg in place when layouts differ. Copy dialogue refs in-place.
+            patches.AddRange(CloneVoiceDialogueReferences(johnson, donor));
+            return patches;
+        }
+        catch
+        {
+            RestorePatches(patches);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Copies <c>udlg</c> tag references (and default dialogue effect ids) from
+    /// <paramref name="source"/> into <paramref name="target"/>'s existing voice
+    /// slots without relocating nested block pointers across tags.
+    /// </summary>
+    private IReadOnlyList<MemoryPatch> CloneVoiceDialogueReferences(
+        RuntimeTagEntry target,
+        RuntimeTagEntry source)
+    {
+        RuntimeTagFieldValue? targetProps = ReadRoot(target).FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            string.Equals(
+                field.ChildBlockDefinition,
+                "character_voice_properties_block",
+                StringComparison.OrdinalIgnoreCase));
+        RuntimeTagFieldValue? sourceProps = ReadRoot(source).FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            string.Equals(
+                field.ChildBlockDefinition,
+                "character_voice_properties_block",
+                StringComparison.OrdinalIgnoreCase));
+        if (targetProps is null ||
+            sourceProps is null ||
+            targetProps.ChildCount <= 0 ||
+            sourceProps.ChildCount <= 0)
+            return [];
+
+        var patches = new List<MemoryPatch>();
+        try
+        {
+            int propCount = Math.Min(targetProps.ChildCount, sourceProps.ChildCount);
+            for (int propIndex = 0; propIndex < propCount; propIndex++)
+            {
+                IReadOnlyList<RuntimeTagFieldValue> targetFields =
+                    ReadBlock(target, targetProps, propIndex);
+                IReadOnlyList<RuntimeTagFieldValue> sourceFields =
+                    ReadBlock(source, sourceProps, propIndex);
+
+                RuntimeTagFieldValue? targetEffect = FindFieldByCleanName(
+                    targetFields,
+                    "default dialogue effect id");
+                RuntimeTagFieldValue? sourceEffect = FindFieldByCleanName(
+                    sourceFields,
+                    "default dialogue effect id");
+                if (targetEffect is not null &&
+                    sourceEffect is not null &&
+                    targetEffect.Size == sourceEffect.Size &&
+                    targetEffect.Size > 0)
+                {
+                    byte[] original = _memory.ReadBytes(
+                        targetEffect.Address,
+                        targetEffect.Size);
+                    byte[] replacement = _memory.ReadBytes(
+                        sourceEffect.Address,
+                        sourceEffect.Size);
+                    if (!original.AsSpan().SequenceEqual(replacement))
+                    {
+                        _memory.WriteVerified(targetEffect.Address, replacement);
+                        patches.Add(new MemoryPatch(targetEffect.Address, original));
+                    }
+                }
+
+                RuntimeTagFieldValue? targetVoices = targetFields.FirstOrDefault(
+                    field =>
+                        field.CanOpenBlock &&
+                        string.Equals(
+                            field.ChildBlockDefinition,
+                            "character_voice_block",
+                            StringComparison.OrdinalIgnoreCase));
+                RuntimeTagFieldValue? sourceVoices = sourceFields.FirstOrDefault(
+                    field =>
+                        field.CanOpenBlock &&
+                        string.Equals(
+                            field.ChildBlockDefinition,
+                            "character_voice_block",
+                            StringComparison.OrdinalIgnoreCase));
+                if (targetVoices is null ||
+                    sourceVoices is null ||
+                    targetVoices.ChildCount <= 0 ||
+                    sourceVoices.ChildCount <= 0)
+                    continue;
+
+                int voiceCount = Math.Min(
+                    Math.Min(targetVoices.ChildCount, sourceVoices.ChildCount),
+                    16);
+                for (int voiceIndex = 0; voiceIndex < voiceCount; voiceIndex++)
+                {
+                    IReadOnlyList<RuntimeTagFieldValue> targetVoice =
+                        ReadBlock(target, targetVoices, voiceIndex);
+                    IReadOnlyList<RuntimeTagFieldValue> sourceVoice =
+                        ReadBlock(source, sourceVoices, voiceIndex);
+                    RuntimeTagFieldValue? targetDialogue = targetVoice.FirstOrDefault(
+                        field =>
+                            field.IsTagReference &&
+                            CleanFieldName(field.Name)
+                                .StartsWith("dialogue", StringComparison.OrdinalIgnoreCase));
+                    RuntimeTagFieldValue? sourceDialogue = sourceVoice.FirstOrDefault(
+                        field =>
+                            field.IsTagReference &&
+                            CleanFieldName(field.Name)
+                                .StartsWith("dialogue", StringComparison.OrdinalIgnoreCase));
+                    if (targetDialogue is null ||
+                        sourceDialogue is null ||
+                        targetDialogue.Size != sourceDialogue.Size ||
+                        targetDialogue.Size <= 0)
+                        continue;
+
+                    byte[] original = _memory.ReadBytes(
+                        targetDialogue.Address,
+                        targetDialogue.Size);
+                    byte[] replacement = _memory.ReadBytes(
+                        sourceDialogue.Address,
+                        sourceDialogue.Size);
+                    if (original.AsSpan().SequenceEqual(replacement))
+                        continue;
+                    _memory.WriteVerified(targetDialogue.Address, replacement);
+                    patches.Add(new MemoryPatch(targetDialogue.Address, original));
+                }
+            }
+            return patches;
+        }
+        catch
+        {
+            RestorePatches(patches);
+            throw;
+        }
+    }
+
+    private RuntimeTagEntry? FindCharacterWithVoice(int preferredActorType)
+    {
+        return _tags
+            .Where(tag =>
+                string.Equals(tag.Group, "char", StringComparison.OrdinalIgnoreCase) &&
+                tag.DataAddress > 0 &&
+                !IsStoryExclusiveCharacter(tag.Name) &&
+                HasVoiceDialogue(tag))
+            .OrderByDescending(tag =>
+            {
+                int? type = TryReadCharacterActorType(tag);
+                if (type == preferredActorType)
+                    return 100;
+                if (type == ActorTypeSpartan)
+                    return 80;
+                if (type == ActorTypeMarine)
+                    return 60;
+                return 10;
+            })
+            .ThenBy(tag => tag.Name.Length)
+            .FirstOrDefault();
+    }
+
+    private bool HasVoiceDialogue(RuntimeTagEntry character)
+    {
+        RuntimeTagFieldValue? props = ReadRoot(character).FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            field.ChildCount > 0 &&
+            string.Equals(
+                field.ChildBlockDefinition,
+                "character_voice_properties_block",
+                StringComparison.OrdinalIgnoreCase));
+        if (props is null)
+            return false;
+        IReadOnlyList<RuntimeTagFieldValue> fields = ReadBlock(character, props, 0);
+        RuntimeTagFieldValue? voices = fields.FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            field.ChildCount > 0 &&
+            string.Equals(
+                field.ChildBlockDefinition,
+                "character_voice_block",
+                StringComparison.OrdinalIgnoreCase));
+        if (voices is null)
+            return false;
+        return ReadBlock(character, voices, 0).Any(field =>
+            field.IsTagReference &&
+            CleanFieldName(field.Name)
+                .StartsWith("dialogue", StringComparison.OrdinalIgnoreCase) &&
+            field.ReferencedTagIndex >= 0);
+    }
+
+    private IReadOnlyList<MemoryPatch> CloneMatchingBlockElements(
+        RuntimeTagEntry target,
+        RuntimeTagEntry source,
+        string blockDefinition)
+    {
+        RuntimeTagFieldValue? targetBlock = ReadRoot(target).FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            string.Equals(
+                field.ChildBlockDefinition,
+                blockDefinition,
+                StringComparison.OrdinalIgnoreCase));
+        RuntimeTagFieldValue? sourceBlock = ReadRoot(source).FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            string.Equals(
+                field.ChildBlockDefinition,
+                blockDefinition,
+                StringComparison.OrdinalIgnoreCase));
+        if (targetBlock is null ||
+            sourceBlock is null ||
+            targetBlock.ChildCount <= 0 ||
+            sourceBlock.ChildCount <= 0 ||
+            targetBlock.ChildElementSize <= 0 ||
+            targetBlock.ChildElementSize != sourceBlock.ChildElementSize)
+            return [];
+
+        int count = Math.Min(
+            Math.Min(targetBlock.ChildCount, sourceBlock.ChildCount),
+            16);
+        var patches = new List<MemoryPatch>(count);
+        try
+        {
+            for (int index = 0; index < count; index++)
+            {
+                long targetAddress =
+                    targetBlock.ChildAddress +
+                    (long)index * targetBlock.ChildElementSize;
+                long sourceAddress =
+                    sourceBlock.ChildAddress +
+                    (long)index * sourceBlock.ChildElementSize;
+                byte[] original = _memory.ReadBytes(
+                    targetAddress,
+                    targetBlock.ChildElementSize);
+                byte[] replacement = _memory.ReadBytes(
+                    sourceAddress,
+                    sourceBlock.ChildElementSize);
+                if (original.AsSpan().SequenceEqual(replacement))
+                    continue;
+                _memory.WriteVerified(targetAddress, replacement);
+                patches.Add(new MemoryPatch(targetAddress, original));
+            }
+            return patches;
+        }
+        catch
+        {
+            RestorePatches(patches);
+            throw;
+        }
     }
 
     private IReadOnlyList<MemoryPatch> ApplyAuthoredSpartanShields(

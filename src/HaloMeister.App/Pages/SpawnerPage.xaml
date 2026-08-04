@@ -313,6 +313,7 @@
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <Button
                                     x:Name="SpawnButton"
+                                    AllowFocusWhenDisabled="True"
                                     Click="OnSpawn"
                                     IsEnabled="False"
                                     Style="{StaticResource AccentButtonStyle}">
@@ -323,6 +324,7 @@
                                 </Button>
                                 <Button
                                     x:Name="SpawnTeamButton"
+                                    AllowFocusWhenDisabled="True"
                                     Click="OnSpawnTeam"
                                     IsEnabled="False">
                                     <StackPanel Orientation="Horizontal" Spacing="7">
@@ -332,6 +334,7 @@
                                 </Button>
                                 <Button
                                     x:Name="SpawnArmorAiButton"
+                                    AllowFocusWhenDisabled="True"
                                     Click="OnSpawnArmorAi"
                                     IsEnabled="False"
                                     Visibility="Collapsed">
@@ -374,6 +377,7 @@
                                         <Button
                                             x:Name="AddToTeamButton"
                                             Grid.Column="1"
+                                            AllowFocusWhenDisabled="True"
                                             Click="OnAddToTeam"
                                             HorizontalAlignment="Stretch"
                                             IsEnabled="False"
@@ -384,30 +388,20 @@
                                             </StackPanel>
                                         </Button>
                                     </Grid>
-                                    <StackPanel Orientation="Horizontal" Spacing="18">
-                                        <CheckBox
-                                            x:Name="FriendlyCompanionBox"
-                                            Content="{i18n:Loc Key='spawner.friendly_companion_follow_player'}" />
-                                        <CheckBox
-                                            x:Name="RandomizeVariantsBox"
-                                            Content="{i18n:Loc Key='spawner.randomize_variants'}" />
-                                        <CheckBox
-                                            x:Name="RandomizeWeaponsBox"
-                                            Content="{i18n:Loc Key='spawner.randomize_authored_weapons'}" />
-                                    </StackPanel>
                                     <ListView
                                         x:Name="TeamCompositionList"
-                                        MaxHeight="190"
+                                        MaxHeight="260"
                                         SelectionChanged="OnTeamCompositionSelectionChanged"
                                         SelectionMode="Single">
                                         <ListView.ItemTemplate>
                                             <DataTemplate>
-                                                <Grid ColumnSpacing="10">
+                                                <Grid ColumnSpacing="10" Padding="0,4">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
-                                                    <StackPanel Spacing="2">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
                                                         <TextBlock
                                                             FontWeight="SemiBold"
                                                             Text="{Binding DisplayName}"
@@ -422,8 +416,26 @@
                                                         Grid.Column="1"
                                                         FontSize="16"
                                                         FontWeight="SemiBold"
+                                                        Margin="0,0,8,0"
                                                         Text="{Binding QuantityLabel}"
                                                         VerticalAlignment="Center" />
+                                                    <StackPanel
+                                                        Grid.Column="2"
+                                                        Orientation="Horizontal"
+                                                        Spacing="10"
+                                                        VerticalAlignment="Center">
+                                                        <ComboBox
+                                                            MinWidth="148"
+                                                            DisplayMemberPath="Label"
+                                                            ItemsSource="{Binding StanceChoices}"
+                                                            SelectedItem="{Binding SelectedStance, Mode=TwoWay}" />
+                                                        <CheckBox
+                                                            Content="{Binding RandomizeVariantsLabel}"
+                                                            IsChecked="{Binding RandomizeVariants, Mode=TwoWay}" />
+                                                        <CheckBox
+                                                            Content="{Binding RandomizeWeaponsLabel}"
+                                                            IsChecked="{Binding RandomizeWeapons, Mode=TwoWay}" />
+                                                    </StackPanel>
                                                 </Grid>
                                             </DataTemplate>
                                         </ListView.ItemTemplate>
@@ -437,6 +449,7 @@
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Button
                                             x:Name="SpawnCompositionButton"
+                                            AllowFocusWhenDisabled="True"
                                             Click="OnSpawnComposition"
                                             IsEnabled="False"
                                             Style="{StaticResource AccentButtonStyle}">
@@ -444,12 +457,14 @@
                                         </Button>
                                         <Button
                                             x:Name="RemoveTeamItemButton"
+                                            AllowFocusWhenDisabled="True"
                                             Click="OnRemoveTeamItem"
                                             IsEnabled="False">
                                             <TextBlock Text="{i18n:Loc Key='spawner.remove_selected'}" />
                                         </Button>
                                         <Button
                                             x:Name="ClearTeamButton"
+                                            AllowFocusWhenDisabled="True"
                                             Click="OnClearTeam"
                                             IsEnabled="False">
                                             <TextBlock Text="{i18n:Loc Key='spawner.clear'}" />

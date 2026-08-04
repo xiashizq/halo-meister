@@ -30,6 +30,7 @@ public sealed partial class LiveToolsHubPage : Page
                 [
                     new("live_hub.characters", Symbol.Add, typeof(SpawnerPage)),
                     new("live_hub.squads", Symbol.People, typeof(SquadsPage)),
+                    new("live_hub.allegiance_demo", Symbol.Permissions, typeof(AllegianceDemoPage)),
                     new("live_hub.weapons", Symbol.Bullets, typeof(WeaponLoaderPage)),
                     new("live_hub.vehicles", Symbol.Map, typeof(VehicleWorkshopPage)),
                 ]),

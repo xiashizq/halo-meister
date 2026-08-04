@@ -61,7 +61,8 @@ public static class LiveToolCapabilityCatalog
                 ScriptLanguage.PlayerPosition or ScriptLanguage.PlayerInput or
                 ScriptLanguage.PlayerUnitTagRead =>
                 LiveToolCapability.PlayerTools,
-            ScriptLanguage.PlayerTeam => LiveToolCapability.PlayerAllegiance,
+            ScriptLanguage.PlayerTeam or ScriptLanguage.ObjectTeam =>
+                LiveToolCapability.PlayerAllegiance,
             ScriptLanguage.BlamMachinima or ScriptLanguage.MachinimaState or
                 ScriptLanguage.MachinimaNodes or ScriptLanguage.MachinimaEnable or
                 ScriptLanguage.MachinimaDisable or ScriptLanguage.MachinimaCameraTeleport =>

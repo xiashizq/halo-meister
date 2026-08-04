@@ -33,6 +33,7 @@ public enum ScriptLanguage
     PlayerTeleport,
     PlayerNoClip,
     PlayerTeam,
+    ObjectTeam,
     PlayerPosition,
     PlayerUnitTagRead,
     PlayerInput,
@@ -279,6 +280,7 @@ public sealed class ScriptingBridgeService
                 ScriptLanguage.PlayerTeleport => "player_teleport",
                 ScriptLanguage.PlayerNoClip => "player_noclip",
                 ScriptLanguage.PlayerTeam => "player_team",
+                ScriptLanguage.ObjectTeam => "object_team",
                 ScriptLanguage.PlayerPosition => "player_position",
                 ScriptLanguage.PlayerUnitTagRead => "player_unit_tag_read",
                 ScriptLanguage.PlayerInput => "player_input",
@@ -611,6 +613,7 @@ public sealed class ScriptingBridgeService
                     ScriptLanguage.PlayerTeleport or
                     ScriptLanguage.PlayerNoClip or
                     ScriptLanguage.PlayerTeam or
+                    ScriptLanguage.ObjectTeam or
                     ScriptLanguage.PlayerPosition or
                     ScriptLanguage.PlayerUnitTagRead or
                     ScriptLanguage.PlayerInput or

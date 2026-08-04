@@ -117,6 +117,7 @@ enum class SpawnKind
     player_teleport,
     player_noclip,
     player_team,
+    object_team,
     player_input,
     machinima,
     ai,
@@ -211,6 +212,7 @@ struct SpawnRequest
     std::string cheat_name;
     bool cheat_value{};
     std::int16_t player_team{-1};
+    std::int32_t ally_player_unit{-1};
     std::array<std::uint8_t, 16> character_reference{};
     std::array<std::uint8_t, 4> actor_variant{};
     std::uint32_t ai_weapon_datum{UINT32_MAX};
@@ -282,6 +284,7 @@ std::array<std::array<std::uint8_t, 4>, kMaxAiPlacements>
 std::array<std::uint8_t, 2> g_deferred_ai_team{};
 bool g_deferred_ai_patch_active = false;
 std::array<std::int32_t, kMaxAiPlacements> g_deferred_ai_actors{};
+std::int32_t g_last_ai_actor_datum = -1;
 std::array<bool, kMaxAiPlacements> g_deferred_ai_weapon_done{};
 std::array<bool, kMaxAiPlacements> g_deferred_ai_companion_done{};
 ULONGLONG g_deferred_ai_finalize_deadline = 0;
@@ -733,6 +736,98 @@ bool parse_request(
                 return false;
             }
             request.player_team = static_cast<std::int16_t>(team);
+        }
+    }
+    else if (operation == "object_team")
+    {
+        // target,team[,playerUnit]
+        request.kind = SpawnKind::object_team;
+        std::array<std::string, 3> parts{};
+        std::size_t start = 0;
+        std::size_t part_count = 0;
+        while (part_count < parts.size())
+        {
+            std::size_t comma = payload.find(',', start);
+            parts[part_count++] = payload.substr(
+                start,
+                comma == std::string::npos ? std::string::npos : comma - start);
+            if (comma == std::string::npos)
+                break;
+            start = comma + 1;
+        }
+        if (part_count != 2 && part_count != 3)
+        {
+            error = "The object-team payload must use target,team[,player].";
+            return false;
+        }
+        std::string target = parts[0];
+        unsigned team = 0;
+        auto team_result = std::from_chars(
+            parts[1].data(),
+            parts[1].data() + parts[1].size(),
+            team,
+            10);
+        if (team_result.ec != std::errc{} ||
+            team_result.ptr != parts[1].data() + parts[1].size() ||
+            team > 13)
+        {
+            error = "The requested campaign team must be between 0 and 13.";
+            return false;
+        }
+        request.player_team = static_cast<std::int16_t>(team);
+        if (part_count == 3)
+        {
+            if (parts[2].size() != 8)
+            {
+                error = "The object-team player datum is invalid.";
+                return false;
+            }
+            std::uint32_t player_unit = 0;
+            auto player_result = std::from_chars(
+                parts[2].data(),
+                parts[2].data() + parts[2].size(),
+                player_unit,
+                16);
+            if (player_result.ec != std::errc{} ||
+                player_result.ptr != parts[2].data() + parts[2].size() ||
+                player_unit == UINT32_MAX)
+            {
+                error = "The object-team player datum is invalid.";
+                return false;
+            }
+            request.ally_player_unit = static_cast<std::int32_t>(player_unit);
+        }
+        if (target == "last")
+        {
+            request.cheat_name = "last";
+            request.unit_datum = -1;
+        }
+        else if ((target[0] == 'a' || target[0] == 'A' ||
+                  target[0] == 'u' || target[0] == 'U') &&
+                 target.size() == 9)
+        {
+            request.cheat_name =
+                (target[0] == 'u' || target[0] == 'U') ? "unit" : "actor";
+            std::uint32_t datum = 0;
+            auto datum_result = std::from_chars(
+                target.data() + 1,
+                target.data() + target.size(),
+                datum,
+                16);
+            if (datum_result.ec != std::errc{} ||
+                datum_result.ptr != target.data() + target.size() ||
+                datum == UINT32_MAX)
+            {
+                error = "The object-team datum is invalid.";
+                return false;
+            }
+            request.unit_datum = static_cast<std::int32_t>(datum);
+        }
+        else
+        {
+            error =
+                "The object-team payload must use last|aXXXXXXXX|uXXXXXXXX,...";
+            return false;
         }
     }
     else if (operation == "player_input")
@@ -1389,6 +1484,19 @@ bool validate_module(
              module + kObjectGetRva,
              kObjectGetPrologue.data(),
              kObjectGetPrologue.size()) != 0) ||
+        (kind == SpawnKind::object_team &&
+         (std::memcmp(
+              module + kObjectGetRva,
+              kObjectGetPrologue.data(),
+              kObjectGetPrologue.size()) != 0 ||
+          std::memcmp(
+              module + kAiObjectSetTeamRva,
+              kAiObjectSetTeamPrologue.data(),
+              kAiObjectSetTeamPrologue.size()) != 0 ||
+          std::memcmp(
+              module + kAiObjectStateResolveRva,
+              kAiObjectStateResolvePrologue.data(),
+              kAiObjectStateResolvePrologue.size()) != 0)) ||
         (kind == SpawnKind::player_noclip &&
          std::memcmp(
              module + kObjectSetPhysicsRva,
@@ -4136,6 +4244,311 @@ bool resolve_actor_unit_datum(
     return true;
 }
 
+
+bool apply_unit_campaign_team(
+    std::uint8_t* module,
+    std::int32_t unit_datum,
+    std::int8_t team,
+    const char** error)
+{
+    if (team < 0 || team > 13)
+    {
+        *error = "The requested campaign team is invalid.";
+        return false;
+    }
+    void* unit_object = nullptr;
+    std::uintptr_t exception_address = 0;
+    if (invoke_object_get(
+            module,
+            unit_datum,
+            &unit_object,
+            &exception_address) != 0 ||
+        !unit_object)
+    {
+        *error = "The target unit no longer resolves.";
+        return false;
+    }
+    auto* unit_team = reinterpret_cast<std::int8_t*>(
+        static_cast<std::uint8_t*>(unit_object) + kUnitTeamOffset);
+    if (!writable_range(
+            reinterpret_cast<std::uintptr_t>(unit_team),
+            sizeof(*unit_team)))
+    {
+        *error = "The unit team field is unavailable.";
+        return false;
+    }
+
+    using AiObjectStateResolve = std::uint8_t* (*)(std::int32_t);
+    using AiObjectSetTeam = void (*)(std::int32_t, std::int32_t);
+    auto resolve_state = reinterpret_cast<AiObjectStateResolve>(
+        module + kAiObjectStateResolveRva);
+    auto set_team = reinterpret_cast<AiObjectSetTeam>(
+        module + kAiObjectSetTeamRva);
+    std::uint8_t* state = resolve_state(unit_datum);
+    if (!state ||
+        !writable_range(reinterpret_cast<std::uintptr_t>(state), 0x18))
+    {
+        *error = "The AI object state is unavailable.";
+        return false;
+    }
+    std::int32_t state_object = -1;
+    std::memcpy(&state_object, state, sizeof(state_object));
+    if (state_object != unit_datum)
+    {
+        std::memcpy(state, &unit_datum, sizeof(unit_datum));
+        const std::uint32_t zero = 0;
+        const std::uint32_t default_flags = 0xFF7FFFFF;
+        const std::uint16_t zero_short = 0;
+        std::memcpy(state + 8, &zero, sizeof(zero));
+        std::memcpy(state + 0x14, &default_flags, sizeof(default_flags));
+        std::memcpy(state + 0x0C, &zero_short, sizeof(zero_short));
+    }
+    state[4] = static_cast<std::uint8_t>(team);
+    *unit_team = team;
+    set_team(unit_datum, team);
+
+    ObjectAllegianceEntry* entries = resolve_object_allegiances(module);
+    ObjectAllegianceEntry* matching = std::find_if(
+        entries,
+        entries + kObjectAllegianceEntryCount,
+        [&](const ObjectAllegianceEntry& entry)
+        {
+            return entry.object_datum == unit_datum;
+        });
+    ObjectAllegianceEntry* target = matching;
+    if (target == entries + kObjectAllegianceEntryCount)
+    {
+        target = std::find_if(
+            entries,
+            entries + kObjectAllegianceEntryCount,
+            [](const ObjectAllegianceEntry& entry)
+            {
+                return entry.object_datum == -1;
+            });
+    }
+    if (target == entries + kObjectAllegianceEntryCount)
+    {
+        *error = "All 16 object-specific allegiance override slots are in use.";
+        return false;
+    }
+    target->object_datum = unit_datum;
+    target->team = team;
+    if (*unit_team != team ||
+        state[4] != static_cast<std::uint8_t>(team) ||
+        target->team != team)
+    {
+        *error = "The game did not retain the requested campaign team.";
+        return false;
+    }
+    return true;
+}
+
+bool pacify_actor_after_team_change(
+    std::uint8_t* module,
+    std::int32_t actor_datum,
+    std::int32_t player_unit_datum,
+    int* cleared_targets,
+    int* cleared_objective_slots,
+    const char** error)
+{
+    *cleared_targets = 0;
+    *cleared_objective_slots = 0;
+    void* thread_globals = try_resolve_game_thread_globals(module);
+    if (!thread_globals)
+    {
+        *error = "The simulation thread actor table is unavailable.";
+        return false;
+    }
+    std::uint8_t* actor_table = nullptr;
+    std::memcpy(
+        &actor_table,
+        static_cast<std::uint8_t*>(thread_globals) +
+            kThreadActorDataOffset,
+        sizeof(actor_table));
+    if (!actor_table ||
+        !writable_range(
+            reinterpret_cast<std::uintptr_t>(actor_table + 0x50),
+            sizeof(void*)))
+    {
+        *error = "The live actor data array is unavailable.";
+        return false;
+    }
+    std::uint8_t* actor_records = nullptr;
+    std::memcpy(&actor_records, actor_table + 0x50, sizeof(actor_records));
+    const std::uint16_t actor_index =
+        static_cast<std::uint16_t>(actor_datum);
+    if (!actor_records ||
+        actor_index >
+            ((std::numeric_limits<std::uintptr_t>::max)() -
+                reinterpret_cast<std::uintptr_t>(actor_records)) /
+                kActorRecordSize)
+    {
+        *error = "The actor datum does not resolve into the actor array.";
+        return false;
+    }
+    std::uint8_t* actor_record =
+        actor_records +
+        static_cast<std::size_t>(actor_index) * kActorRecordSize;
+    if (!writable_range(
+            reinterpret_cast<std::uintptr_t>(actor_record),
+            kActorRecordSize))
+    {
+        *error = "The actor record is not writable.";
+        return false;
+    }
+
+    if (player_unit_datum != -1)
+    {
+        for (std::size_t offset = 0;
+             offset + sizeof(std::int32_t) <= kActorRecordSize;
+             offset += sizeof(std::int32_t))
+        {
+            if (offset == kActorUnitDatumOffset)
+                continue;
+            std::int32_t value = -1;
+            std::memcpy(&value, actor_record + offset, sizeof(value));
+            if (value != player_unit_datum)
+                continue;
+            const std::int32_t cleared = -1;
+            std::memcpy(actor_record + offset, &cleared, sizeof(cleared));
+            ++(*cleared_targets);
+        }
+    }
+
+    for (std::size_t offset = 0x40; offset < 0x180; ++offset)
+    {
+        const std::uint8_t status = actor_record[offset];
+        if (status >= 4 && status <= 9)
+            actor_record[offset] = 1;
+    }
+
+    // Blank plausible objective/task index pairs (NONE = -1).
+    constexpr std::int16_t kNone = -1;
+    constexpr int kMaxClearedPairs = 8;
+    for (std::size_t offset = 0;
+         offset + sizeof(std::int16_t) * 2 <= kActorRecordSize &&
+         *cleared_objective_slots < kMaxClearedPairs;
+         offset += sizeof(std::int16_t))
+    {
+        std::int16_t first = -1;
+        std::int16_t second = -1;
+        std::memcpy(&first, actor_record + offset, sizeof(first));
+        std::memcpy(
+            &second,
+            actor_record + offset + sizeof(std::int16_t),
+            sizeof(second));
+        if (first < 0 || first > 512 || second < 0 || second > 64)
+            continue;
+        if (first == 0 && second == 0)
+            continue;
+        std::memcpy(actor_record + offset, &kNone, sizeof(kNone));
+        std::memcpy(
+            actor_record + offset + sizeof(std::int16_t),
+            &kNone,
+            sizeof(kNone));
+        ++(*cleared_objective_slots);
+        offset += sizeof(std::int16_t);
+    }
+    return true;
+}
+
+std::string process_object_team(const SpawnRequest& request)
+{
+    auto* module = reinterpret_cast<std::uint8_t*>(
+        GetModuleHandleW(kSimulationModule));
+    if (!module)
+    {
+        throw std::runtime_error(
+            "HaloSimulation_tag_release.dll is not loaded. Load a campaign mission first.");
+    }
+    std::string validation_error;
+    if (!validate_module(module, validation_error, request.kind))
+    {
+        throw std::runtime_error(validation_error);
+    }
+
+    std::int32_t actor_datum = -1;
+    std::int32_t unit_datum = request.unit_datum;
+    if (request.cheat_name == "last")
+    {
+        actor_datum = g_last_ai_actor_datum;
+        if (actor_datum == -1)
+        {
+            throw std::runtime_error(
+                "No AI actor has been created yet in this session. Spawn one first.");
+        }
+        const char* resolve_error = nullptr;
+        if (!resolve_actor_unit_datum(
+                module,
+                actor_datum,
+                &unit_datum,
+                &resolve_error))
+        {
+            throw std::runtime_error(
+                resolve_error != nullptr
+                    ? resolve_error
+                    : "Could not resolve the last AI actor to a unit.");
+        }
+    }
+    else if (request.cheat_name == "actor")
+    {
+        actor_datum = request.unit_datum;
+        const char* resolve_error = nullptr;
+        if (!resolve_actor_unit_datum(
+                module,
+                actor_datum,
+                &unit_datum,
+                &resolve_error))
+        {
+            throw std::runtime_error(
+                resolve_error != nullptr
+                    ? resolve_error
+                    : "Could not resolve the AI actor to a unit.");
+        }
+    }
+    else if (request.cheat_name != "unit")
+    {
+        throw std::runtime_error(
+            "The object-team target must be last, actor, or unit.");
+    }
+
+    if (request.player_team < 0 || request.player_team > 13)
+    {
+        throw std::runtime_error(
+            "The requested campaign team must be between 0 and 13.");
+    }
+
+    const char* apply_error = nullptr;
+    if (!apply_unit_campaign_team(
+            module,
+            unit_datum,
+            static_cast<std::int8_t>(request.player_team),
+            &apply_error))
+    {
+        throw std::runtime_error(
+            apply_error != nullptr
+                ? apply_error
+                : "Could not apply the campaign team to the unit.");
+    }
+
+    // Do not scan/rewrite actor combat or objective/task bytes here. Blind
+    // heuristics previously corrupted live actor state and froze the game.
+    // Team + per-object allegiance is the supported allegiance path.
+    (void)actor_datum;
+    (void)request.ally_player_unit;
+
+    char message[192]{};
+    std::snprintf(
+        message,
+        sizeof(message),
+        "unit=0x%08X\nactor=0x%08X\nteam=%d\n"
+        "method=ai_object_set_team+allegiance_table",
+        static_cast<std::uint32_t>(unit_datum),
+        static_cast<std::uint32_t>(actor_datum),
+        static_cast<int>(request.player_team));
+    return message;
+}
+
 DWORD invoke_add_player_fireteam_squad(
     std::uint8_t* module,
     std::int32_t player_unit_datum,
@@ -4394,6 +4807,7 @@ std::string spawn_ai(const SpawnRequest& request)
         }
     }
     g_deferred_ai_actors = created_actors;
+    g_last_ai_actor_datum = created_actors[0];
     g_deferred_ai_weapon_done.fill(false);
     g_deferred_ai_companion_done.fill(false);
     g_deferred_ai_fireteam_done = false;
@@ -5365,6 +5779,14 @@ void* hooked_simulation_context()
                 g_pending_request.id,
                 "ok",
                 process_player_team(g_pending_request));
+        }
+        else if (g_pending_request.kind == SpawnKind::object_team)
+        {
+            write_result(
+                g_pending_result_path,
+                g_pending_request.id,
+                "ok",
+                process_object_team(g_pending_request));
         }
         else if (g_pending_request.kind == SpawnKind::player_input)
         {

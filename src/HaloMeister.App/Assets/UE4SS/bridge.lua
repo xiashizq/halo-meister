@@ -1,5 +1,5 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 89
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 96
 do
     local hm_ok, hm_error = pcall(function()
         local UEHelpers = require("UEHelpers")
@@ -11,7 +11,7 @@ do
         -- Keep in step with the VERSION marker above; Halo Meister compares the
         -- version reported here against the copy it ships so it can tell you when
         -- the game is still running a stale bridge.
-        local bridge_version = 89
+        local bridge_version = 96
         -- User scripts execute in a dedicated environment. Expose the UE4SS
         -- helper module there while retaining normal access to global UE4SS
         -- APIs and preserving the historical global assignment behavior.
@@ -861,6 +861,9 @@ do
                 and (payload == "read"
                     or payload == "restore"
                     or payload:match("^%d%d?$"))
+            local valid_object_team = operation == "object_team"
+                and (payload:match("^last,%d%d?$")
+                    or payload:match("^[aAuU]%x%x%x%x%x%x%x%x,%d%d?$"))
             local valid_player_input = operation == "player_input"
                 and (payload == "suppress" or payload == "restore")
             local valid_native_machinima = operation == "machinima"
@@ -902,7 +905,7 @@ do
                 and validate_ai(payload)
             local function validate_ai_team(value)
                 local fields = split_fields(value)
-                if #fields < 11 or #fields > 21 then
+                if #fields < 8 or #fields > 21 then
                     return false
                 end
                 local has_weapon = false
@@ -915,7 +918,7 @@ do
                 else
                     return false
                 end
-                if count < 2 or count > 5
+                if count < 1 or count > 5
                     or not is_hex_width(fields[1], 4)
                     or not is_hex_width(fields[2], 16)
                     or not is_hex_width(fields[3], 4) then
@@ -948,6 +951,7 @@ do
                 and not valid_player_position
                 and not valid_teleport and not valid_noclip
                 and not valid_player_team
+                and not valid_object_team
                 and not valid_player_input and not valid_native_machinima
                 and not valid_research_call
                 and not valid_ai and not valid_ai_team then
@@ -1011,6 +1015,7 @@ do
                         or operation == "player_teleport"
                         or operation == "player_noclip"
                         or operation == "player_team"
+                        or operation == "object_team"
                         or ((operation == "ai" or operation == "ai_team")
                             and friendly_companion) then
                         local unit_component = nil
@@ -1136,6 +1141,10 @@ do
                         elseif operation == "ai" or operation == "ai_team" then
                             payload = payload
                                 .. ",p" .. string.format("%08x", unit_datum)
+                        elseif operation == "object_team" then
+                            -- target,team[,playerUnit] — player clears combat aim.
+                            payload = payload
+                                .. "," .. string.format("%08x", unit_datum)
                         else
                             payload = (operation == "weapon_variant"
                                     and weapon_variant or payload)
@@ -1427,6 +1436,8 @@ do
                 execute_blam_spawn(request.id, "player_noclip", request.code)
             elseif request.kind == "player_team" then
                 execute_blam_spawn(request.id, "player_team", request.code)
+            elseif request.kind == "object_team" then
+                execute_blam_spawn(request.id, "object_team", request.code)
             elseif request.kind == "player_input" then
                 execute_blam_spawn(request.id, "player_input", request.code)
             elseif request.kind == "blam_machinima" then
