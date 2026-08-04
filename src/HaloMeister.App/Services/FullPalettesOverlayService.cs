@@ -3,24 +3,75 @@ using HaloMeister.App.Localization;
 
 namespace HaloMeister.App.Services;
 
+/// <summary>
+/// Bundled campaign content mod <c>MMYJ_FULL_VEHI_WAP_P</c> (.utoc/.ucas/.pak):
+/// full vehicle/weapon palettes plus dedicated <c>hm_ally</c>/<c>hm_hostile</c>
+/// spawn scaffolds. Dedicated Allegiance Demo features require the complete
+/// triplet in the game Paks folder; vehicle/weapon tools remain usable without it.
+/// </summary>
 public sealed class FullPalettesOverlayService
 {
     public const string OverlayStem = "MMYJ_FULL_VEHI_WAP_P";
 
-    // Previous shipping name; cleaned up on install/remove so old copies
-    // do not keep mounting after a rename.
+    // Previous shipping names; cleaned up on install/remove so old copies
+    // do not keep mounting after a rename or after demo-squads were merged in.
     private const string LegacyOverlayStem = "HM_FullPalettes_P";
+    private const string LegacyDemoSquadsStem = "ZZ_HM_DemoSquads_P";
+    private const string LegacyDemoSquadsStemAlt = "HM_DemoSquads_P";
 
     private static readonly string[] Extensions = [".utoc", ".ucas", ".pak"];
+
+    public static IReadOnlyList<string> RequiredFileNames { get; } =
+        Extensions.Select(extension => OverlayStem + extension).ToArray();
 
     public bool IsGameRunning =>
         Process.GetProcessesByName("HaloCampaignEvolved").Any(process => !process.HasExited);
 
+    /// <summary>
+    /// True only when all three overlay files are present in Paks.
+    /// Dedicated features (Allegiance Demo scaffolds) should gate on this.
+    /// </summary>
     public bool IsInstalled()
     {
-        string paks = ResolvePaksDirectory();
-        return HasCompleteTriplet(paks, OverlayStem) ||
-               HasCompleteTriplet(paks, LegacyOverlayStem);
+        try
+        {
+            string paks = ResolvePaksDirectory();
+            return HasCompleteTriplet(paks, OverlayStem) ||
+                   HasCompleteTriplet(paks, LegacyOverlayStem);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public bool IsBundledAvailable()
+    {
+        try
+        {
+            _ = ResolveBundledSources();
+            return true;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Per-file presence for the shipping stem in the game Paks folder.
+    /// </summary>
+    public IReadOnlyList<BuiltinModFileStatus> GetInstalledFileStatus()
+    {
+        string? paks = null;
+        try { paks = ResolvePaksDirectory(); }
+        catch (DirectoryNotFoundException) { }
+
+        return RequiredFileNames
+            .Select(name => new BuiltinModFileStatus(
+                name,
+                paks is not null && File.Exists(Path.Combine(paks, name))))
+            .ToArray();
     }
 
     private static bool HasCompleteTriplet(string paks, string stem) =>
@@ -32,17 +83,13 @@ public sealed class FullPalettesOverlayService
         EnsureGameClosed();
         string paks = ResolvePaksDirectory();
         RemoveStem(paks, LegacyOverlayStem);
+        RemoveStem(paks, LegacyDemoSquadsStem);
+        RemoveStem(paks, LegacyDemoSquadsStemAlt);
+        RemoveStem(paks, OverlayStem);
         string[] sources = ResolveBundledSources();
         string[] destinations = sources
             .Select(source => Path.Combine(paks, Path.GetFileName(source)))
             .ToArray();
-
-        foreach (string destination in destinations)
-            if (File.Exists(destination))
-                throw new IOException(
-                    L.Format(
-                        "vehicle_workshop.full_palettes_already_installed",
-                        Path.GetFileName(destination)));
 
         var copied = new List<string>();
         try
@@ -51,7 +98,7 @@ public sealed class FullPalettesOverlayService
             {
                 string temporary = destinations[index] + $".{Guid.NewGuid():N}.tmp";
                 File.Copy(sources[index], temporary, false);
-                File.Move(temporary, destinations[index], false);
+                File.Move(temporary, destinations[index], true);
                 copied.Add(destinations[index]);
             }
         }
@@ -69,7 +116,7 @@ public sealed class FullPalettesOverlayService
             Installed: true,
             PaksDirectory: paks,
             Files: destinations,
-            Message: L.Get("vehicle_workshop.full_palettes_installed_restart"));
+            Message: L.Get("builtin_mod.installed_restart"));
     }
 
     public FullPalettesOverlayResult Remove()
@@ -79,6 +126,8 @@ public sealed class FullPalettesOverlayService
         var removed = new List<string>();
         removed.AddRange(RemoveStem(paks, OverlayStem));
         removed.AddRange(RemoveStem(paks, LegacyOverlayStem));
+        removed.AddRange(RemoveStem(paks, LegacyDemoSquadsStem));
+        removed.AddRange(RemoveStem(paks, LegacyDemoSquadsStemAlt));
 
         if (removed.Count == 0)
             throw new FileNotFoundException(
@@ -88,7 +137,7 @@ public sealed class FullPalettesOverlayService
             Installed: false,
             PaksDirectory: paks,
             Files: removed,
-            Message: L.Get("vehicle_workshop.full_palettes_removed_restart"));
+            Message: L.Get("builtin_mod.removed_restart"));
     }
 
     private void EnsureGameClosed()
@@ -254,3 +303,5 @@ public sealed record FullPalettesOverlayResult(
     string PaksDirectory,
     IReadOnlyList<string> Files,
     string Message);
+
+public sealed record BuiltinModFileStatus(string FileName, bool Present);

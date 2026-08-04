@@ -21,31 +21,63 @@
                 Text="{i18n:Loc Key='allegiance_demo.description'}" />
         </StackPanel>
 
-        <Border Grid.Row="1" Style="{StaticResource LiveToolInsetStyle}">
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock
-                    x:Name="BridgeStatusText"
-                    VerticalAlignment="Center"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextWrapping="Wrap" />
-                <ProgressRing
-                    x:Name="BusyRing"
-                    Grid.Column="1"
-                    Width="20"
-                    Height="20"
-                    IsActive="False" />
-            </Grid>
-        </Border>
+        <StackPanel Grid.Row="1" Spacing="8">
+            <InfoBar
+                x:Name="ModRequiredBanner"
+                IsClosable="False"
+                IsOpen="False"
+                Severity="Warning"
+                Title="{i18n:Loc Key='allegiance_demo.mod_required_title'}"
+                Message="{i18n:Loc Key='allegiance_demo.mod_required_body'}" />
+            <Border Style="{StaticResource LiveToolInsetStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="BridgeStatusText"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
+                    <ProgressRing
+                        x:Name="BusyRing"
+                        Grid.Column="1"
+                        Width="20"
+                        Height="20"
+                        IsActive="False" />
+                </Grid>
+            </Border>
+        </StackPanel>
 
         <ScrollViewer
             Grid.Row="2"
             HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="14">
+                <Border Style="{StaticResource LiveToolCardStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock
+                            FontSize="16"
+                            FontWeight="SemiBold"
+                            Text="{i18n:Loc Key='allegiance_demo.step_unit_team'}" />
+                        <TextBlock
+                            Opacity="0.72"
+                            Text="{i18n:Loc Key='allegiance_demo.step_unit_team_hint'}"
+                            TextWrapping="Wrap" />
+                        <ComboBox
+                            x:Name="TeamComboBox"
+                            HorizontalAlignment="Stretch"
+                            DisplayMemberPath="Label"
+                            PlaceholderText="{i18n:Loc Key='allegiance_demo.choose_team'}" />
+                        <Button
+                            x:Name="ApplyTeamButton"
+                            Click="OnApplyTeam"
+                            Content="{i18n:Loc Key='allegiance_demo.apply_object_team'}"
+                            IsEnabled="False" />
+                    </StackPanel>
+                </Border>
+
                 <Border Style="{StaticResource LiveToolCardStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock
@@ -87,30 +119,6 @@
                             Opacity="0.78"
                             Text="{i18n:Loc Key='allegiance_demo.no_actor_yet'}"
                             TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource LiveToolCardStyle}">
-                    <StackPanel Spacing="10">
-                        <TextBlock
-                            FontSize="16"
-                            FontWeight="SemiBold"
-                            Text="{i18n:Loc Key='allegiance_demo.step_unit_team'}" />
-                        <TextBlock
-                            Opacity="0.72"
-                            Text="{i18n:Loc Key='allegiance_demo.step_unit_team_hint'}"
-                            TextWrapping="Wrap" />
-                        <ComboBox
-                            x:Name="TeamComboBox"
-                            HorizontalAlignment="Stretch"
-                            DisplayMemberPath="Label"
-                            PlaceholderText="{i18n:Loc Key='allegiance_demo.choose_team'}" />
-                        <Button
-                            x:Name="ApplyTeamButton"
-                            Click="OnApplyTeam"
-                            Content="{i18n:Loc Key='allegiance_demo.apply_object_team'}"
-                            IsEnabled="False"
-                            Style="{StaticResource AccentButtonStyle}" />
                     </StackPanel>
                 </Border>
 

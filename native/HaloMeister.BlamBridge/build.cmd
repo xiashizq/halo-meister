@@ -12,7 +12,7 @@ call "%VSDEVCMD%" -arch=x64 -host_arch=x64 >nul
 if errorlevel 1 exit /b %errorlevel%
 if not exist "..\..\src\HaloMeister.App\Assets\UE4SS" mkdir "..\..\src\HaloMeister.App\Assets\UE4SS"
 if not exist "obj" mkdir "obj"
-cl /nologo /std:c++17 /O2 /GL /EHsc /MT /W4 /WX /LD /DUNICODE /D_UNICODE ^
+cl /nologo /std:c++17 /O2 /GL /EHsc /MT /W4 /WX /utf-8 /LD /DUNICODE /D_UNICODE ^
   /Fo:"obj\blam_bridge.obj" ^
   blam_bridge.cpp /link /LTCG /OPT:REF /OPT:ICF ^
   /IMPLIB:"obj\blam_bridge.lib" ^

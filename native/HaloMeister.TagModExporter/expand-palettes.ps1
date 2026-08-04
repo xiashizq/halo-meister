@@ -1,9 +1,11 @@
-# Expand every Campaign Evolved scenario vehicle/weapon palette and write a _P overlay.
+# Expand every Campaign Evolved scenario vehicle/weapon palette AND ensure
+# dedicated hm_ally / hm_hostile squads, then write one _P overlay.
 param(
     [string]$Paks,
     [string]$Output = (Join-Path $PSScriptRoot "out\MMYJ_FULL_VEHI_WAP_P.utoc"),
     [switch]$DryRun,
-    [switch]$Install
+    [switch]$Install,
+    [switch]$UpdateBundledAssets
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,6 +48,17 @@ function Resolve-PaksDirectory {
     throw "Could not find Meteorite\Content\Paks. Pass -Paks or set HALO_CAMPAIGN_EVOLVED_ROOT."
 }
 
+function Remove-OverlayStem {
+    param([string]$PaksDir, [string]$Stem)
+    foreach ($ext in @(".utoc", ".ucas", ".pak")) {
+        $path = Join-Path $PaksDir ($Stem + $ext)
+        if (Test-Path $path) {
+            Remove-Item -Force $path
+            Write-Host "Removed $path"
+        }
+    }
+}
+
 $exeCandidates = @(
     (Join-Path $PSScriptRoot "target\release\halomeister-tagmod-exporter.exe"),
     (Join-Path $PSScriptRoot "..\..\src\HaloMeister.App\Assets\Native\halomeister-tagmod-exporter.exe")
@@ -63,23 +76,45 @@ if (-not (Test-Path $exe)) {
 
 $paksDir = Resolve-PaksDirectory -Explicit $Paks
 New-Item -ItemType Directory -Force -Path (Split-Path $Output) | Out-Null
+
+# Build from base + non-conflicting packs: drop both previous scenario overlays
+# so the merged package is not reading its own prior output.
+if (-not $DryRun) {
+    if (Get-Process -Name "HaloCampaignEvolved" -ErrorAction SilentlyContinue) {
+        throw "Close Halo: Campaign Evolved before rebuilding/installing the overlay."
+    }
+    Remove-OverlayStem -PaksDir $paksDir -Stem "ZZ_HM_DemoSquads_P"
+    Remove-OverlayStem -PaksDir $paksDir -Stem "HM_DemoSquads_P"
+    Remove-OverlayStem -PaksDir $paksDir -Stem "MMYJ_FULL_VEHI_WAP_P"
+    Remove-OverlayStem -PaksDir $paksDir -Stem "HM_FullPalettes_P"
+}
+
 $args = @("--paks", $paksDir, "--expand-palettes", "--output", $Output)
 if ($DryRun) { $args += "--dry-run" }
 & $exe @args
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-if ($Install -and -not $DryRun) {
-    if (Get-Process -Name "HaloCampaignEvolved" -ErrorAction SilentlyContinue) {
-        throw "Close Halo: Campaign Evolved before installing the overlay."
+if ($UpdateBundledAssets -and -not $DryRun) {
+    $bundleDir = Join-Path $PSScriptRoot "..\..\src\HaloMeister.App\Assets\Overlays"
+    New-Item -ItemType Directory -Force -Path $bundleDir | Out-Null
+    foreach ($ext in @(".utoc", ".ucas", ".pak")) {
+        $source = [IO.Path]::ChangeExtension($Output, $ext)
+        if (-not (Test-Path $source)) { throw "Missing $source" }
+        Copy-Item -Force $source (Join-Path $bundleDir (Split-Path $source -Leaf))
+        Write-Host "Updated bundled asset $((Join-Path $bundleDir (Split-Path $source -Leaf)))"
     }
-    foreach ($ext in @("utoc", "ucas", "pak")) {
+}
+
+if ($Install -and -not $DryRun) {
+    foreach ($ext in @(".utoc", ".ucas", ".pak")) {
         $source = [IO.Path]::ChangeExtension($Output, $ext)
         $destination = Join-Path $paksDir (Split-Path $source -Leaf)
         if (-not (Test-Path $source)) { throw "Missing $source" }
-        if (Test-Path $destination) {
-            throw "$destination already exists. Remove or rename it first."
-        }
-        Copy-Item $source $destination
+        Copy-Item -Force $source $destination
         Write-Host "Installed $destination"
     }
+    # Belt-and-suspenders: never leave the old dual-pack stem around.
+    Remove-OverlayStem -PaksDir $paksDir -Stem "ZZ_HM_DemoSquads_P"
+    Remove-OverlayStem -PaksDir $paksDir -Stem "HM_DemoSquads_P"
+    Write-Host "Restart the game so MMYJ_FULL_VEHI_WAP_P (palettes + demo squads) mounts."
 }

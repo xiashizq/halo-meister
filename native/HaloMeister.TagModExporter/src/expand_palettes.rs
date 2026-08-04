@@ -1,3 +1,4 @@
+use crate::ensure_demo_squads;
 use anyhow::{Context, Result, anyhow, bail};
 use blam_tags::fields::{TagFieldData, TagReferenceData};
 use blam_tags::iostore::IoStoreArchive;
@@ -16,6 +17,9 @@ pub struct ExpandReport {
     pub weapon_catalog: usize,
     pub vehicle_added_total: usize,
     pub weapon_added_total: usize,
+    pub ally_added: usize,
+    pub ally_from_hostile_fallback: usize,
+    pub hostile_added: usize,
     pub lines: Vec<String>,
 }
 
@@ -44,10 +48,13 @@ pub fn expand_all_mission_palettes(
         weapon_catalog: weapons.len(),
         vehicle_added_total: 0,
         weapon_added_total: 0,
+        ally_added: 0,
+        ally_from_hostile_fallback: 0,
+        hostile_added: 0,
         lines: Vec::new(),
     };
     report.lines.push(format!(
-        "Catalog: {} vehicle(s), {} weapon(s); {} scenario(s) to process",
+        "Catalog: {} vehicle(s), {} weapon(s); {} scenario(s) to process (palettes + hm_ally/hm_hostile)",
         vehicles.len(),
         weapons.len(),
         scenarios.len()
@@ -64,15 +71,20 @@ pub fn expand_all_mission_palettes(
             ensure_palette(&mut tag, "vehicle palette", VEHICLE_GROUP, &vehicles)?;
         let weapon_added =
             ensure_palette(&mut tag, "weapon palette", WEAPON_GROUP, &weapons)?;
-        if vehicle_added == 0 && weapon_added == 0 {
+        let squads = ensure_demo_squads::ensure_demo_squads_on_tag(&mut tag, tag_path)?;
+        if vehicle_added == 0 && weapon_added == 0 && !squads.changed {
             continue;
         }
         report.scenarios_changed += 1;
         report.vehicle_added_total += vehicle_added;
         report.weapon_added_total += weapon_added;
+        report.ally_added += squads.ally_added;
+        report.ally_from_hostile_fallback += squads.ally_from_hostile_fallback;
+        report.hostile_added += squads.hostile_added;
         report.lines.push(format!(
             "{tag_path}: +{vehicle_added} vehicle(s), +{weapon_added} weapon(s)"
         ));
+        report.lines.extend(squads.lines);
         if dry_run {
             continue;
         }
@@ -89,9 +101,9 @@ pub fn expand_all_mission_palettes(
         return Ok(report);
     }
     if edited.is_empty() {
-        report
-            .lines
-            .push("Every scenario already contained the full catalogs.".to_owned());
+        report.lines.push(
+            "Every scenario already contained the full catalogs and demo squads.".to_owned(),
+        );
         return Ok(report);
     }
 

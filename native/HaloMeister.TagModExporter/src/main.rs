@@ -1,3 +1,4 @@
+mod ensure_demo_squads;
 mod expand_palettes;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -65,6 +66,7 @@ fn run() -> Result<()> {
     let mut output = None;
     let mut inspect = None;
     let mut expand_palettes = false;
+    let mut ensure_demo_squads = false;
     let mut dry_run = false;
     while let Some(argument) = args.next() {
         match argument.to_string_lossy().as_ref() {
@@ -74,6 +76,7 @@ fn run() -> Result<()> {
             "--output" => output = args.next().map(PathBuf::from),
             "--inspect" => inspect = args.next().map(|value| value.to_string_lossy().into_owned()),
             "--expand-palettes" => expand_palettes = true,
+            "--ensure-demo-squads" => ensure_demo_squads = true,
             "--dry-run" => dry_run = true,
             other => bail!("unknown argument '{other}'"),
         }
@@ -87,13 +90,35 @@ fn run() -> Result<()> {
             println!("{line}");
         }
         println!(
-            "Summary: {} / {} scenario(s) changed from catalogs of {} vehicle(s)/{} weapon(s); +{} vehicle palette entries, +{} weapon palette entries",
+            "Summary: {} / {} scenario(s) changed from catalogs of {} vehicle(s)/{} weapon(s); +{} vehicle palette entries, +{} weapon palette entries; +{} hm_ally ({} hostile-fallback), +{} hm_hostile",
             report.scenarios_changed,
             report.scenarios_seen,
             report.vehicle_catalog,
             report.weapon_catalog,
             report.vehicle_added_total,
-            report.weapon_added_total
+            report.weapon_added_total,
+            report.ally_added,
+            report.ally_from_hostile_fallback,
+            report.hostile_added
+        );
+        return Ok(());
+    }
+    if ensure_demo_squads {
+        let output =
+            priority_output(output.context("--output is required with --ensure-demo-squads")?);
+        let report =
+            ensure_demo_squads::ensure_all_mission_demo_squads(&archives, &output, dry_run)?;
+        for line in &report.lines {
+            println!("{line}");
+        }
+        println!(
+            "Summary: {} / {} scenario(s) changed; +{} hm_ally ({} from hostile fallback), +{} hm_hostile; {} skipped (no donor)",
+            report.scenarios_changed,
+            report.scenarios_seen,
+            report.ally_added,
+            report.ally_from_hostile_fallback,
+            report.hostile_added,
+            report.skipped_missing_donor
         );
         return Ok(());
     }
@@ -456,6 +481,9 @@ fn chunk_number(path: &Path) -> u32 {
         .unwrap_or("");
     let lowered = stem.to_ascii_lowercase();
     let Some(rest) = lowered.strip_prefix("pakchunk") else {
+        // Non-pakchunk overlays share one priority band and then sort by path.
+        // Name _P packs lexicographically later (e.g. ZZ_*) so they win over
+        // earlier scenario-editing overlays such as MMYJ_FULL_VEHI_WAP_P.
         return u32::MAX - 1;
     };
     rest.chars()

@@ -6,7 +6,8 @@ namespace HaloMeister.App.Services;
 
 public sealed record AllegianceDemoSpawnResult(
     ScriptExecutionResult SpawnResult,
-    int? ActorDatum);
+    int? ActorDatum,
+    SpawnScaffoldDiagnosis? ScaffoldDiagnosis);
 
 public sealed record ObjectTeamResult(
     int UnitDatum,
@@ -15,10 +16,10 @@ public sealed record ObjectTeamResult(
     string RawMessage);
 
 /// <summary>
-/// Demo helpers for the proper campaign-team path: spawn AI, then apply
-/// <c>ai_object_set_team</c> + the object allegiance table.
-/// Does not patch scenario squad teams, scan actor combat/objective memory,
-/// or touch the global <c>ai_allegiance</c> matrix during unit apply.
+/// Friend/foe demo: prefer a matching scaffold squad, birth as player (1) or
+/// covenant (3). Friendlies register as a player fireteam companion and follow;
+/// hostiles do not. Optional post reinforce via <c>ai_object_set_team</c> +
+/// the object allegiance table. No per-frame AI team maintain.
 /// </summary>
 public sealed class AllegianceDemoService
 {
@@ -32,30 +33,121 @@ public sealed class AllegianceDemoService
 
     public ScriptingBridgeStatus BridgeStatus => _bridge.GetStatus();
 
-    public static IReadOnlyList<PlayerTeamOption> TeamOptions { get; } =
-        PlayerTeamService.Options
-            .Where(option => option.Value >= 0)
-            .ToArray();
+    /// <summary>Friendly = player (1). Hostile = covenant (3).</summary>
+    public const int FriendlyTeam = 1;
+    public const int HostileTeam = 3;
+
+    public static IReadOnlyList<PlayerTeamOption> CreateTeamOptions() =>
+    [
+        new(
+            L.Get("allegiance_demo.stance_friendly"),
+            FriendlyTeam,
+            L.Get("allegiance_demo.stance_friendly_desc")),
+        new(
+            L.Get("allegiance_demo.stance_hostile"),
+            HostileTeam,
+            L.Get("allegiance_demo.stance_hostile_desc")),
+    ];
 
     public SpawnerCatalog Connect() => _spawner.Connect();
+
+    public SpawnScaffoldInventory ProbeScaffolds() =>
+        _spawner.ProbeScaffoldInventory();
+
+    public string ScaffoldDiagnosisLogPath =>
+        EnemySpawnerService.ScaffoldDiagnosisLogPath;
 
     public async Task<AllegianceDemoSpawnResult> SpawnAsync(
         EnemySpawnChoice character,
         SpawnVariantChoice variant,
+        int campaignTeam = FriendlyTeam,
         CancellationToken cancellationToken = default)
     {
-        // Borrowed hostile squads often point at a combat objective. Temporarily
-        // write authored <none> (-1) into that squad's initial objective/task
-        // around actor_new — same value Sapien shows as <none>.
+        if (campaignTeam is not (FriendlyTeam or HostileTeam))
+            throw new ArgumentOutOfRangeException(nameof(campaignTeam));
+
+        // Friendly prefers an ally scaffold and registers as a player fireteam
+        // companion so they follow. Hostile prefers a hostile scaffold and does
+        // not join the player's fireteam. Native keeps squad team patched
+        // through actor_new + finalize. clearSquadObjective only applies to
+        // borrowed encounter squads; dedicated hm_* keep combat objective.
+        bool followPlayer = campaignTeam == FriendlyTeam;
         ScriptExecutionResult result = await _spawner.SpawnGroupAsync(
             character,
             variant,
             count: 1,
-            followPlayer: false,
+            followPlayer: followPlayer,
             clearSquadObjective: true,
+            campaignTeam: (ushort)campaignTeam,
             cancellationToken: cancellationToken);
         int? actor = TryParseActorDatum(result.Message);
-        return new AllegianceDemoSpawnResult(result, actor);
+        SpawnScaffoldDiagnosis? diagnosis = _spawner.LastScaffoldDiagnosis;
+        // Friendlies already get fireteam follow via native finalize; skip the
+        // HaloScript wake so ai_renew does not knock them out of the fireteam.
+        if (!followPlayer)
+        {
+            result = await WakeSpawnedSquadAsync(
+                result,
+                diagnosis,
+                campaignTeam,
+                cancellationToken);
+        }
+        else if (result.Outcome == ScriptOutcome.Confirmed)
+        {
+            result = result with
+            {
+                Message = $"{result.Message} follow=fireteam",
+            };
+        }
+        return new AllegianceDemoSpawnResult(result, actor, diagnosis);
+    }
+
+    /// <summary>
+    /// Best-effort for hostile spawns: unsuppress combat and renew so actors
+    /// leave the idle stand pose after actor_new.
+    /// </summary>
+    private async Task<ScriptExecutionResult> WakeSpawnedSquadAsync(
+        ScriptExecutionResult spawnResult,
+        SpawnScaffoldDiagnosis? diagnosis,
+        int campaignTeam,
+        CancellationToken cancellationToken)
+    {
+        if (spawnResult.Outcome != ScriptOutcome.Confirmed)
+            return spawnResult;
+
+        string squadName = diagnosis?.UsedDedicated == true
+            && !string.IsNullOrWhiteSpace(diagnosis.SquadName)
+            ? diagnosis.SquadName
+            : EnemySpawnerService.DedicatedHostileSquadName;
+
+        var lines = new List<string>
+        {
+            $"ai_suppress_combat {squadName} false",
+            $"ai_renew {squadName}",
+            $"ai_magically_see_object {squadName} (player_get 0)",
+        };
+
+        try
+        {
+            ScriptExecutionResult wake = await _bridge.ExecuteAsync(
+                ScriptLanguage.HaloScript,
+                string.Join('\n', lines),
+                TimeSpan.FromSeconds(8),
+                cancellationToken);
+            if (wake.Outcome == ScriptOutcome.Confirmed)
+            {
+                return spawnResult with
+                {
+                    Message = $"{spawnResult.Message} wake={squadName}",
+                };
+            }
+        }
+        catch
+        {
+            // Wake is optional; spawn already succeeded with correct team.
+        }
+
+        return spawnResult;
     }
 
     public async Task<ObjectTeamResult> ApplyObjectTeamAsync(
@@ -63,10 +155,10 @@ public sealed class AllegianceDemoService
         int? actorDatum = null,
         CancellationToken cancellationToken = default)
     {
-        if (TeamOptions.All(option => option.Value != team))
+        if (team is not (FriendlyTeam or HostileTeam))
             throw new ArgumentOutOfRangeException(nameof(team));
 
-        // Minimal payload: target,team. Lua may append player unit; native ignores it.
+        // Minimal payload: target,team. Lua appends player unit for combat-aim clear.
         string payload = actorDatum is int actor
             ? string.Create(
                 CultureInfo.InvariantCulture,
@@ -191,10 +283,10 @@ public sealed class AllegianceDemoService
         }
         if (status.IsStale)
             throw new InvalidOperationException(status.Summary);
-        if (status.RunningVersion is < 96)
+        if (status.RunningVersion is < 102)
         {
             throw new InvalidOperationException(
-                L.Get("allegiance_demo.requires_bridge_v96"));
+                L.Get("allegiance_demo.requires_bridge_v102"));
         }
     }
 }

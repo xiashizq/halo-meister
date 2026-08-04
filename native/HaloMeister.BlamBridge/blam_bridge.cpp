@@ -283,6 +283,10 @@ std::array<std::array<std::uint8_t, 4>, kMaxAiPlacements>
     g_deferred_ai_variants{};
 std::array<std::uint8_t, 2> g_deferred_ai_team{};
 bool g_deferred_ai_patch_active = false;
+// actor_new path keeps the borrowed squad team patched until deferred
+// finalize finishes applying the live unit team; restoring earlier lets
+// campaign sync re-stamp the original hostile team onto the new actor.
+bool g_deferred_ai_squad_team_active = false;
 std::array<std::int32_t, kMaxAiPlacements> g_deferred_ai_actors{};
 std::int32_t g_last_ai_actor_datum = -1;
 std::array<bool, kMaxAiPlacements> g_deferred_ai_weapon_done{};
@@ -1052,12 +1056,14 @@ bool parse_request(
         }
         else
         {
-            if (part_count >= 11 && (part_count - 5) % 3 == 0)
+            // One placement is valid (allegiance demo / single companion).
+            // Layout: squad,teamAddr,teamVal,(ref,pos,var)*N,charRef,variant[,weapon]
+            if (part_count >= 8 && (part_count - 5) % 3 == 0)
             {
                 request.ai_placement_count = static_cast<std::uint16_t>(
                     (part_count - 5) / 3);
             }
-            else if (part_count >= 12 && (part_count - 6) % 3 == 0)
+            else if (part_count >= 9 && (part_count - 6) % 3 == 0)
             {
                 request.ai_placement_count = static_cast<std::uint16_t>(
                     (part_count - 6) / 3);
@@ -1066,14 +1072,14 @@ bool parse_request(
             else
             {
                 error =
-                    "The AI team payload must contain between two and five placements.";
+                    "The AI team payload must contain between one and five placements.";
                 return false;
             }
-            if (request.ai_placement_count < 2 ||
+            if (request.ai_placement_count < 1 ||
                 request.ai_placement_count > kMaxAiPlacements)
             {
                 error =
-                    "The AI team payload must contain between two and five placements.";
+                    "The AI team payload must contain between one and five placements.";
                 return false;
             }
         }
@@ -3899,6 +3905,10 @@ bool finalize_deferred_ai(
     std::uint8_t* module,
     const SpawnRequest& request,
     std::string& error);
+bool restamp_deferred_ai_teams(
+    std::uint8_t* module,
+    const SpawnRequest& request,
+    std::string& error);
 
 DWORD invoke_actor_new_direct(
     const SpawnRequest* request,
@@ -4176,6 +4186,49 @@ bool configure_actor_as_player_companion(
         *error = "The game did not retain the companion team.";
         return false;
     }
+
+    // Targeting consults the per-object allegiance table; unit-team alone is
+    // not enough when the actor was created from a hostile borrowed squad.
+    try
+    {
+        ObjectAllegianceEntry* entries = resolve_object_allegiances(module);
+        ObjectAllegianceEntry* matching = std::find_if(
+            entries,
+            entries + kObjectAllegianceEntryCount,
+            [&](const ObjectAllegianceEntry& entry)
+            {
+                return entry.object_datum == unit_datum;
+            });
+        ObjectAllegianceEntry* target = matching;
+        if (target == entries + kObjectAllegianceEntryCount)
+        {
+            target = std::find_if(
+                entries,
+                entries + kObjectAllegianceEntryCount,
+                [](const ObjectAllegianceEntry& entry)
+                {
+                    return entry.object_datum == -1;
+                });
+        }
+        if (target == entries + kObjectAllegianceEntryCount)
+        {
+            *error =
+                "All 16 object-specific allegiance override slots are in use.";
+            return false;
+        }
+        target->object_datum = unit_datum;
+        target->team = team;
+        if (target->object_datum != unit_datum || target->team != team)
+        {
+            *error = "The game did not retain the companion allegiance override.";
+            return false;
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        *error = exception.what();
+        return false;
+    }
     return true;
 }
 
@@ -4343,16 +4396,17 @@ bool apply_unit_campaign_team(
     return true;
 }
 
-bool pacify_actor_after_team_change(
+bool clear_actor_player_combat_targets(
     std::uint8_t* module,
     std::int32_t actor_datum,
     std::int32_t player_unit_datum,
     int* cleared_targets,
-    int* cleared_objective_slots,
     const char** error)
 {
     *cleared_targets = 0;
-    *cleared_objective_slots = 0;
+    if (player_unit_datum == -1)
+        return true;
+
     void* thread_globals = try_resolve_game_thread_globals(module);
     if (!thread_globals)
     {
@@ -4397,57 +4451,21 @@ bool pacify_actor_after_team_change(
         return false;
     }
 
-    if (player_unit_datum != -1)
-    {
-        for (std::size_t offset = 0;
-             offset + sizeof(std::int32_t) <= kActorRecordSize;
-             offset += sizeof(std::int32_t))
-        {
-            if (offset == kActorUnitDatumOffset)
-                continue;
-            std::int32_t value = -1;
-            std::memcpy(&value, actor_record + offset, sizeof(value));
-            if (value != player_unit_datum)
-                continue;
-            const std::int32_t cleared = -1;
-            std::memcpy(actor_record + offset, &cleared, sizeof(cleared));
-            ++(*cleared_targets);
-        }
-    }
-
-    for (std::size_t offset = 0x40; offset < 0x180; ++offset)
-    {
-        const std::uint8_t status = actor_record[offset];
-        if (status >= 4 && status <= 9)
-            actor_record[offset] = 1;
-    }
-
-    // Blank plausible objective/task index pairs (NONE = -1).
-    constexpr std::int16_t kNone = -1;
-    constexpr int kMaxClearedPairs = 8;
+    // Only exact matches of the player unit datum. Never rewrite status /
+    // objective bytes; those blind heuristics previously froze the game.
     for (std::size_t offset = 0;
-         offset + sizeof(std::int16_t) * 2 <= kActorRecordSize &&
-         *cleared_objective_slots < kMaxClearedPairs;
-         offset += sizeof(std::int16_t))
+         offset + sizeof(std::int32_t) <= kActorRecordSize;
+         offset += sizeof(std::int32_t))
     {
-        std::int16_t first = -1;
-        std::int16_t second = -1;
-        std::memcpy(&first, actor_record + offset, sizeof(first));
-        std::memcpy(
-            &second,
-            actor_record + offset + sizeof(std::int16_t),
-            sizeof(second));
-        if (first < 0 || first > 512 || second < 0 || second > 64)
+        if (offset == kActorUnitDatumOffset)
             continue;
-        if (first == 0 && second == 0)
+        std::int32_t value = -1;
+        std::memcpy(&value, actor_record + offset, sizeof(value));
+        if (value != player_unit_datum)
             continue;
-        std::memcpy(actor_record + offset, &kNone, sizeof(kNone));
-        std::memcpy(
-            actor_record + offset + sizeof(std::int16_t),
-            &kNone,
-            sizeof(kNone));
-        ++(*cleared_objective_slots);
-        offset += sizeof(std::int16_t);
+        const std::int32_t cleared = -1;
+        std::memcpy(actor_record + offset, &cleared, sizeof(cleared));
+        ++(*cleared_targets);
     }
     return true;
 }
@@ -4531,21 +4549,37 @@ std::string process_object_team(const SpawnRequest& request)
                 : "Could not apply the campaign team to the unit.");
     }
 
-    // Do not scan/rewrite actor combat or objective/task bytes here. Blind
-    // heuristics previously corrupted live actor state and froze the game.
-    // Team + per-object allegiance is the supported allegiance path.
-    (void)actor_datum;
-    (void)request.ally_player_unit;
+    // Clear only exact player-unit combat aim slots. Do not scrub objective /
+    // task / status bytes; those heuristics previously froze the game.
+    int cleared_targets = 0;
+    if (actor_datum != -1 && request.ally_player_unit != -1)
+    {
+        const char* clear_error = nullptr;
+        if (!clear_actor_player_combat_targets(
+                module,
+                actor_datum,
+                request.ally_player_unit,
+                &cleared_targets,
+                &clear_error))
+        {
+            throw std::runtime_error(
+                clear_error != nullptr
+                    ? clear_error
+                    : "Could not clear combat aim at the player.");
+        }
+    }
 
-    char message[192]{};
+    char message[220]{};
     std::snprintf(
         message,
         sizeof(message),
         "unit=0x%08X\nactor=0x%08X\nteam=%d\n"
+        "cleared_combat=%d\n"
         "method=ai_object_set_team+allegiance_table",
         static_cast<std::uint32_t>(unit_datum),
         static_cast<std::uint32_t>(actor_datum),
-        static_cast<int>(request.player_team));
+        static_cast<int>(request.player_team),
+        cleared_targets);
     return message;
 }
 
@@ -4612,12 +4646,39 @@ bool finalize_deferred_ai(
         // world pickup and attempt to attach it after the actor is alive.
         g_deferred_ai_weapon_done[index] = true;
 
-        // Friendly actors already inherit the temporarily-patched scenario
-        // squad team. Fireteam registration below is the engine-owned follow
-        // mechanism; forcing a separate per-unit AI object state is both
-        // redundant and not consistently available for freshly-created actors.
-        if (request.ai_follow_player)
+        // Birth-time squad team patch is necessary but not sufficient: also
+        // mirror the intended campaign team onto the live unit + allegiance
+        // table once the unit object exists. Skipping this left actors with a
+        // correct squad birth team that later object_team edits could not
+        // fully reverse for combat disposition.
+        if (!g_deferred_ai_companion_done[index])
+        {
+            if (request.ai_follow_player)
+            {
+                if (!configure_actor_as_player_companion(
+                        module,
+                        actor_datum,
+                        request.unit_datum,
+                        &actor_error))
+                {
+                    error = actor_error;
+                    return false;
+                }
+            }
+            else if (request.ai_team_address != 0)
+            {
+                if (!apply_unit_campaign_team(
+                        module,
+                        unit_datum,
+                        static_cast<std::int8_t>(request.ai_team_value),
+                        &actor_error))
+                {
+                    error = actor_error;
+                    return false;
+                }
+            }
             g_deferred_ai_companion_done[index] = true;
+        }
     }
 
     if (request.ai_follow_player && !g_deferred_ai_fireteam_done)
@@ -4661,11 +4722,127 @@ bool finalize_deferred_ai(
     return true;
 }
 
+bool restamp_deferred_ai_teams(
+    std::uint8_t* module,
+    const SpawnRequest& request,
+    std::string& error)
+{
+    // Ordinary single-actor "ai" spawns have no team override to preserve.
+    if (request.ai_team_address == 0 && !request.ai_follow_player)
+        return true;
+
+    for (std::size_t index = 0;
+         index < request.ai_placement_count;
+         ++index)
+    {
+        const std::int32_t actor_datum = g_deferred_ai_actors[index];
+        if (actor_datum == -1)
+            continue;
+
+        const char* actor_error = "Could not re-stamp the actor campaign team.";
+        if (request.ai_follow_player)
+        {
+            if (!configure_actor_as_player_companion(
+                    module,
+                    actor_datum,
+                    request.unit_datum,
+                    &actor_error))
+            {
+                error = actor_error;
+                return false;
+            }
+            continue;
+        }
+
+        std::int32_t unit_datum = -1;
+        if (!resolve_actor_unit_datum(
+                module,
+                actor_datum,
+                &unit_datum,
+                &actor_error))
+        {
+            error = actor_error;
+            return false;
+        }
+        if (!apply_unit_campaign_team(
+                module,
+                unit_datum,
+                static_cast<std::int8_t>(request.ai_team_value),
+                &actor_error))
+        {
+            error = actor_error;
+            return false;
+        }
+        if (request.ally_player_unit != -1)
+        {
+            int cleared_targets = 0;
+            if (!clear_actor_player_combat_targets(
+                    module,
+                    actor_datum,
+                    request.ally_player_unit,
+                    &cleared_targets,
+                    &actor_error))
+            {
+                error = actor_error;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool restore_deferred_ai_squad_team(std::string& error)
+{
+    if (!g_deferred_ai_squad_team_active)
+        return true;
+    if (g_pending_request.ai_team_address == 0)
+    {
+        g_deferred_ai_squad_team_active = false;
+        return true;
+    }
+    if (!writable_range(g_pending_request.ai_team_address, 2))
+    {
+        error =
+            "AI placement was submitted, but the borrowed scenario team moved "
+            "before it could be restored.";
+        return false;
+    }
+    DWORD exception_code = 0;
+    __try
+    {
+        std::memcpy(
+            reinterpret_cast<void*>(g_pending_request.ai_team_address),
+            g_deferred_ai_team.data(),
+            g_deferred_ai_team.size());
+    }
+    __except ((
+        exception_code =
+            GetExceptionInformation()->ExceptionRecord->ExceptionCode,
+        EXCEPTION_EXECUTE_HANDLER))
+    {
+    }
+    if (exception_code != 0)
+    {
+        char message[160]{};
+        std::snprintf(
+            message,
+            sizeof(message),
+            "AI placement was submitted, but restoring its scenario team "
+            "raised Windows exception 0x%08X.",
+            static_cast<unsigned>(exception_code));
+        error = message;
+        return false;
+    }
+    g_deferred_ai_squad_team_active = false;
+    return true;
+}
+
 bool restore_deferred_ai_patch(std::string& error)
 {
     if (!g_deferred_ai_patch_active)
     {
-        return true;
+        // actor_new path may still be holding the squad-team patch.
+        return restore_deferred_ai_squad_team(error);
     }
     for (std::size_t index = 0;
          index < g_pending_request.ai_placement_count;
@@ -4744,6 +4921,7 @@ bool restore_deferred_ai_patch(std::string& error)
         return false;
     }
     g_deferred_ai_patch_active = false;
+    g_deferred_ai_squad_team_active = false;
     return true;
 }
 
@@ -4762,6 +4940,29 @@ std::string spawn_ai(const SpawnRequest& request)
         throw std::runtime_error(validation_error);
     }
     install_ai_spawn_hooks(module);
+
+    // actor_new inherits the live scenario squad team at birth. Keep that
+    // override active until deferred finalize mirrors it onto the live unit +
+    // allegiance table; restoring immediately after actor_new lets campaign
+    // sync re-apply the original hostile squad team (spawn-then-change).
+    if (request.ai_team_address != 0)
+    {
+        if (!writable_range(request.ai_team_address, g_deferred_ai_team.size()))
+        {
+            throw std::runtime_error(
+                "The borrowed scenario squad team is not writable.");
+        }
+        std::memcpy(
+            g_deferred_ai_team.data(),
+            reinterpret_cast<const void*>(request.ai_team_address),
+            g_deferred_ai_team.size());
+        std::memcpy(
+            reinterpret_cast<void*>(request.ai_team_address),
+            &request.ai_team_value,
+            sizeof(request.ai_team_value));
+        g_deferred_ai_squad_team_active = true;
+    }
+
     std::array<std::int32_t, kMaxAiPlacements> created_actors{};
     created_actors.fill(-1);
     std::uintptr_t exception_address = 0;
@@ -4769,20 +4970,33 @@ std::string spawn_ai(const SpawnRequest& request)
         &request,
         &created_actors,
         &exception_address);
+    auto restore_team_on_failure = [&]()
+    {
+        if (!g_deferred_ai_squad_team_active)
+            return;
+        std::memcpy(
+            reinterpret_cast<void*>(request.ai_team_address),
+            g_deferred_ai_team.data(),
+            g_deferred_ai_team.size());
+        g_deferred_ai_squad_team_active = false;
+    };
     if (exception_code == ERROR_NOT_FOUND)
     {
+        restore_team_on_failure();
         throw std::runtime_error(
             "The engine did not build an authored AI starting location for the "
             "selected hostile squad.");
     }
     if (exception_code == ERROR_INVALID_STATE)
     {
+        restore_team_on_failure();
         throw std::runtime_error(
             "The actor was created, but the game rejected its friendly "
             "companion state. " + g_ai_creation_diagnostic);
     }
     if (exception_code != 0)
     {
+        restore_team_on_failure();
         char message[192]{};
         std::snprintf(
             message,
@@ -4801,6 +5015,7 @@ std::string spawn_ai(const SpawnRequest& request)
     {
         if (created_actors[index] == -1)
         {
+            restore_team_on_failure();
             throw std::runtime_error(
                 "Native actor_new rejected the selected character or starting "
                 "location. " + g_ai_creation_diagnostic);
@@ -5464,6 +5679,10 @@ void* hooked_simulation_context()
     }
     if (context != nullptr && module != nullptr)
     {
+        // Player-team overrides still need a tick maintain (campaign sync
+        // republishes the controlled body). AI born on a matching scaffold
+        // does not  per-object maintain was removed once friendly-squad
+        // borrowing made birth team stick without it.
         maintain_player_team(module);
     }
 
@@ -5564,7 +5783,23 @@ void* hooked_simulation_context()
                     InterlockedExchange(&g_pending_state, 3);
                     return context;
                 }
+                // Always restore borrowed scenario fields (including squad
+                // team held for actor_new) after finalize succeeds or fails.
                 std::string restore_error;
+                const bool restored =
+                    restore_deferred_ai_patch(restore_error);
+                // Restoring the scaffold squad team lets active encounters
+                // re-sync live actors to the original hostile team. That is
+                // why friendlies worked in quiet zones but turned enemy in
+                // combat zones. Re-stamp unit team + allegiance after restore.
+                std::string restamp_error;
+                const bool restamped =
+                    finalization_error.empty() &&
+                    restored &&
+                    restamp_deferred_ai_teams(
+                        module,
+                        g_pending_request,
+                        restamp_error);
                 if (!finalization_error.empty())
                 {
                     write_result(
@@ -5574,21 +5809,31 @@ void* hooked_simulation_context()
                         "Created the requested actors, but their deferred "
                         "companion setup failed: " + finalization_error);
                 }
-                else if (restore_deferred_ai_patch(restore_error))
-                {
-                    write_result(
-                        g_pending_result_path,
-                        g_pending_request.id,
-                        "submitted",
-                        g_deferred_result_message);
-                }
-                else
+                else if (!restored)
                 {
                     write_result(
                         g_pending_result_path,
                         g_pending_request.id,
                         "error",
                         restore_error);
+                }
+                else if (!restamped)
+                {
+                    write_result(
+                        g_pending_result_path,
+                        g_pending_request.id,
+                        "error",
+                        "Created the requested actors, but re-stamping their "
+                        "campaign team after scaffold restore failed: " +
+                            restamp_error);
+                }
+                else
+                {
+                    write_result(
+                        g_pending_result_path,
+                        g_pending_request.id,
+                        "submitted",
+                        g_deferred_result_message);
                 }
             }
             InterlockedExchange(&g_pending_state, 0);

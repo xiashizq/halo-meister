@@ -135,6 +135,7 @@ public sealed partial class MainWindow : Window
         CustomizationNavItem.Content = L.Get("shell.customization");
         ConfigNavItem.Content = L.Get("shell.game_settings");
         GameSavesNavItem.Content = L.Get("shell.game_saves");
+        BuiltinModNavItem.Content = L.Get("shell.builtin_mod");
         LiveToolsNavItem.Content = L.Get("shell.live_tools");
         GameplayNavItem.Content = L.Get("shell.gameplay");
         SpawnEquipNavItem.Content = L.Get("shell.spawn_equip");
@@ -350,6 +351,7 @@ public sealed partial class MainWindow : Window
         "raw" => typeof(RawPage),
         "config" => typeof(ConfigPage),
         "game-saves" => typeof(GameSavesPage),
+        "builtin-mod" => typeof(BuiltinModPage),
         "live-gameplay" or "live-spawn" or "live-player" or "live-world" => typeof(LiveToolsHubPage),
         "runtime-tags" => typeof(RuntimeTagsPage),
         "scripting" => typeof(ScriptingPage),

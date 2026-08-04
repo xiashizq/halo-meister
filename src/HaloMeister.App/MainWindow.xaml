@@ -168,6 +168,7 @@
                         <NavigationViewItem x:Name="CustomizationNavItem" Content="{i18n:Loc Key='shell.customization'}" Icon="Edit" Tag="customization" />
                         <NavigationViewItem x:Name="ConfigNavItem" Content="{i18n:Loc Key='shell.game_settings'}" Icon="Setting" Tag="config" />
                         <NavigationViewItem x:Name="GameSavesNavItem" Content="{i18n:Loc Key='shell.game_saves'}" Icon="SaveLocal" Tag="game-saves" />
+                        <NavigationViewItem x:Name="BuiltinModNavItem" Content="{i18n:Loc Key='shell.builtin_mod'}" Icon="Library" Tag="builtin-mod" />
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
 

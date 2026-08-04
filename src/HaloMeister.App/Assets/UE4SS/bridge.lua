@@ -1,5 +1,5 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 96
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 102
 do
     local hm_ok, hm_error = pcall(function()
         local UEHelpers = require("UEHelpers")
@@ -11,7 +11,7 @@ do
         -- Keep in step with the VERSION marker above; Halo Meister compares the
         -- version reported here against the copy it ships so it can tell you when
         -- the game is still running a stale bridge.
-        local bridge_version = 96
+        local bridge_version = 102
         -- User scripts execute in a dedicated environment. Expose the UE4SS
         -- helper module there while retaining normal access to global UE4SS
         -- APIs and preserving the historical global assignment behavior.
