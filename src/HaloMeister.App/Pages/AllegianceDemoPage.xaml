@@ -212,43 +212,28 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <Grid ColumnSpacing="8">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock
+                                                FontWeight="SemiBold"
+                                                Text="{Binding DisplayName}"
+                                                TextTrimming="CharacterEllipsis"
+                                                ToolTipService.ToolTip="{Binding DisplayName}" />
+                                            <TextBlock
+                                                FontSize="11"
+                                                Opacity="0.62"
+                                                Text="{Binding CategoryLabel}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <Grid Grid.Row="1" ColumnSpacing="8">
                                             <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="108" />
+                                                <ColumnDefinition Width="88" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Spacing="2">
-                                                <TextBlock
-                                                    FontWeight="SemiBold"
-                                                    Text="{Binding DisplayName}"
-                                                    TextTrimming="CharacterEllipsis"
-                                                    ToolTipService.ToolTip="{Binding DisplayName}" />
-                                                <TextBlock
-                                                    FontSize="11"
-                                                    Opacity="0.62"
-                                                    Text="{Binding CategoryLabel}"
-                                                    TextTrimming="CharacterEllipsis" />
-                                            </StackPanel>
-                                            <Button
-                                                Grid.Column="1"
-                                                Width="36"
-                                                Height="32"
-                                                Padding="0"
-                                                VerticalAlignment="Top"
-                                                Click="OnRemoveRow"
-                                                ToolTipService.ToolTip="{i18n:Loc Key='allegiance_demo.remove_row'}">
-                                                <SymbolIcon Symbol="Delete" />
-                                            </Button>
-                                        </Grid>
-                                        <Grid Grid.Row="1" ColumnSpacing="8">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="88" />
-                                                <ColumnDefinition Width="1.2*" />
-                                            </Grid.ColumnDefinitions>
                                             <ComboBox
+                                                Width="108"
                                                 Header="{i18n:Loc Key='allegiance_demo.choose_team'}"
-                                                HorizontalAlignment="Stretch"
                                                 DisplayMemberPath="Label"
                                                 ItemsSource="{Binding TeamChoices}"
                                                 SelectedItem="{Binding SelectedTeam, Mode=TwoWay}" />
@@ -268,6 +253,17 @@
                                                 DisplayMemberPath="Label"
                                                 ItemsSource="{Binding WeaponChoices}"
                                                 SelectedItem="{Binding SelectedWeapon, Mode=TwoWay}" />
+                                            <Button
+                                                Grid.Column="3"
+                                                Width="36"
+                                                Height="32"
+                                                Margin="0,0,0,2"
+                                                Padding="0"
+                                                VerticalAlignment="Bottom"
+                                                Click="OnRemoveRow"
+                                                ToolTipService.ToolTip="{i18n:Loc Key='allegiance_demo.remove_row'}">
+                                                <SymbolIcon Symbol="Delete" />
+                                            </Button>
                                         </Grid>
                                     </Grid>
                                 </DataTemplate>

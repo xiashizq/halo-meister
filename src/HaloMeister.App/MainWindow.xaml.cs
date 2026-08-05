@@ -162,7 +162,7 @@ public sealed partial class MainWindow : Window
         RemoteNavItem.Content = L.Get("shell.phone_remote");
         SetupNavItem.Content = L.Get("shell.setup");
         HelpNavItem.Content = L.Get("shell.help");
-        CommunityNavItem.Content = L.Get("shell.community_links");
+        // CommunityNavItem.Content = L.Get("shell.community_links");
     }
 
     private void UpdateChrome()
@@ -426,7 +426,7 @@ public sealed partial class MainWindow : Window
             "phone-remote" => RemoteNavItem,
             "setup" => SetupNavItem,
             "help" => HelpNavItem,
-            "community" => CommunityNavItem,
+            // "community" => CommunityNavItem,
             _ => null,
         };
 

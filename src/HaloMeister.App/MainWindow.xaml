@@ -210,7 +210,9 @@
                 <NavigationViewItem x:Name="RemoteNavItem" Content="{i18n:Loc Key='shell.phone_remote'}" Icon="World" Tag="phone-remote" />
                 <NavigationViewItem x:Name="SetupNavItem" Content="{i18n:Loc Key='shell.setup'}" Icon="Setting" Tag="setup" />
                 <NavigationViewItem x:Name="HelpNavItem" Content="{i18n:Loc Key='shell.help'}" Icon="Help" Tag="help" />
+                <!-- Temporarily hidden: community & links menu entry
                 <NavigationViewItem x:Name="CommunityNavItem" Content="{i18n:Loc Key='shell.community_links'}" Icon="People" Tag="community" />
+                -->
             </NavigationView.FooterMenuItems>
 
             <Frame x:Name="ContentFrame" />
