@@ -4,154 +4,334 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
-    <Grid Padding="24,24,24,16" RowSpacing="14">
+    <Grid Padding="24,20,24,16" RowSpacing="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Spacing="5">
-            <TextBlock
-                Style="{ThemeResource TitleTextBlockStyle}"
-                Text="{i18n:Loc Key='allegiance_demo.title'}" />
-            <TextBlock
-                Style="{StaticResource LivePageDescriptionStyle}"
-                Text="{i18n:Loc Key='allegiance_demo.description'}" />
-        </StackPanel>
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock
+                    Style="{ThemeResource TitleTextBlockStyle}"
+                    Text="{i18n:Loc Key='allegiance_demo.title'}" />
+                <TextBlock
+                    Style="{StaticResource CompactSafetyTextStyle}"
+                    Text="{i18n:Loc Key='allegiance_demo.description'}"
+                    TextTrimming="CharacterEllipsis"
+                    MaxLines="1" />
+            </StackPanel>
+            <StackPanel
+                Grid.Column="1"
+                Orientation="Horizontal"
+                Spacing="8"
+                VerticalAlignment="Center">
+                <TextBlock
+                    x:Name="BridgeStatusText"
+                    MaxWidth="260"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource CompactSafetyTextStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Width="18"
+                    Height="18"
+                    IsActive="False" />
+            </StackPanel>
+            <Button
+                x:Name="ScanButton"
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                Click="OnScan"
+                Content="{i18n:Loc Key='allegiance_demo.scan'}"
+                Style="{StaticResource AccentButtonStyle}" />
+        </Grid>
 
-        <StackPanel Grid.Row="1" Spacing="8">
-            <InfoBar
-                x:Name="ModRequiredBanner"
-                IsClosable="False"
-                IsOpen="False"
-                Severity="Warning"
-                Title="{i18n:Loc Key='allegiance_demo.mod_required_title'}"
-                Message="{i18n:Loc Key='allegiance_demo.mod_required_body'}" />
-            <Border Style="{StaticResource LiveToolInsetStyle}">
-                <Grid ColumnSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        x:Name="BridgeStatusText"
-                        VerticalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        TextWrapping="Wrap" />
-                    <ProgressRing
-                        x:Name="BusyRing"
-                        Grid.Column="1"
-                        Width="20"
-                        Height="20"
-                        IsActive="False" />
+        <InfoBar
+            x:Name="ModRequiredBanner"
+            Grid.Row="1"
+            IsClosable="False"
+            IsOpen="False"
+            Severity="Warning"
+            Title="{i18n:Loc Key='allegiance_demo.mod_required_title'}"
+            Message="{i18n:Loc Key='allegiance_demo.mod_required_body'}">
+            <InfoBar.ActionButton>
+                <Button
+                    Click="OnOpenBuiltinMod"
+                    Content="{i18n:Loc Key='allegiance_demo.open_builtin_mod'}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <Grid
+            x:Name="WorkspacePanel"
+            Grid.Row="2"
+            ColumnSpacing="14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.1*" MinWidth="280" />
+                <ColumnDefinition Width="1.4*" MinWidth="360" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: catalog -->
+            <Border Style="{StaticResource LiveToolCardStyle}">
+                <Grid RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Text="{i18n:Loc Key='allegiance_demo.catalog_title'}" />
+                        <TextBox
+                            x:Name="CharacterFilterBox"
+                            Grid.Column="1"
+                            PlaceholderText="{i18n:Loc Key='allegiance_demo.filter_characters'}"
+                            TextChanged="OnCharacterFilterChanged" />
+                    </Grid>
+
+                    <ListView
+                        x:Name="CharacterList"
+                        Grid.Row="1"
+                        SelectionMode="None">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="8,6" />
+                                <Setter Property="MinHeight" Value="0" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock
+                                            FontWeight="SemiBold"
+                                            Text="{Binding DisplayName}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{Binding DisplayName}" />
+                                        <TextBlock
+                                            FontSize="11"
+                                            Opacity="0.62"
+                                            Text="{Binding Category}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{Binding Category}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        MinWidth="64"
+                                        Padding="12,5"
+                                        VerticalAlignment="Center"
+                                        Click="OnAddCharacterRow"
+                                        Content="{i18n:Loc Key='allegiance_demo.add'}"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
                 </Grid>
             </Border>
-        </StackPanel>
 
-        <ScrollViewer
-            Grid.Row="2"
-            HorizontalScrollBarVisibility="Disabled"
-            VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="14">
-                <Border Style="{StaticResource LiveToolCardStyle}">
-                    <StackPanel Spacing="10">
-                        <TextBlock
-                            FontSize="16"
-                            FontWeight="SemiBold"
-                            Text="{i18n:Loc Key='allegiance_demo.step_unit_team'}" />
-                        <TextBlock
-                            Opacity="0.72"
-                            Text="{i18n:Loc Key='allegiance_demo.step_unit_team_hint'}"
-                            TextWrapping="Wrap" />
-                        <ComboBox
-                            x:Name="TeamComboBox"
-                            HorizontalAlignment="Stretch"
-                            DisplayMemberPath="Label"
-                            PlaceholderText="{i18n:Loc Key='allegiance_demo.choose_team'}" />
-                        <Button
-                            x:Name="ApplyTeamButton"
-                            Click="OnApplyTeam"
-                            Content="{i18n:Loc Key='allegiance_demo.apply_object_team'}"
-                            IsEnabled="False" />
-                    </StackPanel>
-                </Border>
+            <!-- Right: roster -->
+            <Border Grid.Column="1" Style="{StaticResource LiveToolCardStyle}">
+                <Grid RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                <Border Style="{StaticResource LiveToolCardStyle}">
-                    <StackPanel Spacing="10">
-                        <TextBlock
-                            FontSize="16"
-                            FontWeight="SemiBold"
-                            Text="{i18n:Loc Key='allegiance_demo.step_spawn'}" />
-                        <TextBlock
-                            Opacity="0.72"
-                            Text="{i18n:Loc Key='allegiance_demo.step_spawn_hint'}"
-                            TextWrapping="Wrap" />
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ComboBox
-                                x:Name="CharacterComboBox"
-                                HorizontalAlignment="Stretch"
-                                DisplayMemberPath="DisplayName"
-                                PlaceholderText="{i18n:Loc Key='allegiance_demo.choose_character'}"
-                                SelectionChanged="OnCharacterChanged" />
-                            <Button
-                                x:Name="ScanButton"
-                                Grid.Column="1"
-                                Click="OnScan"
-                                Content="{i18n:Loc Key='allegiance_demo.scan'}" />
-                            <Button
-                                x:Name="SpawnButton"
-                                Grid.Column="2"
-                                Click="OnSpawn"
-                                Content="{i18n:Loc Key='allegiance_demo.spawn_ai'}"
-                                IsEnabled="False"
-                                Style="{StaticResource AccentButtonStyle}" />
-                        </Grid>
-                        <TextBlock
-                            x:Name="LastActorText"
-                            FontFamily="Consolas"
-                            Opacity="0.78"
-                            Text="{i18n:Loc Key='allegiance_demo.no_actor_yet'}"
-                            TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource LiveToolCardStyle}">
-                    <StackPanel Spacing="10">
-                        <TextBlock
-                            FontSize="16"
-                            FontWeight="SemiBold"
-                            Text="{i18n:Loc Key='allegiance_demo.step_global'}" />
-                        <TextBlock
-                            Opacity="0.72"
-                            Text="{i18n:Loc Key='allegiance_demo.step_global_hint'}"
-                            TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button
-                                x:Name="AllyButton"
-                                Click="OnAlly"
-                                Content="{i18n:Loc Key='allegiance_demo.hs_allegiance'}"
-                                IsEnabled="False" />
-                            <Button
-                                x:Name="BreakButton"
-                                Click="OnBreak"
-                                Content="{i18n:Loc Key='allegiance_demo.hs_break'}"
-                                IsEnabled="False" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock
+                                FontWeight="SemiBold"
+                                Text="{i18n:Loc Key='allegiance_demo.roster_title'}" />
+                            <TextBlock
+                                x:Name="RosterSummaryText"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource CompactSafetyTextStyle}" />
                         </StackPanel>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
+                        <Button
+                            x:Name="ClearSquadButton"
+                            Grid.Column="1"
+                            Click="OnClearSquad"
+                            Content="{i18n:Loc Key='allegiance_demo.clear_squad'}"
+                            IsEnabled="False" />
+                        <Button
+                            x:Name="SpawnSquadButton"
+                            Grid.Column="2"
+                            MinWidth="132"
+                            Click="OnSpawnSquad"
+                            IsEnabled="False"
+                            Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <SymbolIcon Symbol="Play" />
+                                <TextBlock Text="{i18n:Loc Key='allegiance_demo.spawn_squad'}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <ListView
+                            x:Name="SquadList"
+                            SelectionMode="None">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="8,8" />
+                                    <Setter Property="MinHeight" Value="0" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid RowSpacing="8">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="2">
+                                                <TextBlock
+                                                    FontWeight="SemiBold"
+                                                    Text="{Binding DisplayName}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    ToolTipService.ToolTip="{Binding DisplayName}" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    Text="{Binding CategoryLabel}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <Button
+                                                Grid.Column="1"
+                                                Width="36"
+                                                Height="32"
+                                                Padding="0"
+                                                VerticalAlignment="Top"
+                                                Click="OnRemoveRow"
+                                                ToolTipService.ToolTip="{i18n:Loc Key='allegiance_demo.remove_row'}">
+                                                <SymbolIcon Symbol="Delete" />
+                                            </Button>
+                                        </Grid>
+                                        <Grid Grid.Row="1" ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="88" />
+                                                <ColumnDefinition Width="1.2*" />
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox
+                                                Header="{i18n:Loc Key='allegiance_demo.choose_team'}"
+                                                HorizontalAlignment="Stretch"
+                                                DisplayMemberPath="Label"
+                                                ItemsSource="{Binding TeamChoices}"
+                                                SelectedItem="{Binding SelectedTeam, Mode=TwoWay}" />
+                                            <NumberBox
+                                                Grid.Column="1"
+                                                Header="{i18n:Loc Key='allegiance_demo.quantity'}"
+                                                LargeChange="5"
+                                                Maximum="50"
+                                                Minimum="1"
+                                                SmallChange="1"
+                                                SpinButtonPlacementMode="Compact"
+                                                Value="{Binding QuantityValue, Mode=TwoWay}" />
+                                            <ComboBox
+                                                Grid.Column="2"
+                                                Header="{i18n:Loc Key='allegiance_demo.weapon'}"
+                                                HorizontalAlignment="Stretch"
+                                                DisplayMemberPath="Label"
+                                                ItemsSource="{Binding WeaponChoices}"
+                                                SelectedItem="{Binding SelectedWeapon, Mode=TwoWay}" />
+                                        </Grid>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <Border
+                            x:Name="EmptySquadPanel"
+                            Style="{StaticResource LiveToolInsetStyle}"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Stretch"
+                            Margin="20">
+                            <TextBlock
+                                Style="{StaticResource CompactSafetyTextStyle}"
+                                Text="{i18n:Loc Key='allegiance_demo.no_squad_members'}"
+                                TextAlignment="Center" />
+                        </Border>
+                    </Grid>
+
+                    <TextBlock
+                        x:Name="SpawnSummaryText"
+                        Grid.Row="2"
+                        Style="{StaticResource CompactSafetyTextStyle}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Expander
+            x:Name="AdvancedExpander"
+            Grid.Row="3"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Header="{i18n:Loc Key='allegiance_demo.advanced_reinforce'}">
+            <Grid ColumnSpacing="10" Padding="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ComboBox
+                    x:Name="ApplyTeamComboBox"
+                    HorizontalAlignment="Stretch"
+                    DisplayMemberPath="Label"
+                    PlaceholderText="{i18n:Loc Key='allegiance_demo.choose_team'}" />
+                <Button
+                    x:Name="ApplyTeamButton"
+                    Grid.Column="1"
+                    Click="OnApplyTeam"
+                    Content="{i18n:Loc Key='allegiance_demo.apply_object_team'}"
+                    IsEnabled="False" />
+                <TextBlock
+                    x:Name="LastActorText"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    FontFamily="Consolas"
+                    FontSize="12"
+                    Opacity="0.78"
+                    Text="{i18n:Loc Key='allegiance_demo.no_actor_yet'}"
+                    TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </Expander>
 
         <InfoBar
             x:Name="StatusBar"
-            Grid.Row="3"
+            Grid.Row="4"
             IsClosable="True"
             IsOpen="False" />
     </Grid>

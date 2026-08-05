@@ -11,6 +11,7 @@ public sealed partial class CheatGlobalsPage : Page
     private readonly PlayerModifiersService _modifiers =
         PlayerModifiersService.Current;
     private readonly PlayerTeamService _playerTeam = new();
+    private readonly AllegianceDemoService _globalAllegiance = new();
     private IReadOnlyList<CheatGlobalItem> _items = [];
     private IReadOnlyList<PlayerModifierItem> _modifierItems = [];
     private readonly Dictionary<string, bool> _loaded =
@@ -28,6 +29,14 @@ public sealed partial class CheatGlobalsPage : Page
     {
         InitializeComponent();
         PlayerTeamComboBox.ItemsSource = PlayerTeamService.Options;
+        // Global ai_allegiance pairs player with a concrete campaign team.
+        PlayerTeamOption[] globalTeams = PlayerTeamService.Options
+            .Where(option => option.Value > 0)
+            .ToArray();
+        GlobalAllegianceTeamComboBox.ItemsSource = globalTeams;
+        GlobalAllegianceTeamComboBox.SelectedItem = globalTeams.FirstOrDefault(
+            option => option.Value == AllegianceDemoService.HostileTeam)
+            ?? globalTeams.FirstOrDefault();
         UpdateBridgeStatus();
         UpdateButtons();
     }
@@ -208,6 +217,41 @@ public sealed partial class CheatGlobalsPage : Page
         });
     }
 
+    private async void OnGlobalAllegianceAlly(object sender, RoutedEventArgs e) =>
+        await SubmitGlobalAllegianceAsync(breakAllegiance: false);
+
+    private async void OnGlobalAllegianceBreak(object sender, RoutedEventArgs e) =>
+        await SubmitGlobalAllegianceAsync(breakAllegiance: true);
+
+    private async Task SubmitGlobalAllegianceAsync(bool breakAllegiance)
+    {
+        if (GlobalAllegianceTeamComboBox.SelectedItem is not PlayerTeamOption team)
+            return;
+        await RunBusy(async () =>
+        {
+            ScriptExecutionResult result = await _globalAllegiance.SubmitAllegianceAsync(
+                team.Value,
+                breakAllegiance);
+            string verb = breakAllegiance
+                ? L.Format(
+                    "cheat_globals.global_allegiance_break_ok",
+                    AllegianceDemoService.HaloScriptTeamName(team.Value))
+                : L.Format(
+                    "cheat_globals.global_allegiance_submit_ok",
+                    AllegianceDemoService.HaloScriptTeamName(team.Value));
+            if (result.Outcome == ScriptOutcome.Failed)
+            {
+                ShowStatus(result.Message, InfoBarSeverity.Error);
+                return;
+            }
+            ShowStatus(
+                $"{verb} {result.Message}",
+                result.Outcome == ScriptOutcome.Confirmed
+                    ? InfoBarSeverity.Success
+                    : InfoBarSeverity.Informational);
+        });
+    }
+
     private async void OnPlayerTeamChanged(
         object sender,
         SelectionChangedEventArgs e)
@@ -385,6 +429,11 @@ public sealed partial class CheatGlobalsPage : Page
         PlayerTeamComboBox.IsEnabled = ready && _teamState is not null;
         RestorePlayerTeamButton.IsEnabled =
             ready && _teamState?.HasSnapshot == true;
+        bool hasGlobalTeam =
+            GlobalAllegianceTeamComboBox.SelectedItem is PlayerTeamOption;
+        GlobalAllegianceTeamComboBox.IsEnabled = ready;
+        GlobalAllegianceAllyButton.IsEnabled = ready && hasGlobalTeam;
+        GlobalAllegianceBreakButton.IsEnabled = ready && hasGlobalTeam;
     }
 
     private void UpdateBridgeStatus()

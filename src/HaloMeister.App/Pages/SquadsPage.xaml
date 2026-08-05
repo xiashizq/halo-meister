@@ -16,19 +16,13 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel Spacing="4">
+            <StackPanel Spacing="4" VerticalAlignment="Center">
                 <TextBlock
                     Style="{ThemeResource TitleTextBlockStyle}"
                     Text="{i18n:Loc Key='squads.title'}" />
                 <TextBlock
                     Style="{StaticResource LivePageDescriptionStyle}"
                     Text="{i18n:Loc Key='squads.description'}" />
-                <TextBlock
-                    x:Name="ScenarioPathText"
-                    FontFamily="Consolas"
-                    FontSize="11"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextWrapping="Wrap" />
             </StackPanel>
             <Button
                 x:Name="RefreshButton"
@@ -92,8 +86,7 @@
                                 <StackPanel Padding="4,7" Spacing="3">
                                     <TextBlock FontWeight="SemiBold" Text="{Binding ListTitle}" />
                                     <TextBlock
-                                        FontFamily="Consolas"
-                                        FontSize="10"
+                                        FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Text="{Binding TeamDisplay}"
                                         TextTrimming="CharacterEllipsis" />
@@ -133,82 +126,89 @@
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
                     </StackPanel>
-                    <ScrollViewer
+
+                    <Grid
                         x:Name="SelectionDetails"
-                        Padding="24"
+                        Padding="20"
+                        RowSpacing="12"
                         Visibility="Collapsed">
-                        <StackPanel Spacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Spacing="6">
                             <TextBlock
                                 x:Name="SelectedNameText"
                                 Style="{ThemeResource SubtitleTextBlockStyle}" />
-                            <TextBlock
-                                x:Name="SelectedIndexText"
-                                FontFamily="Consolas"
-                                FontSize="11"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="FlagsText" TextWrapping="Wrap" />
                             <TextBlock x:Name="TeamText" />
-                            <TextBlock x:Name="ParentText" TextWrapping="Wrap" />
-                            <TextBlock x:Name="ZoneText" TextWrapping="Wrap" />
-                            <TextBlock x:Name="ObjectiveText" TextWrapping="Wrap" />
-                            <TextBlock x:Name="TaskText" />
-                            <TextBlock x:Name="FolderText" TextWrapping="Wrap" />
-                            <TextBlock x:Name="SpawnCountsText" />
+                        </StackPanel>
+
+                        <Grid Grid.Row="1" RowSpacing="8" MinHeight="280">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
                             <TextBlock
                                 x:Name="SpawnPointsHeaderText"
-                                Margin="0,4,0,0"
                                 FontWeight="SemiBold"
                                 Text="{i18n:Loc Key='squads.spawn_points_header'}"
                                 Visibility="Collapsed" />
                             <ListView
                                 x:Name="SpawnPointsList"
-                                MaxHeight="280"
-                                Margin="0,2,0,0"
+                                Grid.Row="1"
                                 IsItemClickEnabled="False"
                                 SelectionMode="None"
                                 Visibility="Collapsed">
                                 <ListView.ItemTemplate>
                                     <DataTemplate>
-                                        <TextBlock
-                                            Padding="0,2"
-                                            FontFamily="Consolas"
-                                            FontSize="11"
-                                            Text="{Binding Display}"
-                                            TextWrapping="Wrap" />
+                                        <Grid Padding="0,6" ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                Text="{Binding Display}"
+                                                TextWrapping="Wrap" />
+                                            <Button
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Click="OnTeleportToSpawnPoint"
+                                                Content="{i18n:Loc Key='squads.teleport'}"
+                                                Tag="{Binding}" />
+                                        </Grid>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>
                             <TextBlock
                                 x:Name="SpawnPointsEmptyText"
-                                Margin="0,2,0,0"
+                                Grid.Row="1"
+                                VerticalAlignment="Top"
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Text="{i18n:Loc Key='squads.spawn_points_empty'}"
                                 Visibility="Collapsed" />
-                            <StackPanel
-                                Margin="0,8,0,0"
-                                Orientation="Horizontal"
-                                Spacing="8">
-                                <Button
-                                    x:Name="PlaceButton"
-                                    Click="OnPlace"
-                                    Content="{i18n:Loc Key='squads.place'}"
-                                    IsEnabled="False"
-                                    Style="{StaticResource AccentButtonStyle}" />
-                                <Button
-                                    x:Name="EraseButton"
-                                    Click="OnErase"
-                                    Content="{i18n:Loc Key='squads.erase'}"
-                                    IsEnabled="False" />
-                            </StackPanel>
-                            <InfoBar
-                                IsClosable="False"
-                                IsOpen="True"
-                                Severity="Informational"
-                                Title="{i18n:Loc Key='squads.actions_title'}"
-                                Message="{i18n:Loc Key='squads.actions_message'}" />
+                        </Grid>
+
+                        <StackPanel
+                            Grid.Row="2"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <Button
+                                x:Name="PlaceButton"
+                                Click="OnPlace"
+                                Content="{i18n:Loc Key='squads.place'}"
+                                IsEnabled="False"
+                                Style="{StaticResource AccentButtonStyle}" />
+                            <Button
+                                x:Name="EraseButton"
+                                Click="OnErase"
+                                Content="{i18n:Loc Key='squads.erase'}"
+                                IsEnabled="False" />
                         </StackPanel>
-                    </ScrollViewer>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>
@@ -216,7 +216,7 @@
         <StackPanel Grid.Row="2" Spacing="8">
             <TextBlock
                 x:Name="ConnectionText"
-                FontSize="11"
+                FontSize="12"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             <InfoBar
                 x:Name="StatusBar"

@@ -4,23 +4,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
-    <Grid Padding="24,24,24,16" RowSpacing="14">
+    <Grid Padding="24,16,24,12" RowSpacing="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Spacing="5">
-            <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='cheat_globals.gameplay_modifiers'}" />
-            <TextBlock
-                Style="{StaticResource LivePageDescriptionStyle}"
-                Text="{i18n:Loc Key='cheat_globals.tune_the_current_offline_mission_with_foc_002796'}" />
-        </StackPanel>
-
-        <Border Grid.Row="1" Style="{StaticResource LiveToolInsetStyle}">
+        <Border Style="{StaticResource LiveToolInsetStyle}">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -40,7 +32,7 @@
             </Grid>
         </Border>
 
-        <Pivot Grid.Row="2">
+        <Pivot Grid.Row="1">
             <PivotItem Header="{i18n:Loc Key='cheat_globals.quick_cheats'}">
                 <ScrollViewer
                     x:Name="CheatsScrollViewer"
@@ -286,12 +278,54 @@
                                 Style="{StaticResource CompactSafetyTextStyle}"
                                 Text="{i18n:Loc Key='cheat_globals.allegiance_applies_only_to_the_current_pl_77e9dd'}" />
                         </Border>
+
+                        <Border Style="{StaticResource LiveToolCardStyle}">
+                            <StackPanel Spacing="18">
+                                <StackPanel Spacing="3">
+                                    <TextBlock
+                                        FontSize="18"
+                                        FontWeight="SemiBold"
+                                        Text="{i18n:Loc Key='cheat_globals.global_allegiance_title'}" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{i18n:Loc Key='cheat_globals.global_allegiance_hint'}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="280" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox
+                                        x:Name="GlobalAllegianceTeamComboBox"
+                                        HorizontalAlignment="Stretch"
+                                        DisplayMemberPath="Label"
+                                        IsEnabled="False"
+                                        PlaceholderText="{i18n:Loc Key='cheat_globals.global_allegiance_choose_team'}" />
+                                    <Button
+                                        x:Name="GlobalAllegianceAllyButton"
+                                        Grid.Column="1"
+                                        Click="OnGlobalAllegianceAlly"
+                                        Content="{i18n:Loc Key='cheat_globals.global_allegiance_submit'}"
+                                        IsEnabled="False" />
+                                    <Button
+                                        x:Name="GlobalAllegianceBreakButton"
+                                        Grid.Column="2"
+                                        Click="OnGlobalAllegianceBreak"
+                                        Content="{i18n:Loc Key='cheat_globals.global_allegiance_break'}"
+                                        IsEnabled="False" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </PivotItem>
         </Pivot>
 
-        <Border Grid.Row="3" Style="{StaticResource LiveToolInsetStyle}">
+        <Border Grid.Row="2" Style="{StaticResource LiveToolInsetStyle}">
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -322,6 +356,6 @@
             </Grid>
         </Border>
 
-        <InfoBar x:Name="StatusBar" Grid.Row="4" IsOpen="False" />
+        <InfoBar x:Name="StatusBar" Grid.Row="3" IsOpen="False" />
     </Grid>
 </Page>

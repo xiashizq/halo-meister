@@ -181,6 +181,11 @@
                     <NavigationViewItem.MenuItems>
                         <NavigationViewItem x:Name="GameplayNavItem" Content="{i18n:Loc Key='shell.gameplay'}" Icon="Repair" Tag="live-gameplay" />
                         <NavigationViewItem x:Name="SpawnEquipNavItem" Content="{i18n:Loc Key='shell.spawn_equip'}" Icon="Add" Tag="live-spawn" />
+                        <NavigationViewItem x:Name="AllegianceNavItem" Content="{i18n:Loc Key='shell.allegiance'}" Tag="live-allegiance">
+                            <NavigationViewItem.Icon>
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE99A;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
                         <NavigationViewItem x:Name="PlayerAppearanceNavItem" Content="{i18n:Loc Key='shell.player_appearance'}" Icon="Contact" Tag="live-player" />
                         <NavigationViewItem x:Name="CameraWorldNavItem" Content="{i18n:Loc Key='shell.camera_world'}" Icon="Video" Tag="live-world" />
                     </NavigationViewItem.MenuItems>
@@ -193,7 +198,9 @@
                     IsExpanded="False"
                     SelectsOnInvoked="False">
                     <NavigationViewItem.MenuItems>
+                        <!-- Temporarily hidden: realtime tags menu entry
                         <NavigationViewItem x:Name="RuntimeTagsNavItem" Content="{i18n:Loc Key='shell.realtime_tags'}" Icon="Bullets" Tag="runtime-tags" />
+                        -->
                         <NavigationViewItem x:Name="ScriptingNavItem" Content="{i18n:Loc Key='shell.scripting'}" Icon="Keyboard" Tag="scripting" />
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>

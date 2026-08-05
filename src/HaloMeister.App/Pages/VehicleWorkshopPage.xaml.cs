@@ -51,7 +51,7 @@ public sealed partial class VehicleWorkshopPage : Page
             if (_fullPalettes.IsGameRunning)
             {
                 ShowStatus(
-                    L.Get("vehicle_workshop.full_palettes_close_game"),
+                    L.Get("builtin_mod.close_game"),
                     InfoBarSeverity.Warning);
                 return;
             }
@@ -65,8 +65,8 @@ public sealed partial class VehicleWorkshopPage : Page
                 XamlRoot = XamlRoot,
                 Title = actionLabel,
                 Content = installing
-                    ? L.Get("vehicle_workshop.full_palettes_install_confirm")
-                    : L.Get("vehicle_workshop.full_palettes_remove_confirm"),
+                    ? L.Get("builtin_mod.install_confirm")
+                    : L.Get("builtin_mod.remove_confirm"),
                 PrimaryButtonText = actionLabel,
                 CloseButtonText = L.Get("common.cancel"),
                 DefaultButton = ContentDialogButton.Close,

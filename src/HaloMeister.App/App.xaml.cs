@@ -20,6 +20,20 @@ public partial class App : Application
         _window.Activate();
     }
 
+    /// <summary>
+    /// Called when a second process redirects activation to this instance.
+    /// </summary>
+    internal void ActivateMainWindow()
+    {
+        if (_window is MainWindow main)
+        {
+            main.BringToForeground();
+            return;
+        }
+
+        _window?.Activate();
+    }
+
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         LogCrash("XamlUnhandled", e.Exception);

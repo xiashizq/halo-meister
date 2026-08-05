@@ -4,23 +4,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
-    <Grid Padding="24" RowSpacing="16">
+    <Grid Padding="24,16,24,12" RowSpacing="12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Spacing="6">
-            <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='live_skulls.live_skulls'}" />
-            <TextBlock
-                Style="{StaticResource LivePageDescriptionStyle}"
-                Text="{i18n:Loc Key='live_skulls.enable_or_disable_the_simulation_s_56_sku_b96ae8'}" />
-        </StackPanel>
-
-        <Grid Grid.Row="1" ColumnSpacing="10">
+        <Grid ColumnSpacing="10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="260" />
@@ -53,7 +45,7 @@
 
         <ListView
             x:Name="SkullsList"
-            Grid.Row="2"
+            Grid.Row="1"
             IsItemClickEnabled="False"
             SelectionMode="None">
             <ListView.ItemTemplate>
@@ -94,7 +86,7 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10">
             <ProgressRing x:Name="BusyRing" Width="22" Height="22" IsActive="False" />
             <TextBlock
                 x:Name="SummaryText"
@@ -103,6 +95,6 @@
                 Text="{i18n:Loc Key='live_skulls.load_an_offline_campaign_mission_then_ref_ed7365'}" />
         </StackPanel>
 
-        <InfoBar x:Name="StatusBar" Grid.Row="4" IsOpen="False" />
+        <InfoBar x:Name="StatusBar" Grid.Row="3" IsOpen="False" />
     </Grid>
 </Page>

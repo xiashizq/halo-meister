@@ -29,7 +29,7 @@ public sealed partial class SpawnerPage : Page
     {
         InitializeComponent();
         SpawnTypePicker.SelectedIndex = 0;
-        TeamCompositionList.ItemsSource = _teamComposition;
+        // TeamCompositionList.ItemsSource = _teamComposition;
         _game.ConnectionChanged += OnGameConnectionChanged;
         Unloaded += OnUnloaded;
         UpdateConnectionButton();
@@ -291,6 +291,7 @@ public sealed partial class SpawnerPage : Page
         });
     }
 
+#if false // Temporarily hidden with spawn-team / mixed-team UI
     private async void OnSpawnTeam(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -311,6 +312,7 @@ public sealed partial class SpawnerPage : Page
                 InfoBarSeverity.Success);
         });
     }
+#endif
 
     private async void OnSpawnArmorAi(object sender, RoutedEventArgs e)
     {
@@ -332,6 +334,7 @@ public sealed partial class SpawnerPage : Page
         });
     }
 
+#if false // Temporarily hidden with mixed-team UI
     private void OnAddToTeam(object sender, RoutedEventArgs e)
     {
         if (_selectedVariant is null)
@@ -483,9 +486,6 @@ public sealed partial class SpawnerPage : Page
                         ScriptExecutionResult result;
                         if (assignment.Character is not null)
                         {
-                            // Typed stances retarget a donor [char] (prefer
-                            // ai/generic) and write actor_type_enum. Original
-                            // keeps the selected character tag as-is.
                             result = item.UsesDonorAi
                                 ? await _spawner.SpawnCharacterWithJohnsonAiAsync(
                                     assignment.Character,
@@ -553,6 +553,7 @@ public sealed partial class SpawnerPage : Page
                 : Visibility.Collapsed;
         UpdateSpawnButton();
     }
+#endif
 
     private async Task RunBusy(Func<Task> action)
     {
@@ -560,12 +561,12 @@ public sealed partial class SpawnerPage : Page
         _busy = true;
         ScanButton.IsEnabled = false;
         SpawnButton.IsEnabled = false;
-        SpawnTeamButton.IsEnabled = false;
+        // SpawnTeamButton.IsEnabled = false;
         SpawnArmorAiButton.IsEnabled = false;
-        AddToTeamButton.IsEnabled = false;
-        SpawnCompositionButton.IsEnabled = false;
-        RemoveTeamItemButton.IsEnabled = false;
-        ClearTeamButton.IsEnabled = false;
+        // AddToTeamButton.IsEnabled = false;
+        // SpawnCompositionButton.IsEnabled = false;
+        // RemoveTeamItemButton.IsEnabled = false;
+        // ClearTeamButton.IsEnabled = false;
         try
         {
             await action();
@@ -636,23 +637,8 @@ public sealed partial class SpawnerPage : Page
             hasSelection &&
             status.IsRuntimeReady &&
             !status.IsStale;
-        if (SpawnTeamButton is not null)
-        {
-            // Bridge v67 asks the engine to build an authored starting-location
-            // record before creating the selected character through actor_new.
-            // directly. Older bridges can report ai_place success while
-            // creating the authored actor somewhere else.
-            bool supportsSerializedAiTeam =
-                status.IsRuntimeReady &&
-                status.RunningVersion is >= 67;
-            SpawnTeamButton.IsEnabled =
-                !_busy &&
-                _game.IsConnected &&
-                CurrentMode == SpawnMode.Character &&
-                _selectedCharacter is not null &&
-                _selectedVariant is not null &&
-                supportsSerializedAiTeam;
-        }
+        // Temporarily hidden: spawn team (5 AI) / mixed AI team controls.
+        // if (SpawnTeamButton is not null) { ... }
         if (SpawnArmorAiButton is not null)
         {
             bool supportsAiComposition =
@@ -669,23 +655,8 @@ public sealed partial class SpawnerPage : Page
                 _selectedArmor is not null &&
                 _selectedVariant is not null &&
                 supportsAiComposition;
-            AddToTeamButton.IsEnabled =
-                !_busy &&
-                _game.IsConnected &&
-                CurrentMode is SpawnMode.Character or SpawnMode.Armor &&
-                _selectedVariant is not null &&
-                supportsAiComposition;
-            SpawnCompositionButton.IsEnabled =
-                !_busy &&
-                _game.IsConnected &&
-                _teamComposition.Count > 0 &&
-                supportsAiComposition;
-            RemoveTeamItemButton.IsEnabled =
-                !_busy &&
-                TeamCompositionList.SelectedItem is TeamCompositionItem;
-            ClearTeamButton.IsEnabled =
-                !_busy &&
-                _teamComposition.Count > 0;
+            // AddToTeamButton / SpawnCompositionButton / RemoveTeamItemButton /
+            // ClearTeamButton temporarily hidden with mixed-team UI.
         }
     }
 

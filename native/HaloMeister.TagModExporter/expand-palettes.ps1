@@ -1,5 +1,6 @@
-# Expand every Campaign Evolved scenario vehicle/weapon palette AND ensure
-# dedicated hm_ally / hm_hostile squads, then write one _P overlay.
+# Expand every Campaign Evolved scenario vehicle/weapon/character palette AND
+# ensure dedicated hm_ally / hm_hostile squads, then write one _P overlay.
+# Character palette is capped at 64 (engine schema); AI chars are prioritized.
 param(
     [string]$Paks,
     [string]$Output = (Join-Path $PSScriptRoot "out\MMYJ_FULL_VEHI_WAP_P.utoc"),

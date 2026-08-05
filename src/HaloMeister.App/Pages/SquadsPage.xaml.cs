@@ -9,9 +9,9 @@ public sealed partial class SquadsPage : Page
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly ScenarioSquadsService _squads = new();
+    private readonly PlayerToolsService _playerTools = new();
     private IReadOnlyList<ScenarioSquadInfo> _all = [];
     private ScenarioSquadInfo? _selected;
-    private string _scenarioPath = "";
     private bool _busy;
     private bool _hasScanned;
 
@@ -28,11 +28,9 @@ public sealed partial class SquadsPage : Page
         await RunBusy(async () =>
         {
             ScenarioSquadsSession session = await Task.Run(_squads.Scan);
-            _all = session.Squads;
-            _scenarioPath = session.ScenarioPath;
+            _all = FilterScaffoldSquads(session.Squads);
             _hasScanned = true;
             SearchBox.IsEnabled = true;
-            ScenarioPathText.Text = L.Format("squads.scenario_path", _scenarioPath);
             ApplyFilter();
             ShowStatus(
                 L.Format("squads.found_squads", _all.Count),
@@ -46,9 +44,7 @@ public sealed partial class SquadsPage : Page
         await RunBusy(async () =>
         {
             ScenarioSquadsSession session = await Task.Run(_squads.Scan);
-            _all = session.Squads;
-            _scenarioPath = session.ScenarioPath;
-            ScenarioPathText.Text = L.Format("squads.scenario_path", _scenarioPath);
+            _all = FilterScaffoldSquads(session.Squads);
             _selected = _all.FirstOrDefault(item => item.Index == selectedIndex);
             ApplyFilter();
             ShowSelection();
@@ -67,7 +63,7 @@ public sealed partial class SquadsPage : Page
             ScriptExecutionResult result = await _squads.PlaceAsync(squad);
             ShowScriptResult(
                 result,
-                L.Format("squads.placed_submitted", squad.ScriptName));
+                L.Format("squads.placed_submitted", squad.Name));
         });
     }
 
@@ -80,7 +76,23 @@ public sealed partial class SquadsPage : Page
             ScriptExecutionResult result = await _squads.EraseAsync(squad);
             ShowScriptResult(
                 result,
-                L.Format("squads.erased_submitted", squad.ScriptName));
+                L.Format("squads.erased_submitted", squad.Name));
+        });
+    }
+
+    private async void OnTeleportToSpawnPoint(object sender, RoutedEventArgs e)
+    {
+        if (_busy ||
+            sender is not FrameworkElement { Tag: ScenarioSquadSpawnPoint point })
+            return;
+
+        await RunBusy(async () =>
+        {
+            await _playerTools.TeleportAsync(
+                new PlayerCoordinates(point.X, point.Y, point.Z));
+            ShowStatus(
+                L.Format("squads.teleported_to_spawn", point.Display),
+                InfoBarSeverity.Success);
         });
     }
 
@@ -120,25 +132,7 @@ public sealed partial class SquadsPage : Page
         }
 
         SelectedNameText.Text = _selected.Name;
-        SelectedIndexText.Text = L.Format("squads.index_label", _selected.Index);
-        FlagsText.Text = _selected.FlagNames.Count == 0
-            ? L.Format("squads.flags_none", _selected.FlagsHex)
-            : L.Format(
-                "squads.flags_label",
-                _selected.FlagsHex,
-                string.Join(", ", _selected.FlagNames));
         TeamText.Text = L.Format("squads.team_label", _selected.TeamDisplay);
-        ParentText.Text = L.Format("squads.parent_label", _selected.ParentDisplay);
-        ZoneText.Text = L.Format("squads.zone_label", _selected.InitialZoneDisplay);
-        ObjectiveText.Text = L.Format(
-            "squads.objective_label",
-            _selected.InitialObjectiveDisplay);
-        TaskText.Text = L.Format("squads.task_label", _selected.InitialTaskDisplay);
-        FolderText.Text = L.Format("squads.folder_label", _selected.EditorFolderDisplay);
-        SpawnCountsText.Text = L.Format(
-            "squads.spawn_counts",
-            _selected.SpawnPointCount,
-            _selected.SpawnFormationCount);
         bool hasSpawnPoints = _selected.SpawnPoints.Count > 0;
         SpawnPointsHeaderText.Visibility = Visibility.Visible;
         SpawnPointsList.ItemsSource = _selected.SpawnPoints;
@@ -195,7 +189,7 @@ public sealed partial class SquadsPage : Page
         PlaceButton.IsEnabled = canAct;
         EraseButton.IsEnabled = canAct;
         ConnectionText.Text = _hasScanned
-            ? L.Format("squads.loaded_summary", _all.Count, _scenarioPath)
+            ? L.Format("squads.loaded_summary", _all.Count)
             : _game.IsConnected
                 ? L.Get("squads.connected_scan_hint")
                 : L.Get("squads.disconnected");
@@ -213,4 +207,23 @@ public sealed partial class SquadsPage : Page
         StatusBar.Severity = severity;
         StatusBar.IsOpen = true;
     }
+
+    private static IReadOnlyList<ScenarioSquadInfo> FilterScaffoldSquads(
+        IReadOnlyList<ScenarioSquadInfo> squads) =>
+        squads
+            .Where(squad => !IsScaffoldSquad(squad))
+            .ToArray();
+
+    private static bool IsScaffoldSquad(ScenarioSquadInfo squad) =>
+        IsScaffoldName(squad.Name) || IsScaffoldName(squad.ScriptName);
+
+    private static bool IsScaffoldName(string name) =>
+        string.Equals(
+            name.Trim(),
+            EnemySpawnerService.DedicatedAllySquadName,
+            StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(
+            name.Trim(),
+            EnemySpawnerService.DedicatedHostileSquadName,
+            StringComparison.OrdinalIgnoreCase);
 }

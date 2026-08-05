@@ -6,17 +6,22 @@ use blam_tags::TagFile;
 use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
 
-const MAX_PALETTE_ENTRIES: usize = 256;
+const MAX_OBJECT_PALETTE_ENTRIES: usize = 256;
+const MAX_CHARACTER_PALETTE_ENTRIES: usize = 64;
 const VEHICLE_GROUP: u32 = u32::from_be_bytes(*b"vehi");
 const WEAPON_GROUP: u32 = u32::from_be_bytes(*b"weap");
+const CHARACTER_GROUP: u32 = u32::from_be_bytes(*b"char");
 
 pub struct ExpandReport {
     pub scenarios_seen: usize,
     pub scenarios_changed: usize,
     pub vehicle_catalog: usize,
     pub weapon_catalog: usize,
+    pub character_catalog: usize,
     pub vehicle_added_total: usize,
     pub weapon_added_total: usize,
+    pub character_added_total: usize,
+    pub character_skipped_cap: usize,
     pub ally_added: usize,
     pub ally_from_hostile_fallback: usize,
     pub hostile_added: usize,
@@ -30,12 +35,16 @@ pub fn expand_all_mission_palettes(
 ) -> Result<ExpandReport> {
     let vehicles = collect_tag_paths(archives, "vehicle")?;
     let weapons = collect_tag_paths(archives, "weapon")?;
+    let characters = collect_ai_character_paths(archives)?;
     let scenarios = collect_scenario_entries(archives)?;
     if vehicles.is_empty() {
         bail!("no vehicle tags found under Meteorite/Content/Tags");
     }
     if weapons.is_empty() {
         bail!("no weapon tags found under Meteorite/Content/Tags");
+    }
+    if characters.is_empty() {
+        bail!("no AI character tags found under Meteorite/Content/Tags");
     }
     if scenarios.is_empty() {
         bail!("no scenario tags found under Meteorite/Content/Tags");
@@ -46,17 +55,28 @@ pub fn expand_all_mission_palettes(
         scenarios_changed: 0,
         vehicle_catalog: vehicles.len(),
         weapon_catalog: weapons.len(),
+        character_catalog: characters.len(),
         vehicle_added_total: 0,
         weapon_added_total: 0,
+        character_added_total: 0,
+        character_skipped_cap: 0,
         ally_added: 0,
         ally_from_hostile_fallback: 0,
         hostile_added: 0,
         lines: Vec::new(),
     };
+    let representative_count = characters
+        .iter()
+        .filter(|path| is_representative_character(path))
+        .count();
     report.lines.push(format!(
-        "Catalog: {} vehicle(s), {} weapon(s); {} scenario(s) to process (palettes + hm_ally/hm_hostile)",
+        "Catalog: {} vehicle(s), {} weapon(s), {} AI character(s) ({} representative + {} padding, fill to {}); {} scenario(s) (palettes + hm_ally/hm_hostile)",
         vehicles.len(),
         weapons.len(),
+        characters.len(),
+        representative_count,
+        characters.len().saturating_sub(representative_count),
+        MAX_CHARACTER_PALETTE_ENTRIES,
         scenarios.len()
     ));
 
@@ -67,22 +87,42 @@ pub fn expand_all_mission_palettes(
             .with_context(|| format!("could not read {rel_path}"))?;
         let mut tag = TagFile::read_from_bytes(&bytes)
             .with_context(|| format!("could not parse {rel_path}"))?;
-        let vehicle_added =
-            ensure_palette(&mut tag, "vehicle palette", VEHICLE_GROUP, &vehicles)?;
-        let weapon_added =
-            ensure_palette(&mut tag, "weapon palette", WEAPON_GROUP, &weapons)?;
+        let vehicle_added = ensure_palette(
+            &mut tag,
+            "vehicle palette",
+            VEHICLE_GROUP,
+            &vehicles,
+            "name",
+            MAX_OBJECT_PALETTE_ENTRIES,
+        )?;
+        let weapon_added = ensure_palette(
+            &mut tag,
+            "weapon palette",
+            WEAPON_GROUP,
+            &weapons,
+            "name",
+            MAX_OBJECT_PALETTE_ENTRIES,
+        )?;
+        let character_fill = ensure_character_palette(&mut tag, &characters)?;
         let squads = ensure_demo_squads::ensure_demo_squads_on_tag(&mut tag, tag_path)?;
-        if vehicle_added == 0 && weapon_added == 0 && !squads.changed {
+        if vehicle_added == 0
+            && weapon_added == 0
+            && character_fill.added == 0
+            && !squads.changed
+        {
             continue;
         }
         report.scenarios_changed += 1;
         report.vehicle_added_total += vehicle_added;
         report.weapon_added_total += weapon_added;
+        report.character_added_total += character_fill.added;
+        report.character_skipped_cap += character_fill.skipped_cap;
         report.ally_added += squads.ally_added;
         report.ally_from_hostile_fallback += squads.ally_from_hostile_fallback;
         report.hostile_added += squads.hostile_added;
         report.lines.push(format!(
-            "{tag_path}: +{vehicle_added} vehicle(s), +{weapon_added} weapon(s)"
+            "{tag_path}: +{vehicle_added} vehicle(s), +{weapon_added} weapon(s), +{} character(s) (cap-skip {})",
+            character_fill.added, character_fill.skipped_cap
         ));
         report.lines.extend(squads.lines);
         if dry_run {
@@ -121,13 +161,55 @@ pub fn expand_all_mission_palettes(
     Ok(report)
 }
 
+struct CharacterFill {
+    added: usize,
+    skipped_cap: usize,
+}
+
+fn ensure_character_palette(
+    tag: &mut TagFile,
+    catalog: &BTreeSet<String>,
+) -> Result<CharacterFill> {
+    let existing = read_palette_paths(tag, "character palette", "reference")?;
+    let prioritized = prioritize_characters(catalog);
+    let missing: Vec<&String> = prioritized
+        .iter()
+        .filter(|path| !existing.contains(path.as_str()))
+        .collect();
+    if missing.is_empty() {
+        return Ok(CharacterFill {
+            added: 0,
+            skipped_cap: 0,
+        });
+    }
+    let room = MAX_CHARACTER_PALETTE_ENTRIES.saturating_sub(existing.len());
+    let (take, skipped_cap) = if missing.len() > room {
+        (&missing[..room], missing.len() - room)
+    } else {
+        (missing.as_slice(), 0)
+    };
+    let added = append_palette_entries(
+        tag,
+        "character palette",
+        CHARACTER_GROUP,
+        take,
+        "reference",
+    )?;
+    Ok(CharacterFill {
+        added,
+        skipped_cap,
+    })
+}
+
 fn ensure_palette(
     tag: &mut TagFile,
     block_name: &str,
     group_tag: u32,
     catalog: &BTreeSet<String>,
+    reference_field: &str,
+    max_entries: usize,
 ) -> Result<usize> {
-    let existing = read_palette_paths(tag, block_name)?;
+    let existing = read_palette_paths(tag, block_name, reference_field)?;
     let missing: Vec<&String> = catalog
         .iter()
         .filter(|path| !existing.contains(path.as_str()))
@@ -135,16 +217,25 @@ fn ensure_palette(
     if missing.is_empty() {
         return Ok(0);
     }
-    if existing.len() + missing.len() > MAX_PALETTE_ENTRIES {
+    if existing.len() + missing.len() > max_entries {
         bail!(
-            "{block_name} would exceed {MAX_PALETTE_ENTRIES} entries (have {}, need {})",
+            "{block_name} would exceed {max_entries} entries (have {}, need {})",
             existing.len(),
             missing.len()
         );
     }
+    append_palette_entries(tag, block_name, group_tag, &missing, reference_field)
+}
 
+fn append_palette_entries(
+    tag: &mut TagFile,
+    block_name: &str,
+    group_tag: u32,
+    paths: &[&String],
+    reference_field: &str,
+) -> Result<usize> {
     let mut added = 0usize;
-    for path in missing {
+    for path in paths {
         let index = {
             let mut root = tag.root_mut();
             let mut field = root
@@ -155,14 +246,14 @@ fn ensure_palette(
                 .ok_or_else(|| anyhow!("{block_name} is not a block"))?;
             block.add_element()
         };
-        let reference_path = format!("{block_name}[{index}]/name");
+        let reference_path = format!("{block_name}[{index}]/{reference_field}");
         let mut root = tag.root_mut();
         let mut field = root
             .field_path_mut(&reference_path)
             .ok_or_else(|| anyhow!("{reference_path} was not found after add_element"))?;
         field
             .set(TagFieldData::TagReference(TagReferenceData {
-                group_tag_and_name: Some((group_tag, path.clone())),
+                group_tag_and_name: Some((group_tag, (*path).clone())),
             }))
             .map_err(|error| anyhow!("failed to set {reference_path}: {error:?}"))?;
         added += 1;
@@ -170,7 +261,11 @@ fn ensure_palette(
     Ok(added)
 }
 
-fn read_palette_paths(tag: &TagFile, block_name: &str) -> Result<HashSet<String>> {
+fn read_palette_paths(
+    tag: &TagFile,
+    block_name: &str,
+    reference_field: &str,
+) -> Result<HashSet<String>> {
     let root = tag.root();
     let field = root
         .field_path(block_name)
@@ -183,7 +278,11 @@ fn read_palette_paths(tag: &TagFile, block_name: &str) -> Result<HashSet<String>
         let Some(element) = block.element(index) else {
             continue;
         };
-        let Some(name_field) = element.field("name") else {
+        let Some(name_field) = element
+            .field(reference_field)
+            .or_else(|| element.field("name"))
+            .or_else(|| element.field("reference"))
+        else {
             continue;
         };
         let Some(TagFieldData::TagReference(reference)) = name_field.value() else {
@@ -195,6 +294,183 @@ fn read_palette_paths(tag: &TagFile, block_name: &str) -> Result<HashSet<String>
         paths.insert(normalize_tag_path(&path));
     }
     Ok(paths)
+}
+
+/// Preferred combat AI — filled first. Remaining slots up to the schema max
+/// (64) are padded with secondary variants that are still spawnable.
+const REPRESENTATIVE_CHARACTER_LEAVES: &[&str] = &[
+    // UNSC
+    "trooper",
+    "trooper_female",
+    "trooper_ragtag",
+    "johnson",
+    "keyes",
+    // Elites — base ranks + distinct playstyles; one sacristan hero
+    "elite",
+    "elite_officer",
+    "elite_ultra",
+    "elite_general",
+    "elite_specops",
+    "elite_stealth",
+    "elite_jetpack",
+    "elite_sacristan_zealot",
+    // Grunts
+    "grunt",
+    "grunt_major",
+    "grunt_heavy",
+    "grunt_ultra",
+    "grunt_specops",
+    // Jackals / skirmishers
+    "jackal",
+    "jackal_major",
+    "jackal_sniper",
+    "skirmisher",
+    "skirmisher_major",
+    "skirmisher_champion",
+    // Brutes
+    "brute",
+    "brute_captain",
+    "brute_chieftain_weapon",
+    // Hunter
+    "hunter",
+    // Flood
+    "flood_infection",
+    "flood_carrier",
+    "floodcombat_base",
+    "floodcombat_elite",
+    "floodcombat_elite_camo",
+    "flood_combat_human",
+    "flood_pureform",
+    "flood_pureform_tank",
+    // Support / Forerunner
+    "engineer",
+    "sentinel_aggressor",
+    "sentinel_aggressor_major",
+    "monitor",
+];
+
+pub fn list_ai_character_catalog(archives: &[IoStoreArchive]) -> Result<Vec<String>> {
+    let all = collect_tag_paths(archives, "character")?;
+    let mut paths: Vec<String> = all
+        .into_iter()
+        .filter(|path| is_candidate_ai_character(path))
+        .collect();
+    paths.sort_by(|left, right| {
+        character_priority(right)
+            .cmp(&character_priority(left))
+            .then_with(|| left.cmp(right))
+    });
+    Ok(paths)
+}
+
+pub fn list_all_ai_character_paths(archives: &[IoStoreArchive]) -> Result<Vec<String>> {
+    let all = collect_tag_paths(archives, "character")?;
+    let mut paths: Vec<String> = all
+        .into_iter()
+        .filter(|path| {
+            let lower = path.to_ascii_lowercase();
+            lower.contains("\\ai\\")
+                && !lower.contains("\\stimuli\\")
+                && !lower.contains("\\null\\")
+        })
+        .collect();
+    paths.sort();
+    Ok(paths)
+}
+
+fn collect_ai_character_paths(archives: &[IoStoreArchive]) -> Result<BTreeSet<String>> {
+    Ok(list_ai_character_catalog(archives)?.into_iter().collect())
+}
+
+fn prioritize_characters(catalog: &BTreeSet<String>) -> Vec<String> {
+    let mut scored: Vec<(i32, String)> = catalog
+        .iter()
+        .cloned()
+        .map(|path| (character_priority(&path), path))
+        .collect();
+    scored.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    scored.into_iter().map(|(_, path)| path).collect()
+}
+
+fn is_candidate_ai_character(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.contains("\\ai\\")
+        && !lower.contains("\\stimuli\\")
+        && !lower.contains("\\null\\")
+        && !is_hard_rejected_character(&lower)
+}
+
+fn is_hard_rejected_character(lower_path: &str) -> bool {
+    // Never spend palette slots on these — drivers, crippled helpers, vehicle AI.
+    const REJECT_SUBSTRINGS: &[&str] = &[
+        "pilot",
+        "flying",
+        "crewman",
+        "\\cryo",
+        "thirsty",
+        "low_perception",
+        "no_melee",
+        "no_kill",
+        "unique_crazy",
+        "eye_of_prophet",
+        "\\vehicles\\",
+        "monitor_engine",
+        "johnson_orion",
+    ];
+    REJECT_SUBSTRINGS
+        .iter()
+        .any(|needle| lower_path.contains(needle))
+}
+
+fn is_representative_character(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    let leaf = tag_leaf_name(&lower);
+    REPRESENTATIVE_CHARACTER_LEAVES
+        .iter()
+        .any(|name| *name == leaf)
+}
+
+fn tag_leaf_name(path: &str) -> &str {
+    path.rsplit(['\\', '/']).next().unwrap_or(path)
+}
+
+fn character_priority(path: &str) -> i32 {
+    let lower = path.to_ascii_lowercase();
+    let leaf = tag_leaf_name(&lower);
+    // Higher = filled earlier. Representatives first, then secondary padding.
+    let base = match leaf {
+        "trooper" | "elite" | "grunt" | "jackal" | "brute" | "hunter" => 100,
+        "trooper_female" | "johnson" | "keyes" => 95,
+        "elite_officer" | "elite_ultra" | "grunt_major" | "jackal_major" | "brute_captain" => 90,
+        "elite_specops" | "elite_stealth" | "grunt_specops" | "jackal_sniper" => 85,
+        "elite_general" | "elite_jetpack" | "grunt_heavy" | "grunt_ultra" => 80,
+        "skirmisher" | "skirmisher_major" | "skirmisher_champion" => 75,
+        "brute_chieftain_weapon" | "elite_sacristan_zealot" => 70,
+        "floodcombat_elite" | "flood_combat_human" | "floodcombat_base" => 65,
+        "flood_infection" | "flood_carrier" | "flood_pureform" | "flood_pureform_tank" => 60,
+        "floodcombat_elite_camo" => 55,
+        "sentinel_aggressor" | "sentinel_aggressor_major" | "engineer" | "monitor" => 50,
+        "trooper_ragtag" => 45,
+        // Secondary padding (still combat-capable; used to reach 64).
+        "elite_sacristan_major" | "elite_sacristan_specops" | "elite_sacristan_stealth" => 35,
+        "elite_sacristan_minor" | "grunt_sacristan_major" | "grunt_sacristan_specops" => 34,
+        "grunt_sacristan_minor" | "jackal_sacristan_major" | "jackal_sacristan_sniper" => 33,
+        "jackal_sacristan_minor" | "hunter_sacristan" | "brute_chieftain_armor" => 32,
+        "skirmisher_commando" | "skirmisher_murmillone" => 31,
+        "floodcombat_elite_shielded" => 30,
+        "trooper_unique" | "trooper_female_unique" | "trooper_badlands" => 28,
+        "trooper_ragtag_unique" | "trooper_female_ragtag" | "trooper_female_ragtag_unique" => 27,
+        "keyes_marine" => 26,
+        "trooper_c10" | "trooper_female_c10" | "floodcombat_elite_c10_vig" => 20,
+        _ => {
+            if is_representative_character(path) {
+                40
+            } else {
+                15
+            }
+        }
+    };
+    base
 }
 
 fn collect_tag_paths(archives: &[IoStoreArchive], group_name: &str) -> Result<BTreeSet<String>> {

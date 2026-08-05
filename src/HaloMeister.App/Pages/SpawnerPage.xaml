@@ -322,6 +322,7 @@
                                         <TextBlock Text="{i18n:Loc Key='spawner.spawn_ahead_of_player'}" />
                                     </StackPanel>
                                 </Button>
+                                <!-- Temporarily hidden: spawn team (5 AI)
                                 <Button
                                     x:Name="SpawnTeamButton"
                                     AllowFocusWhenDisabled="True"
@@ -332,6 +333,7 @@
                                         <TextBlock Text="{i18n:Loc Key='spawner.spawn_team_5_ai'}" />
                                     </StackPanel>
                                 </Button>
+                                -->
                                 <Button
                                     x:Name="SpawnArmorAiButton"
                                     AllowFocusWhenDisabled="True"
@@ -345,6 +347,7 @@
                                 </Button>
                             </StackPanel>
 
+                            <!-- Temporarily hidden: mixed AI team builder
                             <Border
                                 Padding="14"
                                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -472,6 +475,7 @@
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
+                            -->
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

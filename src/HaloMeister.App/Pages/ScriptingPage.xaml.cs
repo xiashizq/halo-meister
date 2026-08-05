@@ -23,11 +23,9 @@ public sealed partial class ScriptingPage : Page
 
     private const string DefaultLuaScript =
         "print(\"[HaloMeister] Lua is running\")\nreturn \"ok\"";
-    private const string DefaultHaloScript = "hs:chud_show 1";
+    private const string DefaultHaloScript = "(fade_out 0 0 0 0)";
     private static readonly IReadOnlyList<ScriptExample> HaloScriptExamples =
     [
-        new("scripting.example_show_hud", "hs:chud_show 1"),
-        new("scripting.example_hide_hud", "hs:chud_show 0"),
         new("scripting.example_instant_fade_out", "(fade_out 0 0 0 0)"),
         new("scripting.example_instant_fade_in", "(fade_in 0 0 0 0)"),
         new("scripting.example_kill_player", "unit_kill (player0)"),

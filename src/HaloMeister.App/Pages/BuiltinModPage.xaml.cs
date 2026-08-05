@@ -2,7 +2,6 @@ using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace HaloMeister.App.Pages;
@@ -29,7 +28,7 @@ public sealed partial class BuiltinModPage : Page
             if (_mod.IsGameRunning)
             {
                 ShowStatus(
-                    L.Get("vehicle_workshop.full_palettes_close_game"),
+                    L.Get("builtin_mod.close_game"),
                     InfoBarSeverity.Warning);
                 return;
             }
@@ -59,7 +58,7 @@ public sealed partial class BuiltinModPage : Page
             if (_mod.IsGameRunning)
             {
                 ShowStatus(
-                    L.Get("vehicle_workshop.full_palettes_close_game"),
+                    L.Get("builtin_mod.close_game"),
                     InfoBarSeverity.Warning);
                 return;
             }
@@ -86,43 +85,25 @@ public sealed partial class BuiltinModPage : Page
     {
         bool bundled = _mod.IsBundledAvailable();
         bool installed = false;
-        string? paks = null;
+        int present = 0;
+        int total = FullPalettesOverlayService.RequiredFileNames.Count;
         try
         {
-            paks = FullPalettesOverlayService.ResolvePaksDirectory();
             installed = _mod.IsInstalled();
+            present = _mod.GetInstalledFileStatus().Count(file => file.Present);
         }
         catch (DirectoryNotFoundException)
         {
             // Keep UI usable; install will surface the same error.
         }
 
-        IReadOnlyList<BuiltinModFileStatus> files = _mod.GetInstalledFileStatus();
-        int present = files.Count(file => file.Present);
-
         StatusText.Text = !bundled
-            ? L.Get("vehicle_workshop.full_palettes_bundle_missing")
+            ? L.Get("builtin_mod.bundle_missing")
             : installed
                 ? L.Get("builtin_mod.status_ready")
-                : L.Format("builtin_mod.status_incomplete", present, files.Count);
-
-        PaksPathText.Text = paks is null
-            ? L.Get("vehicle_workshop.error_paks_not_found")
-            : L.Format("builtin_mod.paks_path", paks);
-
-        Brush presentBrush = TryThemeBrush("SystemFillColorSuccessBrush")
-            ?? TryThemeBrush("AccentFillColorDefaultBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.ForestGreen);
-        Brush missingBrush = TryThemeBrush("TextFillColorSecondaryBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
-        FileList.ItemsSource = files
-            .Select(file => new FileRow(
-                file.Present ? "\uE73E" : "\uE711",
-                file.Present ? presentBrush : missingBrush,
-                file.Present
-                    ? L.Format("builtin_mod.file_present", file.FileName)
-                    : L.Format("builtin_mod.file_missing", file.FileName)))
-            .ToArray();
+                : present == 0
+                    ? L.Get("builtin_mod.status_not_installed")
+                    : L.Format("builtin_mod.status_incomplete", present, total);
 
         InstallButton.IsEnabled = !_busy && bundled && !installed;
         RemoveButton.IsEnabled = !_busy && present > 0;
@@ -161,14 +142,4 @@ public sealed partial class BuiltinModPage : Page
         StatusBar.Severity = severity;
         StatusBar.IsOpen = true;
     }
-
-    private static Brush? TryThemeBrush(string key)
-    {
-        if (Application.Current.Resources.TryGetValue(key, out object? value) &&
-            value is Brush brush)
-            return brush;
-        return null;
-    }
-
-    private sealed record FileRow(string Glyph, Brush Brush, string Label);
 }

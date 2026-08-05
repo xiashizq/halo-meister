@@ -67,6 +67,7 @@ fn run() -> Result<()> {
     let mut inspect = None;
     let mut expand_palettes = false;
     let mut ensure_demo_squads = false;
+    let mut list_ai_characters = false;
     let mut dry_run = false;
     while let Some(argument) = args.next() {
         match argument.to_string_lossy().as_ref() {
@@ -77,12 +78,27 @@ fn run() -> Result<()> {
             "--inspect" => inspect = args.next().map(|value| value.to_string_lossy().into_owned()),
             "--expand-palettes" => expand_palettes = true,
             "--ensure-demo-squads" => ensure_demo_squads = true,
+            "--list-ai-characters" => list_ai_characters = true,
             "--dry-run" => dry_run = true,
             other => bail!("unknown argument '{other}'"),
         }
     }
     let paks = paks.context("--paks is required")?;
     let archives = open_archives(&paks)?;
+    if list_ai_characters {
+        let curated = expand_palettes::list_ai_character_catalog(&archives)?;
+        let all = expand_palettes::list_all_ai_character_paths(&archives)?;
+        println!("# Character-palette fill catalog (representatives first, then padding to 64)");
+        for path in &curated {
+            println!("{path}");
+        }
+        println!(
+            "Fill catalog: {} (hard-rejected excluded) / {} AI character(s) in packs",
+            curated.len(),
+            all.len()
+        );
+        return Ok(());
+    }
     if expand_palettes {
         let output = priority_output(output.context("--output is required with --expand-palettes")?);
         let report = expand_palettes::expand_all_mission_palettes(&archives, &output, dry_run)?;
@@ -90,13 +106,16 @@ fn run() -> Result<()> {
             println!("{line}");
         }
         println!(
-            "Summary: {} / {} scenario(s) changed from catalogs of {} vehicle(s)/{} weapon(s); +{} vehicle palette entries, +{} weapon palette entries; +{} hm_ally ({} hostile-fallback), +{} hm_hostile",
+            "Summary: {} / {} scenario(s) changed from catalogs of {} vehicle(s)/{} weapon(s)/{} AI character(s); +{} vehicle, +{} weapon, +{} character palette entries ({} skipped by 64-cap); +{} hm_ally ({} hostile-fallback), +{} hm_hostile",
             report.scenarios_changed,
             report.scenarios_seen,
             report.vehicle_catalog,
             report.weapon_catalog,
+            report.character_catalog,
             report.vehicle_added_total,
             report.weapon_added_total,
+            report.character_added_total,
+            report.character_skipped_cap,
             report.ally_added,
             report.ally_from_hostile_fallback,
             report.hostile_added

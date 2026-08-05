@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
 using HaloMeister.App.Pages;
@@ -66,7 +67,20 @@ public sealed partial class MainWindow : Window
     public void SetLanguage(string language)
         => LocalizationService.Current.SetLanguage(language);
 
+    /// <summary>
+    /// Restores and focuses this window when another launch is redirected here.
+    /// </summary>
+    public void BringToForeground()
+    {
+        AppWindow.Show();
+        Activate();
+        SetForegroundWindow(Hwnd);
+    }
+
     private nint Hwnd => WinRT.Interop.WindowNative.GetWindowHandle(this);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(nint hWnd);
 
     private void ApplyBuildPolicy()
     {
@@ -139,10 +153,11 @@ public sealed partial class MainWindow : Window
         LiveToolsNavItem.Content = L.Get("shell.live_tools");
         GameplayNavItem.Content = L.Get("shell.gameplay");
         SpawnEquipNavItem.Content = L.Get("shell.spawn_equip");
+        AllegianceNavItem.Content = L.Get("shell.allegiance");
         PlayerAppearanceNavItem.Content = L.Get("shell.player_appearance");
         CameraWorldNavItem.Content = L.Get("shell.camera_world");
         AdvancedNavItem.Content = L.Get("shell.advanced");
-        RuntimeTagsNavItem.Content = L.Get("shell.realtime_tags");
+        // RuntimeTagsNavItem.Content = L.Get("shell.realtime_tags");
         ScriptingNavItem.Content = L.Get("shell.scripting");
         RemoteNavItem.Content = L.Get("shell.phone_remote");
         SetupNavItem.Content = L.Get("shell.setup");
@@ -353,6 +368,7 @@ public sealed partial class MainWindow : Window
         "game-saves" => typeof(GameSavesPage),
         "builtin-mod" => typeof(BuiltinModPage),
         "live-gameplay" or "live-spawn" or "live-player" or "live-world" => typeof(LiveToolsHubPage),
+        "live-allegiance" => typeof(AllegianceDemoPage),
         "runtime-tags" => typeof(RuntimeTagsPage),
         "scripting" => typeof(ScriptingPage),
         _ => typeof(MissionsPage),
@@ -399,11 +415,13 @@ public sealed partial class MainWindow : Window
             "customization" => CustomizationNavItem,
             "config" => ConfigNavItem,
             "game-saves" => GameSavesNavItem,
+            "builtin-mod" => BuiltinModNavItem,
             "live-gameplay" => GameplayNavItem,
             "live-spawn" => SpawnEquipNavItem,
+            "live-allegiance" => AllegianceNavItem,
             "live-player" => PlayerAppearanceNavItem,
             "live-world" => CameraWorldNavItem,
-            "runtime-tags" => RuntimeTagsNavItem,
+            // "runtime-tags" => RuntimeTagsNavItem,
             "scripting" => ScriptingNavItem,
             "phone-remote" => RemoteNavItem,
             "setup" => SetupNavItem,

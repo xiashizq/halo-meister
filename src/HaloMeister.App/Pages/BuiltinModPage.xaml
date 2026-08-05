@@ -4,123 +4,100 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel
-            MaxWidth="880"
-            Padding="24,24,24,40"
-            Spacing="16">
+    <Grid Padding="24" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-            <StackPanel Spacing="5">
-                <TextBlock
-                    Style="{ThemeResource TitleTextBlockStyle}"
-                    Text="{i18n:Loc Key='builtin_mod.title'}" />
-                <TextBlock
-                    Style="{StaticResource LivePageDescriptionStyle}"
-                    Text="{i18n:Loc Key='builtin_mod.description'}" />
-            </StackPanel>
-
-            <InfoBar
-                x:Name="RestartBanner"
-                IsClosable="False"
-                IsOpen="True"
-                Severity="Warning"
-                Title="{i18n:Loc Key='builtin_mod.restart_title'}"
-                Message="{i18n:Loc Key='builtin_mod.restart_message'}" />
-
-            <Border Style="{StaticResource LiveToolCardStyle}">
-                <StackPanel Spacing="10">
-                    <TextBlock
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="{i18n:Loc Key='builtin_mod.what_it_does'}" />
-                    <TextBlock
-                        Opacity="0.82"
-                        Text="{i18n:Loc Key='builtin_mod.what_it_does_body'}"
-                        TextWrapping="Wrap" />
-                    <TextBlock
-                        Opacity="0.82"
-                        Text="{i18n:Loc Key='builtin_mod.optional_for_vehicles'}"
-                        TextWrapping="Wrap" />
-                    <TextBlock
-                        Opacity="0.82"
-                        Text="{i18n:Loc Key='builtin_mod.required_for_dedicated'}"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource LiveToolCardStyle}">
-                <StackPanel Spacing="12">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Spacing="4">
-                            <TextBlock
-                                FontSize="16"
-                                FontWeight="SemiBold"
-                                Text="{i18n:Loc Key='builtin_mod.status_heading'}" />
-                            <TextBlock
-                                x:Name="StatusText"
-                                Opacity="0.82"
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                x:Name="PaksPathText"
-                                FontSize="12"
-                                Opacity="0.6"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                        <ProgressRing
-                            x:Name="BusyRing"
-                            Grid.Column="1"
-                            Width="22"
-                            Height="22"
-                            IsActive="False" />
-                    </Grid>
-
-                    <ItemsControl x:Name="FileList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="0,2" ColumnSpacing="10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <FontIcon
-                                        FontSize="14"
-                                        Glyph="{Binding Glyph}"
-                                        Foreground="{Binding Brush}" />
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        Text="{Binding Label}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button
-                            x:Name="InstallButton"
-                            Click="OnInstall"
-                            Content="{i18n:Loc Key='builtin_mod.install'}"
-                            Style="{StaticResource AccentButtonStyle}" />
-                        <Button
-                            x:Name="RemoveButton"
-                            Click="OnRemove"
-                            Content="{i18n:Loc Key='builtin_mod.remove'}" />
-                        <Button
-                            x:Name="RefreshButton"
-                            Click="OnRefresh"
-                            Content="{i18n:Loc Key='builtin_mod.refresh'}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <InfoBar
-                x:Name="StatusBar"
-                IsOpen="False"
-                IsClosable="True" />
+        <StackPanel Spacing="6">
+            <TextBlock
+                Style="{ThemeResource TitleTextBlockStyle}"
+                Text="{i18n:Loc Key='builtin_mod.title'}" />
+            <TextBlock
+                Style="{StaticResource LivePageDescriptionStyle}"
+                Text="{i18n:Loc Key='builtin_mod.description'}" />
         </StackPanel>
-    </ScrollViewer>
+
+        <InfoBar
+            x:Name="RestartBanner"
+            Grid.Row="1"
+            IsClosable="False"
+            IsOpen="True"
+            Severity="Warning"
+            Title="{i18n:Loc Key='builtin_mod.restart_title'}"
+            Message="{i18n:Loc Key='builtin_mod.restart_message'}" />
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14">
+                <Border Style="{StaticResource LiveToolCardStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock
+                            FontSize="16"
+                            FontWeight="SemiBold"
+                            Text="{i18n:Loc Key='builtin_mod.what_it_does'}" />
+                        <TextBlock
+                            Style="{StaticResource LivePageDescriptionStyle}"
+                            Text="{i18n:Loc Key='builtin_mod.what_it_does_body'}" />
+                        <TextBlock
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            Text="{i18n:Loc Key='builtin_mod.optional_for_vehicles'}" />
+                        <TextBlock
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            Text="{i18n:Loc Key='builtin_mod.required_for_dedicated'}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource LiveToolCardStyle}">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Text="{i18n:Loc Key='builtin_mod.status_heading'}" />
+                                <TextBlock
+                                    x:Name="StatusText"
+                                    Style="{StaticResource LivePageDescriptionStyle}" />
+                            </StackPanel>
+                            <ProgressRing
+                                x:Name="BusyRing"
+                                Grid.Column="1"
+                                Width="22"
+                                Height="22"
+                                IsActive="False" />
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                x:Name="InstallButton"
+                                Click="OnInstall"
+                                Content="{i18n:Loc Key='builtin_mod.install'}"
+                                Style="{StaticResource AccentButtonStyle}" />
+                            <Button
+                                x:Name="RemoveButton"
+                                Click="OnRemove"
+                                Content="{i18n:Loc Key='builtin_mod.remove'}" />
+                            <Button
+                                x:Name="RefreshButton"
+                                Click="OnRefresh"
+                                Content="{i18n:Loc Key='builtin_mod.refresh'}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <InfoBar
+            x:Name="StatusBar"
+            Grid.Row="3"
+            IsOpen="False"
+            IsClosable="True" />
+    </Grid>
 </Page>

@@ -54,6 +54,10 @@ public sealed class AllegianceDemoService
     public SpawnScaffoldInventory ProbeScaffolds() =>
         _spawner.ProbeScaffoldInventory();
 
+    public IReadOnlyList<AiWeaponChoice> GetCompatibleWeapons(
+        EnemySpawnChoice character) =>
+        _spawner.GetCompatibleWeapons(character);
+
     public string ScaffoldDiagnosisLogPath =>
         EnemySpawnerService.ScaffoldDiagnosisLogPath;
 
@@ -61,10 +65,16 @@ public sealed class AllegianceDemoService
         EnemySpawnChoice character,
         SpawnVariantChoice variant,
         int campaignTeam = FriendlyTeam,
+        int count = 1,
+        float formationOffsetX = 0,
+        float formationOffsetY = 0,
+        AiWeaponChoice? weapon = null,
         CancellationToken cancellationToken = default)
     {
         if (campaignTeam is not (FriendlyTeam or HostileTeam))
             throw new ArgumentOutOfRangeException(nameof(campaignTeam));
+        if (count is < 1 or > 5)
+            throw new ArgumentOutOfRangeException(nameof(count));
 
         // Friendly prefers an ally scaffold and registers as a player fireteam
         // companion so they follow. Hostile prefers a hostile scaffold and does
@@ -75,7 +85,10 @@ public sealed class AllegianceDemoService
         ScriptExecutionResult result = await _spawner.SpawnGroupAsync(
             character,
             variant,
-            count: 1,
+            count,
+            formationOffsetX,
+            formationOffsetY,
+            weapon,
             followPlayer: followPlayer,
             clearSquadObjective: true,
             campaignTeam: (ushort)campaignTeam,

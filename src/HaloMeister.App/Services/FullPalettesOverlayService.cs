@@ -5,9 +5,10 @@ namespace HaloMeister.App.Services;
 
 /// <summary>
 /// Bundled campaign content mod <c>MMYJ_FULL_VEHI_WAP_P</c> (.utoc/.ucas/.pak):
-/// full vehicle/weapon palettes plus dedicated <c>hm_ally</c>/<c>hm_hostile</c>
-/// spawn scaffolds. Dedicated Allegiance Demo features require the complete
-/// triplet in the game Paks folder; vehicle/weapon tools remain usable without it.
+/// full vehicle/weapon palettes, AI character-palette fill (schema max 64), plus
+/// dedicated <c>hm_ally</c>/<c>hm_hostile</c> spawn scaffolds. Dedicated Allegiance
+/// Demo features require the complete triplet in the game Paks folder;
+/// vehicle/weapon tools remain usable without it.
 /// </summary>
 public sealed class FullPalettesOverlayService
 {
@@ -131,7 +132,7 @@ public sealed class FullPalettesOverlayService
 
         if (removed.Count == 0)
             throw new FileNotFoundException(
-                L.Get("vehicle_workshop.full_palettes_not_installed"));
+                L.Get("builtin_mod.status_not_installed"));
 
         return new FullPalettesOverlayResult(
             Installed: false,
@@ -144,7 +145,7 @@ public sealed class FullPalettesOverlayService
     {
         if (IsGameRunning)
             throw new InvalidOperationException(
-                L.Get("vehicle_workshop.full_palettes_close_game"));
+                L.Get("builtin_mod.close_game"));
     }
 
     private static List<string> RemoveStem(string paks, string stem)
@@ -177,7 +178,7 @@ public sealed class FullPalettesOverlayService
         }
 
         throw new FileNotFoundException(
-            L.Get("vehicle_workshop.full_palettes_bundle_missing"));
+            L.Get("builtin_mod.bundle_missing"));
     }
 
     public static string ResolvePaksDirectory()
@@ -202,7 +203,7 @@ public sealed class FullPalettesOverlayService
         }
 
         throw new DirectoryNotFoundException(
-            L.Get("vehicle_workshop.error_paks_not_found"));
+            L.Get("builtin_mod.game_folder_missing"));
     }
 
     private static IEnumerable<string> CandidateGameRoots()

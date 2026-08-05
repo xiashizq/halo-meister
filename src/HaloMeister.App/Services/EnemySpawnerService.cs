@@ -515,17 +515,28 @@ public sealed class EnemySpawnerService : IDisposable
     }
 
     public IReadOnlyList<AiWeaponChoice> GetCompatibleWeapons(
-        EnemySpawnChoice choice)
+        EnemySpawnChoice _) =>
+        GetAllWeapons();
+
+    /// <summary>
+    /// Every loaded <c>weap</c> tag currently in the process (not limited to the
+    /// character's authored <c>character_weapons_block</c>).
+    /// </summary>
+    public IReadOnlyList<AiWeaponChoice> GetAllWeapons()
     {
         if (!_memory.IsConnected)
             return [];
         _tags = _memory.ReadTags();
-        RuntimeTagEntry? character = _tags.FirstOrDefault(tag =>
-            tag.Index == choice.CharacterTag.Index &&
-            string.Equals(tag.Group, "char", StringComparison.OrdinalIgnoreCase));
-        return character is null
-            ? []
-            : ReadCompatibleWeapons(character);
+        return _tags
+            .Where(tag =>
+                string.Equals(tag.Group, "weap", StringComparison.OrdinalIgnoreCase) &&
+                tag.DataAddress > 0 &&
+                !string.IsNullOrWhiteSpace(tag.Name) &&
+                !tag.Name.Contains(@"\null\", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new AiWeaponChoice(group.First()))
+            .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     public IReadOnlyList<EnemySpawnChoice> GetCharacterFamilyVariants(

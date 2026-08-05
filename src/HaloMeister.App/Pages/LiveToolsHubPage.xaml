@@ -11,34 +11,13 @@
         </Grid.RowDefinitions>
 
         <Border
-            Padding="24,18,24,8"
+            Padding="12,4,12,0"
             Background="{ThemeResource LayerFillColorAltBrush}">
-            <StackPanel Spacing="10">
-                <Grid ColumnSpacing="20">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="3">
-                        <TextBlock x:Name="HubTitle" Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='live_tools_hub.live_tools'}" />
-                        <TextBlock
-                            x:Name="HubDescription"
-                            HorizontalAlignment="Left"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextWrapping="Wrap" />
-                    </StackPanel>
-                    <Border
-                        Grid.Column="1"
-                        Padding="10,5"
-                        VerticalAlignment="Center"
-                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                        CornerRadius="14">
-                        <StackPanel Orientation="Horizontal" Spacing="7">
-                            <FontIcon FontSize="12" Glyph="&#xE7BA;" />
-                            <TextBlock FontSize="12" Text="{i18n:Loc Key='live_tools_hub.offline_campaign_session_changes'}" />
-                        </StackPanel>
-                    </Border>
-                </Grid>
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <NavigationView
                     x:Name="ToolNav"
                     AlwaysShowHeader="False"
@@ -46,7 +25,17 @@
                     IsSettingsVisible="False"
                     PaneDisplayMode="Top"
                     SelectionChanged="OnToolSelectionChanged" />
-            </StackPanel>
+                <TextBlock
+                    Grid.Column="1"
+                    MaxWidth="220"
+                    Margin="0,0,4,0"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='live_tools_hub.offline_campaign_session_changes'}"
+                    TextTrimming="CharacterEllipsis"
+                    ToolTipService.ToolTip="{i18n:Loc Key='live_tools_hub.offline_campaign_session_changes'}" />
+            </Grid>
         </Border>
 
         <Frame x:Name="ToolFrame" Grid.Row="1" />
