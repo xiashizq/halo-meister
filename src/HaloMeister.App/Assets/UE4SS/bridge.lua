@@ -1,8 +1,11 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 102
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 103
 do
     local hm_ok, hm_error = pcall(function()
-        local UEHelpers = require("UEHelpers")
+        -- UE4SS can load a mod before its shared helper module becomes available.
+        -- Keep the mailbox heartbeat alive and retry this recoverable startup phase
+        -- instead of making the whole bridge require a game restart.
+        local UEHelpers = nil
         local local_app_data = os.getenv("LOCALAPPDATA")
         if not local_app_data then
             error("LOCALAPPDATA is unavailable")
@@ -11,7 +14,7 @@ do
         -- Keep in step with the VERSION marker above; Halo Meister compares the
         -- version reported here against the copy it ships so it can tell you when
         -- the game is still running a stale bridge.
-        local bridge_version = 102
+        local bridge_version = 103
         -- User scripts execute in a dedicated environment. Expose the UE4SS
         -- helper module there while retaining normal access to global UE4SS
         -- APIs and preserving the historical global assignment behavior.
@@ -46,6 +49,9 @@ do
         -- Blam may retain the binary blob after this request completes.
         local loaded_tag_assets = {}
         local ai_capture_bootstrap = nil
+        local ue_helpers_ready = false
+        local next_ue_helpers_attempt = 0
+        local next_ai_capture_attempt = 0
 
         -- Halo Meister normally creates this folder on launch. When the game starts
         -- first, the bridge must create it itself or every heartbeat write fails.
@@ -122,6 +128,26 @@ do
                     tostring(err)
                 ))
             end
+        end
+
+        local function ensure_ue_helpers()
+            if ue_helpers_ready then return true end
+            local now = os.time()
+            if now < next_ue_helpers_attempt then return false end
+            next_ue_helpers_attempt = now + 5
+            local ok, helpers_or_error = pcall(require, "UEHelpers")
+            if not ok then
+                print(string.format(
+                    "[HaloMeister] UEHelpers is not ready; retrying bridge initialization: %s\n",
+                    tostring(helpers_or_error)
+                ))
+                return false
+            end
+            UEHelpers = helpers_or_error
+            user_script_environment.UEHelpers = UEHelpers
+            ue_helpers_ready = true
+            print("[HaloMeister] UEHelpers ready; scripting mailbox is accepting requests\n")
+            return true
         end
 
         local function valid_remote_object(object)
@@ -1470,19 +1496,6 @@ do
         end
 
         local function poll()
-            if ai_capture_bootstrap == nil then
-                local bootstrap = package.loadlib(
-                    native_module_path,
-                    "HaloMeisterAiCaptureBootstrap"
-                )
-                if bootstrap then
-                    ai_capture_bootstrap = bootstrap
-                end
-            end
-            if ai_capture_bootstrap ~= nil then
-                pcall(ai_capture_bootstrap)
-            end
-
             local now = os.time()
             if now ~= last_heartbeat then
                 local wrote, write_error = write_atomic(
@@ -1498,6 +1511,7 @@ do
                     ))
                 end
             end
+            if not ensure_ue_helpers() then return end
 
             local ok, request_or_error = xpcall(read_request, debug.traceback)
             if ok and request_or_error then
@@ -1513,6 +1527,37 @@ do
                     "[HaloMeister] Scripting bridge poll failed: %s\n",
                     tostring(request_or_error)
                 ))
+            end
+
+            -- AI capture is optional. Do not let an unavailable native DLL or a
+            -- transient bootstrap failure block the base heartbeat or mailbox.
+            if ai_capture_bootstrap == nil and now >= next_ai_capture_attempt then
+                next_ai_capture_attempt = now + 5
+                local loaded, bootstrap_or_error = pcall(
+                    package.loadlib,
+                    native_module_path,
+                    "HaloMeisterAiCaptureBootstrap"
+                )
+                if loaded and bootstrap_or_error then
+                    ai_capture_bootstrap = bootstrap_or_error
+                    print("[HaloMeister] Native AI capture bootstrap loaded\n")
+                else
+                    print(string.format(
+                        "[HaloMeister] Native AI capture bootstrap will retry: %s\n",
+                        tostring(bootstrap_or_error)
+                    ))
+                end
+            end
+            if ai_capture_bootstrap ~= nil then
+                local bootstrapped, bootstrap_error = pcall(ai_capture_bootstrap)
+                if not bootstrapped then
+                    print(string.format(
+                        "[HaloMeister] Native AI capture bootstrap will retry: %s\n",
+                        tostring(bootstrap_error)
+                    ))
+                    ai_capture_bootstrap = nil
+                    next_ai_capture_attempt = now + 5
+                end
             end
         end
 

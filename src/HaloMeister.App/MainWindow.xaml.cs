@@ -37,6 +37,8 @@ public sealed partial class MainWindow : Window
         Instance = this;
         SetWindowIcon();
         ApplyBuildPolicy();
+        // File-based tools must know the installation while the game is closed.
+        _ = GameInstallationService.Current.BinaryDirectory;
 
         _state.DirtyChanged += UpdateChrome;
         _state.SaveLoaded += UpdateChrome;
@@ -257,7 +259,8 @@ public sealed partial class MainWindow : Window
     {
         if (_installingBridge) return;
 
-        string? selectedRoot = _loaderInstaller.FindInstalledBinaryDirectory();
+        string? selectedRoot = _loaderInstaller.FindGameBinaryDirectory()
+            ?? _loaderInstaller.FindInstalledBinaryDirectory();
         try
         {
             if (_bridge.FindInstalledMainPath() is null && selectedRoot is null)
@@ -271,6 +274,7 @@ public sealed partial class MainWindow : Window
                 StorageFolder? folder = await picker.PickSingleFolderAsync();
                 if (folder is null) return;
                 selectedRoot = folder.Path;
+                GameInstallationService.Current.Remember(selectedRoot);
             }
 
             bool installLoader =

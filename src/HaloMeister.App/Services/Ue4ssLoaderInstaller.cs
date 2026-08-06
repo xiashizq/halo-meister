@@ -19,12 +19,14 @@ public sealed record Ue4ssLoaderInstallResult(
 /// </summary>
 public sealed class Ue4ssLoaderInstaller
 {
-    public const string Version = "v3.0.1-1012-gc838a8ac";
+    // Includes UE4SS's FName-constructor verification guard (upstream PR #1277).
+    public const string Version = "v3.0.1-1018-g662df915";
     public const string DownloadUrl =
-        "https://github.com/UE4SS-RE/RE-UE4SS/releases/download/experimental/" +
-        "UE4SS_v3.0.1-1012-gc838a8ac.zip";
+        "https://github.com/UE4SS-RE/RE-UE4SS/releases/download/experimental-latest/" +
+        "UE4SS_v3.0.1-1018-g662df915.zip";
     public const string ArchiveSha256 =
-        "4CBB48E18D5D7D920DF7C742A871749B725116241B7B9E33788E191E891A73FF";
+        "590AE4C6463DB61497123B9ED35373596C39FB27F736E2078A02B476599671BA";
+    private const int ScannerTimeoutSeconds = 90;
 
     private const long MaximumDownloadBytes = 32L * 1024 * 1024;
     private static readonly UTF8Encoding Utf8 = new(false);
@@ -66,6 +68,10 @@ public sealed class Ue4ssLoaderInstaller
 
     public string? FindInstalledBinaryDirectory()
     {
+        string? discovered = GameInstallationService.Current.BinaryDirectory;
+        if (discovered is not null && IsInstalled(discovered))
+            return discovered;
+
         foreach (string root in CandidateGameRoots())
         {
             string? binaryDirectory = ResolveBinaryDirectory(root);
@@ -75,6 +81,10 @@ public sealed class Ue4ssLoaderInstaller
 
         return null;
     }
+
+    /// <summary>Returns the known game directory even before UE4SS is installed.</summary>
+    public string? FindGameBinaryDirectory()
+        => GameInstallationService.Current.BinaryDirectory;
 
     public async Task<Ue4ssLoaderInstallResult> InstallAsync(
         string selectedPath,
@@ -88,6 +98,7 @@ public sealed class Ue4ssLoaderInstaller
             ?? throw new DirectoryNotFoundException(
                 "Could not find HaloCampaignEvolved.exe under the selected folder. " +
                 "Select the Halo: Campaign Evolved installation folder.");
+        GameInstallationService.Current.Remember(binaryDirectory);
 
         if (!Directory.Exists(_signatureAssetRoot))
             throw new DirectoryNotFoundException(
@@ -272,6 +283,11 @@ public sealed class Ue4ssLoaderInstaller
         string settings = File.ReadAllText(settingsPath, Utf8);
         settings = SetIniValue(settings, "General", "EnableHotReloadSystem", "0");
         settings = SetIniValue(settings, "General", "bUseUObjectArrayCache", "false");
+        settings = SetIniValue(
+            settings,
+            "General",
+            "SecondsToScanBeforeGivingUp",
+            ScannerTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
         settings = SetIniValue(settings, "EngineVersionOverride", "MajorVersion", "5");
         settings = SetIniValue(settings, "EngineVersionOverride", "MinorVersion", "5");
         File.WriteAllText(settingsPath, settings, Utf8);

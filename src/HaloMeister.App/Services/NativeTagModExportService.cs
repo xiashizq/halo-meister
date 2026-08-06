@@ -159,6 +159,10 @@ public sealed class NativeTagModExportService
 
     private static string ResolvePaksDirectory()
     {
+        string? discovered = GameInstallationService.Current.TryGetPaksDirectory();
+        if (discovered is not null)
+            return discovered;
+
         foreach (string root in CandidateGameRoots())
         {
             string full;

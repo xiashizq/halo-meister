@@ -88,6 +88,7 @@ public sealed class ScriptingBridgeService
     private const string MarkerEnd = "-- HALOMEISTER SCRIPTING BRIDGE:END";
     private const string MarkerVersion = "-- HALOMEISTER SCRIPTING BRIDGE:VERSION";
     private const int MaximumCodeBytes = 64 * 1024;
+    private const int MaximumUe4ssLogTailBytes = 128 * 1024;
     private static readonly TimeSpan HeartbeatLifetime = TimeSpan.FromSeconds(8);
     // Fast probes for the common case where status.hm appears within a few seconds,
     // then settle into a steady poll. Callers cancel when they no longer need to wait.
@@ -172,6 +173,9 @@ public sealed class ScriptingBridgeService
         // A bridge older than the one we ship reports outcomes we no longer trust, so it
         // has to be called out rather than shown as plain "Ready".
         bool stale = installedStale || runningStale;
+        string? startupDiagnostic = installed && gameRunning && !ready
+            ? GetStartupDiagnostic(mainPath)
+            : null;
 
         string summary = (installed, gameRunning, ready, runningStale, installedStale) switch
         {
@@ -187,7 +191,8 @@ public sealed class ScriptingBridgeService
                 "bridge.summary_ready",
                 runningVersion,
                 heartbeat?.ToLocalTime().ToString("HH:mm:ss")),
-            (true, true, false, false, false) => L.Get("bridge.summary_game_running_no_heartbeat"),
+            (true, true, false, false, false) => startupDiagnostic ??
+                L.Get("bridge.summary_game_running_no_heartbeat"),
             (true, false, false, false, false) => L.Get("bridge.summary_installed_not_running"),
             (false, _, true, false, false) => L.Format(
                 "bridge.summary_running_install_missing",
@@ -435,6 +440,10 @@ public sealed class ScriptingBridgeService
             WriteAtomic(mainPath, updated);
         }
 
+        EnsureModEnabled(Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(mainPath)!,
+            "..",
+            "..")));
         Directory.CreateDirectory(Path.GetDirectoryName(InstallLocationPath)!);
         File.WriteAllText(InstallLocationPath, mainPath, Utf8);
         Directory.CreateDirectory(BridgeRoot);
@@ -548,6 +557,74 @@ public sealed class ScriptingBridgeService
         foreach (Process process in processes)
             process.Dispose();
         return processes.Length > 0;
+    }
+
+    private static string? GetStartupDiagnostic(string? mainPath)
+    {
+        if (string.IsNullOrWhiteSpace(mainPath))
+            return null;
+
+        string logPath;
+        try
+        {
+            logPath = Path.GetFullPath(Path.Combine(
+                Path.GetDirectoryName(mainPath)!,
+                "..",
+                "..",
+                "..",
+                "UE4SS.log"));
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (!File.Exists(logPath))
+            return L.Get("bridge.summary_ue4ss_log_missing");
+
+        string? tail = TryReadLogTail(logPath);
+        if (string.IsNullOrEmpty(tail))
+            return L.Get("bridge.summary_ue4ss_log_missing");
+        if (tail.Contains("[HaloMeister] Scripting bridge failed to load:", StringComparison.Ordinal))
+            return L.Get("bridge.summary_ue4ss_lua_failed");
+        if (tail.Contains("[HaloMeister] Scripting bridge HMREQ1", StringComparison.Ordinal) ||
+            tail.Contains("Starting Lua mod 'HaloMeister'", StringComparison.Ordinal))
+        {
+            return L.Get("bridge.summary_bridge_loaded_no_heartbeat");
+        }
+        if (tail.Contains("Lua Scan attempt", StringComparison.Ordinal) ||
+            tail.Contains("AOB scans could not be completed", StringComparison.Ordinal))
+        {
+            return L.Get("bridge.summary_ue4ss_initializing");
+        }
+        return L.Get("bridge.summary_ue4ss_mod_not_started");
+    }
+
+    private static string? TryReadLogTail(string logPath)
+    {
+        try
+        {
+            using var stream = new FileStream(
+                logPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            if (stream.Length > MaximumUe4ssLogTailBytes)
+                stream.Seek(-MaximumUe4ssLogTailBytes, SeekOrigin.End);
+            using var reader = new StreamReader(
+                stream,
+                new UTF8Encoding(false, false),
+                detectEncodingFromByteOrderMarks: true);
+            return reader.ReadToEnd();
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static int? ReadBridgeVersion(string path)
@@ -750,8 +827,7 @@ public sealed class ScriptingBridgeService
             if (!File.Exists(mainPath))
                 File.WriteAllText(mainPath, string.Empty, Utf8);
 
-            EnableModInTextList(Path.Combine(modsDirectory, "mods.txt"));
-            EnableModInJsonList(Path.Combine(modsDirectory, "mods.json"));
+            EnsureModEnabled(modsDirectory);
             return mainPath;
         }
         return null;
@@ -788,61 +864,71 @@ public sealed class ScriptingBridgeService
         return null;
     }
 
+    private static void EnsureModEnabled(string modsDirectory)
+    {
+        string modsTextPath = Path.Combine(modsDirectory, "mods.txt");
+        string modsJsonPath = Path.Combine(modsDirectory, "mods.json");
+        EnableModInTextList(modsTextPath);
+        EnableModInJsonList(modsJsonPath);
+        if (!IsModEnabledInTextList(modsTextPath) ||
+            !IsModEnabledInJsonList(modsJsonPath))
+        {
+            throw new InvalidDataException(
+                "HaloMeister could not be enabled in UE4SS mods.txt and mods.json.");
+        }
+    }
+
     private static void EnableModInTextList(string modsTextPath)
     {
-        try
+        List<string> lines = File.Exists(modsTextPath)
+            ? [.. File.ReadAllLines(modsTextPath, Utf8)]
+            : [];
+        for (int i = 0; i < lines.Count; i++)
         {
-            if (!File.Exists(modsTextPath))
-                return;
-
-            List<string> lines = [.. File.ReadAllLines(modsTextPath, Utf8)];
-            for (int i = 0; i < lines.Count; i++)
-            {
-                string trimmed = lines[i].TrimStart();
-                if (trimmed.StartsWith(';') ||
-                    !trimmed.StartsWith("HaloMeister", StringComparison.Ordinal))
-                    continue;
-                lines[i] = "HaloMeister : 1";
-                File.WriteAllLines(modsTextPath, lines, Utf8);
-                return;
-            }
-
-            lines.Add("HaloMeister : 1");
+            string trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith(';') ||
+                !trimmed.StartsWith("HaloMeister", StringComparison.Ordinal))
+                continue;
+            lines[i] = "HaloMeister : 1";
             File.WriteAllLines(modsTextPath, lines, Utf8);
+            return;
         }
-        catch
-        {
-            // The install still works if the user enables the mod by hand.
-        }
+
+        lines.Add("HaloMeister : 1");
+        File.WriteAllLines(modsTextPath, lines, Utf8);
     }
 
     private static void EnableModInJsonList(string modsJsonPath)
     {
-        try
-        {
-            if (!File.Exists(modsJsonPath))
-                return;
+        var entries = File.Exists(modsJsonPath)
+            ? JsonSerializer.Deserialize<List<Ue4ssModEntry>>(
+                File.ReadAllText(modsJsonPath, Utf8)) ?? []
+            : [];
 
-            var entries = JsonSerializer.Deserialize<List<Ue4ssModEntry>>(
-                File.ReadAllText(modsJsonPath, Utf8)) ?? [];
+        int index = entries.FindIndex(entry =>
+            string.Equals(entry.mod_name, "HaloMeister", StringComparison.Ordinal));
+        if (index >= 0)
+            entries[index] = entries[index] with { mod_enabled = true };
+        else
+            entries.Add(new Ue4ssModEntry("HaloMeister", true));
 
-            int index = entries.FindIndex(entry =>
-                string.Equals(entry.mod_name, "HaloMeister", StringComparison.Ordinal));
-            if (index >= 0)
-                entries[index] = entries[index] with { mod_enabled = true };
-            else
-                entries.Add(new Ue4ssModEntry("HaloMeister", true));
-
-            File.WriteAllText(
-                modsJsonPath,
-                JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true }),
-                Utf8);
-        }
-        catch
-        {
-            // Same as mods.txt: a failure here is recoverable by hand.
-        }
+        File.WriteAllText(
+            modsJsonPath,
+            JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true }),
+            Utf8);
     }
+
+    private static bool IsModEnabledInTextList(string modsTextPath)
+        => File.Exists(modsTextPath) &&
+           File.ReadLines(modsTextPath, Utf8).Any(line =>
+               line.Trim().Equals("HaloMeister : 1", StringComparison.Ordinal));
+
+    private static bool IsModEnabledInJsonList(string modsJsonPath)
+        => File.Exists(modsJsonPath) &&
+           (JsonSerializer.Deserialize<List<Ue4ssModEntry>>(
+                File.ReadAllText(modsJsonPath, Utf8)) ?? []).Any(entry =>
+                string.Equals(entry.mod_name, "HaloMeister", StringComparison.Ordinal) &&
+                entry.mod_enabled);
 
     private sealed record Ue4ssModEntry(string mod_name, bool mod_enabled);
 

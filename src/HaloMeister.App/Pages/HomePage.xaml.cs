@@ -86,7 +86,9 @@ public sealed partial class HomePage : Page
             ? _state.IsDirty ? L.Get("home.cloud_dirty") : L.Get("home.cloud_clean")
             : cloudReady ? L.Get("home.cloud_auth") : L.Get("home.cloud_need_auth");
 
-        _gameDirectory = connected ? ResolveGameDirectory(_game.ModulePath) : null;
+        _gameDirectory = connected
+            ? ResolveGameDirectory(_game.ModulePath)
+            : GameInstallationService.Current.BinaryDirectory;
         bool hasGamePath = !string.IsNullOrWhiteSpace(_gameDirectory) && Directory.Exists(_gameDirectory);
         GamePathStatusDot.Fill = StatusBrush(hasGamePath);
         GamePathText.Text = hasGamePath
