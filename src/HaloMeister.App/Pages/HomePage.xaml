@@ -207,6 +207,26 @@
                     </StackPanel>
                 </Grid>
             </Border>
+
+            <Border
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="0,16,0,0">
+                <StackPanel HorizontalAlignment="Center" Spacing="3">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='home.credits_fork'}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="{i18n:Loc Key='home.credits_nicolaas_nel'}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </Page>

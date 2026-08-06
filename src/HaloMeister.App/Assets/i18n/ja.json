@@ -836,6 +836,8 @@
   "home.review_campaign_progress": "キャンペーン進行を確認",
   "home.setup_guidance_safety_notes_troubleshooti_f1fc61": "セットアップ案内、安全メモ、トラブルシューティング、復元",
   "home.use_live_tools": "ライブツールを使う",
+  "home.credits_fork": "本プロジェクトは Halo Meister をベースにした派生プロジェクトです",
+  "home.credits_nicolaas_nel": "原プロジェクト作者：Nicolaas Nel",
   "home.welcome_to_halo_meister": "Halo Meister へようこそ",
   "home.what_would_you_like_to_do": "何をしますか？",
   "allegiance_demo.apply_object_team": "生成したユニットに適用",

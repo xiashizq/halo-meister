@@ -836,6 +836,8 @@
   "home.review_campaign_progress": "查看战役进度",
   "home.setup_guidance_safety_notes_troubleshooti_f1fc61": "安装指引、安全说明、故障排查与恢复",
   "home.use_live_tools": "使用实时工具",
+  "home.credits_fork": "本项目基于 Halo Meister 二次开发",
+  "home.credits_nicolaas_nel": "原项目作者：Nicolaas Nel",
   "home.welcome_to_halo_meister": "欢迎使用 Halo Meister",
   "home.what_would_you_like_to_do": "你想做什么？",
   "allegiance_demo.apply_object_team": "应用到已生成单位",
