@@ -65,7 +65,7 @@ foreach ($path in @($packageDirectory, $archivePath, $checksumPath, $buildOutput
 & dotnet publish $project `
     --configuration Release `
     --runtime win-x64 `
-    --self-contained true `
+    --self-contained false `
     --output $packageDirectory `
     -p:Platform=x64 `
     -p:DebugSymbols=false `

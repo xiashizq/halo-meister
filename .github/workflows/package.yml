@@ -1,4 +1,5 @@
-# One-click clean portable package (self-contained win-x64).
+# One-click framework-dependent win-x64 package.
+# End users install the .NET Desktop Runtime and Windows App Runtime separately.
 # GitHub → Actions → "Release" → Run workflow → Download artifact.
 name: Release
 
@@ -28,7 +29,7 @@ concurrency:
 
 jobs:
   package:
-    name: Build clean win-x64 ZIP
+    name: Build framework-dependent win-x64 ZIP
     runs-on: windows-latest
     timeout-minutes: 45
 
@@ -58,9 +59,31 @@ jobs:
           "tag=v$version" >> $env:GITHUB_OUTPUT
           Write-Host "Canonical version: $version"
 
-      - name: Publish clean portable package
+      - name: Publish framework-dependent package
         shell: pwsh
         run: .\publish-release.ps1 -Version "${{ steps.version.outputs.value }}"
+
+      - name: Verify framework-dependent package
+        shell: pwsh
+        run: |
+          $package = "artifacts/release/HaloMeister-${{ steps.version.outputs.value }}-win-x64"
+          $required = @(
+            "$package\HaloMeister.exe",
+            "$package\HaloMeister.dll",
+            "$package\START_HERE.txt"
+          )
+          foreach ($path in $required) {
+            if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Published package is missing: $path"
+            }
+          }
+          if (Test-Path -LiteralPath "$package\hostfxr.dll") {
+            throw "Package unexpectedly includes the self-contained .NET host runtime."
+          }
+          if (!(Select-String -LiteralPath "$package\START_HERE.txt" `
+              -Pattern "Windows App Runtime" -Quiet)) {
+            throw "Package instructions do not mention the Windows App Runtime prerequisite."
+          }
 
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4

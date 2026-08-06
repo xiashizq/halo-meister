@@ -18,10 +18,10 @@
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
 
-    <!-- Unpackaged + self contained: no MSIX, no separate runtime install, just an .exe. -->
+    <!-- Unpackaged + framework-dependent: keep the release compact. -->
     <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <SelfContained>false</SelfContained>
 
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

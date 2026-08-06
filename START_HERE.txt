@@ -6,8 +6,11 @@ HALO MEISTER - START HERE
    itself. Its Assets and runtime files must remain beside it.
 
 2. Run HaloMeister.exe.
-   This release includes the required .NET and Windows App SDK runtime. You do
-   not need the .NET SDK or Visual Studio.
+   This compact release requires the x64 .NET 10 Desktop Runtime and Windows
+   App Runtime to be installed first. You do not need the .NET SDK or Visual
+   Studio. Download them from:
+   - https://dotnet.microsoft.com/download/dotnet/10.0/runtime
+   - https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads
 
 3. Save-data and local-file tools can be used without connecting to the game.
    Read the in-app Readme before restoring or changing data, and retain your
@@ -45,6 +48,10 @@ verify the accompanying SHA256 file when one is provided.
 
 Troubleshooting
 ---------------
+
+- "You must install or update .NET" / "Windows App Runtime is not installed":
+  Install the x64 .NET 10 Desktop Runtime and Windows App Runtime from the
+  links above, then run HaloMeister.exe again.
 
 - "Bundled definitions are missing":
   Extract the complete ZIP again; keep the Assets folder beside the EXE.
