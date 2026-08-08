@@ -101,11 +101,18 @@ public sealed class ScriptingBridgeService
     ];
     private static readonly TimeSpan HeartbeatPollInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan InstallProbeCacheLifetime = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ProcessProbeCacheLifetime = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan StartupDiagnosticCacheLifetime = TimeSpan.FromSeconds(5);
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly object CapabilityProfileGate = new();
     private static CapabilityProfileCache? _capabilityProfileCache;
     private readonly SemaphoreSlim _executionGate = new(1, 1);
+    private readonly object _statusCacheGate = new();
     private (DateTimeOffset? Heartbeat, int? Version) _lastStatus;
+    private InstallProbeCache? _installProbeCache;
+    private (bool Running, long ExpiresTick) _processProbeCache;
+    private (string? Text, long ExpiresTick) _startupDiagnosticCache;
     private int? _packagedVersion;
     private bool _packagedVersionRead;
 
@@ -156,12 +163,8 @@ public sealed class ScriptingBridgeService
 
     public ScriptingBridgeStatus GetStatus()
     {
-        string? mainPath = FindInstalledMainPath();
-        bool installed = mainPath is not null && ContainsBridge(mainPath);
-        int? installedVersion = installed && mainPath is not null
-            ? ReadBridgeVersion(mainPath)
-            : null;
-        bool gameRunning = IsGameProcessRunning();
+        (string? mainPath, bool installed, int? installedVersion) = ResolveInstallProbe();
+        bool gameRunning = IsGameProcessRunningCached();
         (DateTimeOffset? heartbeat, int? runningVersion) = ReadStatusFile();
         bool ready = heartbeat is { } time && DateTimeOffset.UtcNow - time <= HeartbeatLifetime;
 
@@ -174,7 +177,7 @@ public sealed class ScriptingBridgeService
         // has to be called out rather than shown as plain "Ready".
         bool stale = installedStale || runningStale;
         string? startupDiagnostic = installed && gameRunning && !ready
-            ? GetStartupDiagnostic(mainPath)
+            ? GetStartupDiagnosticCached(mainPath)
             : null;
 
         string summary = (installed, gameRunning, ready, runningStale, installedStale) switch
@@ -202,6 +205,20 @@ public sealed class ScriptingBridgeService
 
         return new ScriptingBridgeStatus(
             mainPath, installed, installedVersion, gameRunning, ready, heartbeat, runningVersion, stale, summary);
+    }
+
+    /// <summary>
+    /// Drops cached install / process / diagnostic probes so the next
+    /// <see cref="GetStatus"/> reflects a fresh install, uninstall, or folder change.
+    /// </summary>
+    public void InvalidateStatusCaches()
+    {
+        lock (_statusCacheGate)
+        {
+            _installProbeCache = null;
+            _processProbeCache = default;
+            _startupDiagnosticCache = default;
+        }
     }
 
     /// <summary>
@@ -447,7 +464,70 @@ public sealed class ScriptingBridgeService
         Directory.CreateDirectory(Path.GetDirectoryName(InstallLocationPath)!);
         File.WriteAllText(InstallLocationPath, mainPath, Utf8);
         Directory.CreateDirectory(BridgeRoot);
+        InvalidateStatusCaches();
         return mainPath;
+    }
+
+    /// <summary>
+    /// True when a complete bridge, a partial HaloMeister mod scaffold, or a remembered
+    /// install path remains — enough for uninstall to clear so the user can reinstall.
+    /// </summary>
+    public bool HasRemovableInstall()
+        => ResolveUninstallMainPath() is not null || File.Exists(InstallLocationPath);
+
+    /// <summary>
+    /// Removes the Halo Meister UE4SS mod / bridge markers / native DLL and clears the
+    /// remembered install path so Setup can pick a folder and install again.
+    /// </summary>
+    public string UninstallBridge()
+    {
+        if (IsGameProcessRunning())
+            throw new InvalidOperationException(L.Get("builtin_mod.close_game"));
+
+        string? mainPath = ResolveUninstallMainPath();
+        ClearRememberedInstallLocation();
+
+        if (mainPath is null || !File.Exists(mainPath))
+            return string.Empty;
+
+        string scriptsDirectory = Path.GetDirectoryName(mainPath)
+            ?? throw new DirectoryNotFoundException(mainPath);
+        string? modDirectory = Path.GetDirectoryName(scriptsDirectory);
+        string? modsDirectory = modDirectory is null
+            ? null
+            : Path.GetDirectoryName(modDirectory);
+
+        Directory.CreateDirectory(BackupRoot);
+        string backupPath = Path.Combine(
+            BackupRoot,
+            $"main-uninstall-{DateTime.Now:yyyyMMdd-HHmmss-fff}.lua");
+        File.Copy(mainPath, backupPath, overwrite: false);
+
+        string original = ReadLuaText(mainPath);
+        string remainder = RemoveMarkedBlock(original);
+        DeleteNativeBridges(scriptsDirectory);
+
+        if (string.IsNullOrWhiteSpace(remainder) && modDirectory is not null)
+        {
+            TryDeleteDirectory(modDirectory);
+        }
+        else
+        {
+            WriteAtomic(mainPath, remainder.TrimEnd() + Environment.NewLine);
+        }
+
+        if (modsDirectory is not null && Directory.Exists(modsDirectory))
+            DisableMod(modsDirectory);
+
+        ClearMailboxFiles();
+        InvalidateStatusCaches();
+        return mainPath;
+    }
+
+    public void ClearRememberedInstallLocation()
+    {
+        DeleteIfExists(InstallLocationPath);
+        InvalidateStatusCaches();
     }
 
     public string? FindInstalledMainPath()
@@ -464,6 +544,16 @@ public sealed class ScriptingBridgeService
             {
                 // Continue with known installation layouts.
             }
+        }
+
+        // Prefer the remembered Store/Steam binary directory before drive scans so
+        // WinGDK installs are not missed when CandidateGameRoots would be too narrow.
+        string? binaryDirectory = GameInstallationService.Current.BinaryDirectory;
+        if (binaryDirectory is not null)
+        {
+            string? fromBinary = ResolveMainPath(binaryDirectory);
+            if (fromBinary is not null)
+                return fromBinary;
         }
 
         foreach (string root in CandidateGameRoots())
@@ -485,12 +575,100 @@ public sealed class ScriptingBridgeService
     /// ages out against <see cref="HeartbeatLifetime"/>.
     /// </para>
     /// </summary>
+    private (string? MainPath, bool Installed, int? Version) ResolveInstallProbe()
+    {
+        lock (_statusCacheGate)
+        {
+            if (_installProbeCache is { } cached &&
+                cached.ExpiresUtc > DateTimeOffset.UtcNow &&
+                InstallProbeStillValid(cached))
+            {
+                return (cached.MainPath, cached.Installed, cached.Version);
+            }
+        }
+
+        string? mainPath = FindInstalledMainPath();
+        bool installed = false;
+        int? version = null;
+        DateTime mainWriteUtc = default;
+        if (mainPath is not null)
+        {
+            (installed, version) = ReadInstallMarkers(mainPath);
+            try { mainWriteUtc = File.GetLastWriteTimeUtc(mainPath); }
+            catch { /* keep default */ }
+        }
+
+        var probe = new InstallProbeCache(
+            mainPath,
+            installed,
+            version,
+            mainWriteUtc,
+            DateTimeOffset.UtcNow + InstallProbeCacheLifetime);
+        lock (_statusCacheGate)
+            _installProbeCache = probe;
+        return (mainPath, installed, version);
+    }
+
+    private static bool InstallProbeStillValid(InstallProbeCache cached)
+    {
+        if (cached.MainPath is null)
+            return true;
+        try
+        {
+            return File.Exists(cached.MainPath) &&
+                   File.GetLastWriteTimeUtc(cached.MainPath) == cached.MainWriteUtc;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Single pass over main.lua for both presence markers and version.
+    /// </summary>
+    private static (bool Installed, int? Version) ReadInstallMarkers(string mainPath)
+    {
+        bool hasStart = false;
+        bool hasEnd = false;
+        int? version = null;
+        try
+        {
+            foreach (string line in File.ReadLines(mainPath))
+            {
+                if (!hasStart && line.Contains(MarkerStart, StringComparison.Ordinal))
+                    hasStart = true;
+                if (!hasEnd && line.Contains(MarkerEnd, StringComparison.Ordinal))
+                    hasEnd = true;
+                if (version is null)
+                {
+                    int marker = line.IndexOf(MarkerVersion, StringComparison.Ordinal);
+                    if (marker >= 0)
+                    {
+                        string value = line[(marker + MarkerVersion.Length)..].Trim();
+                        if (int.TryParse(value, out int parsed))
+                            version = parsed;
+                    }
+                }
+
+                if (hasStart && hasEnd && version is not null)
+                    break;
+            }
+        }
+        catch
+        {
+            return (false, null);
+        }
+
+        return (hasStart && hasEnd, version);
+    }
+
     private (DateTimeOffset? Heartbeat, int? Version) ReadStatusFile()
     {
-        // The Lua bridge rewrites status.hm via delete+rename. Share-compatible
-        // retries avoid treating that momentary gap as "no heartbeat" when the
-        // game was already running before Halo Meister started.
-        for (int attempt = 0; attempt < 4; attempt++)
+        // The Lua bridge rewrites status.hm via delete+rename. Prefer the last good
+        // read over blocking the UI with Thread.Sleep retries — heartbeat still ages
+        // out against HeartbeatLifetime if the bridge truly stopped.
+        for (int attempt = 0; attempt < 2; attempt++)
         {
             try
             {
@@ -517,11 +695,6 @@ public sealed class ScriptingBridgeService
             }
             catch (FileNotFoundException)
             {
-                if (attempt < 3)
-                {
-                    Thread.Sleep(25);
-                    continue;
-                }
                 return _lastStatus;
             }
             catch (DirectoryNotFoundException)
@@ -531,11 +704,8 @@ public sealed class ScriptingBridgeService
             }
             catch (IOException)
             {
-                if (attempt < 3)
-                {
-                    Thread.Sleep(25);
+                if (attempt == 0)
                     continue;
-                }
                 return _lastStatus;
             }
             catch (UnauthorizedAccessException)
@@ -551,12 +721,44 @@ public sealed class ScriptingBridgeService
         return _lastStatus;
     }
 
+    private bool IsGameProcessRunningCached()
+    {
+        long now = Environment.TickCount64;
+        lock (_statusCacheGate)
+        {
+            if (_processProbeCache.ExpiresTick > now)
+                return _processProbeCache.Running;
+        }
+
+        bool running = IsGameProcessRunning();
+        long expires = now + (long)ProcessProbeCacheLifetime.TotalMilliseconds;
+        lock (_statusCacheGate)
+            _processProbeCache = (running, expires);
+        return running;
+    }
+
     private static bool IsGameProcessRunning()
     {
         Process[] processes = Process.GetProcessesByName("HaloCampaignEvolved");
         foreach (Process process in processes)
             process.Dispose();
         return processes.Length > 0;
+    }
+
+    private string? GetStartupDiagnosticCached(string? mainPath)
+    {
+        long now = Environment.TickCount64;
+        lock (_statusCacheGate)
+        {
+            if (_startupDiagnosticCache.ExpiresTick > now)
+                return _startupDiagnosticCache.Text;
+        }
+
+        string? text = GetStartupDiagnostic(mainPath);
+        long expires = now + (long)StartupDiagnosticCacheLifetime.TotalMilliseconds;
+        lock (_statusCacheGate)
+            _startupDiagnosticCache = (text, expires);
+        return text;
     }
 
     private static string? GetStartupDiagnostic(string? mainPath)
@@ -599,6 +801,13 @@ public sealed class ScriptingBridgeService
         }
         return L.Get("bridge.summary_ue4ss_mod_not_started");
     }
+
+    private sealed record InstallProbeCache(
+        string? MainPath,
+        bool Installed,
+        int? Version,
+        DateTime MainWriteUtc,
+        DateTimeOffset ExpiresUtc);
 
     private static string? TryReadLogTail(string logPath)
     {
@@ -746,13 +955,45 @@ public sealed class ScriptingBridgeService
         if (start < 0 && end < 0)
             return original.TrimEnd() + Environment.NewLine + Environment.NewLine +
                    bridge.Trim() + Environment.NewLine;
-        if (start < 0 || end < start)
-            throw new InvalidDataException("The installed main.lua contains an incomplete Halo Meister bridge block.");
+        if (start >= 0 && end > start)
+        {
+            end += MarkerEnd.Length;
+            return original[..start].TrimEnd() + Environment.NewLine + Environment.NewLine +
+                   bridge.Trim() + Environment.NewLine +
+                   original[end..].TrimStart('\r', '\n');
+        }
 
-        end += MarkerEnd.Length;
-        return original[..start].TrimEnd() + Environment.NewLine + Environment.NewLine +
+        // Incomplete markers used to hard-fail Repair. Strip the damaged region and
+        // rewrite a clean block so a broken install can be recovered without hand-editing.
+        string prefix = start >= 0
+            ? original[..start]
+            : end >= 0
+                ? original[..end]
+                : original;
+        string suffix = end > start && start >= 0
+            ? original[(end + MarkerEnd.Length)..]
+            : string.Empty;
+        return prefix.TrimEnd() + Environment.NewLine + Environment.NewLine +
                bridge.Trim() + Environment.NewLine +
-               original[end..].TrimStart('\r', '\n');
+               suffix.TrimStart('\r', '\n');
+    }
+
+    private static string RemoveMarkedBlock(string original)
+    {
+        int start = original.IndexOf(MarkerStart, StringComparison.Ordinal);
+        int end = original.IndexOf(MarkerEnd, StringComparison.Ordinal);
+        if (start < 0 && end < 0)
+            return original;
+        if (start >= 0 && end > start)
+        {
+            end += MarkerEnd.Length;
+            return (original[..start].TrimEnd() + Environment.NewLine +
+                    original[end..].TrimStart('\r', '\n')).Trim();
+        }
+
+        if (start >= 0)
+            return original[..start].TrimEnd();
+        return original[..end].TrimEnd();
     }
 
     private void InstallNativeBridge(string mainPath)
@@ -773,6 +1014,120 @@ public sealed class ScriptingBridgeService
             File.Copy(target, backup, overwrite: false);
         }
         File.Copy(NativeBridgeAssetPath, target, overwrite: true);
+    }
+
+    private string? ResolveUninstallMainPath()
+    {
+        string? mainPath = FindInstalledMainPath();
+        if (mainPath is not null)
+            return mainPath;
+
+        string? binaryDirectory = GameInstallationService.Current.BinaryDirectory;
+        if (binaryDirectory is not null)
+        {
+            mainPath = ResolveMainPath(binaryDirectory);
+            if (mainPath is not null)
+                return mainPath;
+        }
+
+        return null;
+    }
+
+    private void DeleteNativeBridges(string scriptsDirectory)
+    {
+        if (!Directory.Exists(scriptsDirectory))
+            return;
+
+        foreach (string path in Directory.EnumerateFiles(scriptsDirectory, "halomeister_blam*.dll"))
+        {
+            try
+            {
+                string backup = Path.Combine(
+                    BackupRoot,
+                    $"halomeister-blam-uninstall-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Path.GetFileName(path)}");
+                Directory.CreateDirectory(BackupRoot);
+                File.Copy(path, backup, overwrite: false);
+                File.Delete(path);
+            }
+            catch
+            {
+                // DLL may still be mapped if the game was closed mid-exit; best-effort.
+            }
+        }
+    }
+
+    private void ClearMailboxFiles()
+    {
+        foreach (string path in new[] { RequestPath, ProcessingPath, ResultPath, StatusPath })
+            DeleteIfExists(path);
+        _lastStatus = default;
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // Best-effort: leftover empty folders do not block a later reinstall.
+        }
+    }
+
+    private static void DisableMod(string modsDirectory)
+    {
+        DisableModInTextList(Path.Combine(modsDirectory, "mods.txt"));
+        DisableModInJsonList(Path.Combine(modsDirectory, "mods.json"));
+    }
+
+    private static void DisableModInTextList(string modsTextPath)
+    {
+        if (!File.Exists(modsTextPath))
+            return;
+
+        List<string> lines = [.. File.ReadAllLines(modsTextPath, Utf8)];
+        bool changed = false;
+        for (int i = 0; i < lines.Count; i++)
+        {
+            string trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith(';') ||
+                !trimmed.StartsWith("HaloMeister", StringComparison.Ordinal))
+                continue;
+            lines[i] = "HaloMeister : 0";
+            changed = true;
+        }
+
+        if (changed)
+            File.WriteAllLines(modsTextPath, lines, Utf8);
+    }
+
+    private static void DisableModInJsonList(string modsJsonPath)
+    {
+        if (!File.Exists(modsJsonPath))
+            return;
+
+        var entries = JsonSerializer.Deserialize<List<Ue4ssModEntry>>(
+            File.ReadAllText(modsJsonPath, Utf8)) ?? [];
+        bool changed = false;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (!string.Equals(entries[i].mod_name, "HaloMeister", StringComparison.Ordinal))
+                continue;
+            if (!entries[i].mod_enabled)
+                continue;
+            entries[i] = entries[i] with { mod_enabled = false };
+            changed = true;
+        }
+
+        if (changed)
+        {
+            File.WriteAllText(
+                modsJsonPath,
+                JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true }),
+                Utf8);
+        }
     }
 
     private static bool ContainsBridge(string mainPath)
@@ -983,18 +1338,10 @@ public sealed class ScriptingBridgeService
 
     private static IEnumerable<string> CandidateGameRoots()
     {
-        string? configured = Environment.GetEnvironmentVariable("HALO_CAMPAIGN_EVOLVED_ROOT");
-        if (!string.IsNullOrWhiteSpace(configured))
-            yield return configured;
-
-        foreach (DriveInfo drive in DriveInfo.GetDrives())
-        {
-            if (!drive.IsReady)
-                continue;
-            yield return Path.Combine(drive.RootDirectory.FullName, "Games", "Halo- Campaign Evolved");
-            yield return Path.Combine(drive.RootDirectory.FullName, "XboxGames", "Halo Campaign Evolved");
-            yield return Path.Combine(drive.RootDirectory.FullName, "XboxGames", "Halo- Campaign Evolved");
-        }
+        // Keep discovery identical to GameInstallationService so Microsoft Store
+        // WinGDK roots (including .GamingRoot libraries) and Steam Win64 stay in sync.
+        foreach (string root in GameInstallationService.Current.EnumerateCandidateRoots())
+            yield return root;
     }
 
     private static void WriteAtomic(string destinationPath, string content)

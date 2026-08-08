@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class SquadsPage : Page
+public sealed partial class SquadsPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly ScenarioSquadsService _squads = new();
@@ -19,9 +19,10 @@ public sealed partial class SquadsPage : Page
     {
         InitializeComponent();
         _game.ConnectionChanged += OnConnectionChanged;
-        Unloaded += OnUnloaded;
         UpdateControls();
     }
+
+    public void OnActivated() => UpdateControls();
 
     private async void OnScan(object sender, RoutedEventArgs e)
     {
@@ -188,17 +189,12 @@ public sealed partial class SquadsPage : Page
         RefreshButton.IsEnabled = !_busy && _game.IsConnected && _hasScanned;
         PlaceButton.IsEnabled = canAct;
         EraseButton.IsEnabled = canAct;
+        BusyRing.IsActive = _busy;
         ConnectionText.Text = _hasScanned
             ? L.Format("squads.loaded_summary", _all.Count)
             : _game.IsConnected
                 ? L.Get("squads.connected_scan_hint")
                 : L.Get("squads.disconnected");
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        _game.ConnectionChanged -= OnConnectionChanged;
-        _squads.Dispose();
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)

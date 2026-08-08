@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class AdvancedMachinimaPage : Page
+public sealed partial class AdvancedMachinimaPage : Page, IActivatablePage
 {
     private readonly AdvancedMachinimaService _machinima =
         AdvancedMachinimaService.Current;
@@ -20,10 +20,11 @@ public sealed partial class AdvancedMachinimaPage : Page
         UpdateDisplay();
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
+        UpdateDisplay();
         if (!_busy)
-            await RunBusy(() => RefreshAsync(showSuccess: false));
+            _ = RunBusy(() => RefreshAsync(showSuccess: false));
     }
 
     private async void OnEnter(object sender, RoutedEventArgs e)

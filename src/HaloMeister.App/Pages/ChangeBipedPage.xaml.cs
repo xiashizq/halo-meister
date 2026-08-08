@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Shapes;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class ChangeBipedPage : Page
+public sealed partial class ChangeBipedPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly PlayerBipedService _bipeds = new();
@@ -22,15 +22,14 @@ public sealed partial class ChangeBipedPage : Page
     {
         InitializeComponent();
         _game.ConnectionChanged += OnGameConnectionChanged;
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
         UpdateChrome();
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
+        UpdateChrome();
         if (_game.IsConnected && !_hasScanned)
-            await ScanAsync(connectGame: false);
+            _ = ScanAsync(connectGame: false);
     }
 
     private async void OnConnectAndScan(object sender, RoutedEventArgs e)
@@ -202,13 +201,6 @@ public sealed partial class ChangeBipedPage : Page
 
     private void OnGameConnectionChanged(object? sender, EventArgs e)
         => DispatcherQueue.TryEnqueue(UpdateChrome);
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        Loaded -= OnLoaded;
-        _game.ConnectionChanged -= OnGameConnectionChanged;
-        _bipeds.Dispose();
-    }
 
     private void UpdateChrome()
     {

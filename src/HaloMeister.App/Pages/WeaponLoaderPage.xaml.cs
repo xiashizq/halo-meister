@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class WeaponLoaderPage : Page
+public sealed partial class WeaponLoaderPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly WeaponLoaderService _loader = new();
@@ -30,7 +30,13 @@ public sealed partial class WeaponLoaderPage : Page
     {
         InitializeComponent();
         _game.ConnectionChanged += OnGameConnectionChanged;
-        Unloaded += OnUnloaded;
+        RefreshFullPalettesState();
+        UpdateConnectionButtons();
+        UpdateBridgeStatus();
+    }
+
+    public void OnActivated()
+    {
         RefreshFullPalettesState();
         UpdateConnectionButtons();
         UpdateBridgeStatus();
@@ -435,6 +441,7 @@ public sealed partial class WeaponLoaderPage : Page
     {
         if (_busy) return;
         _busy = true;
+        BusyRing.IsActive = true;
         ScanButton.IsEnabled = false;
         RefreshButton.IsEnabled = false;
         LoadButton.IsEnabled = false;
@@ -449,6 +456,7 @@ public sealed partial class WeaponLoaderPage : Page
         finally
         {
             _busy = false;
+            BusyRing.IsActive = false;
             RefreshFullPalettesState();
             UpdateConnectionButtons();
             UpdateLoadButton();
@@ -485,13 +493,6 @@ public sealed partial class WeaponLoaderPage : Page
         UpdateImportButtons();
         UpdateProjectileControls();
         UpdateVariantControls();
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        _game.ConnectionChanged -= OnGameConnectionChanged;
-        _loader.Dispose();
-        _swapper.Dispose();
     }
 
     private void UpdateBridgeStatus()

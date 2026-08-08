@@ -14,7 +14,6 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="4" VerticalAlignment="Center">
                 <TextBlock
@@ -24,21 +23,28 @@
                     Style="{StaticResource LivePageDescriptionStyle}"
                     Text="{i18n:Loc Key='squads.description'}" />
             </StackPanel>
-            <Button
-                x:Name="RefreshButton"
+            <StackPanel
                 Grid.Column="1"
                 VerticalAlignment="Center"
-                Click="OnRefresh"
-                Content="{i18n:Loc Key='squads.refresh'}"
-                IsEnabled="False" />
-            <Button
-                x:Name="ScanButton"
-                Grid.Column="2"
-                VerticalAlignment="Center"
-                Click="OnScan"
-                Content="{i18n:Loc Key='squads.scan'}"
-                IsEnabled="False"
-                Style="{StaticResource AccentButtonStyle}" />
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    x:Name="RefreshButton"
+                    Click="OnRefresh"
+                    Content="{i18n:Loc Key='squads.refresh'}"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="ScanButton"
+                    Click="OnScan"
+                    Content="{i18n:Loc Key='squads.scan'}"
+                    IsEnabled="False"
+                    Style="{StaticResource AccentButtonStyle}" />
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Width="22"
+                    Height="22"
+                    IsActive="False" />
+            </StackPanel>
         </Grid>
 
         <Grid Grid.Row="1" ColumnSpacing="16">

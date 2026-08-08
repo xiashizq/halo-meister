@@ -36,6 +36,11 @@
                 Click="OnRefresh"
                 Content="{i18n:Loc Key='projectile_swapper.refresh'}"
                 IsEnabled="False" />
+            <ProgressRing
+                x:Name="BusyRing"
+                Width="22"
+                Height="22"
+                IsActive="False" />
         </StackPanel>
 
         <Grid Grid.Row="2" ColumnSpacing="18">

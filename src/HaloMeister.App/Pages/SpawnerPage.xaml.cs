@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class SpawnerPage : Page
+public sealed partial class SpawnerPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly EnemySpawnerService _spawner = new();
@@ -31,8 +31,13 @@ public sealed partial class SpawnerPage : Page
         SpawnTypePicker.SelectedIndex = 0;
         // TeamCompositionList.ItemsSource = _teamComposition;
         _game.ConnectionChanged += OnGameConnectionChanged;
-        Unloaded += OnUnloaded;
         UpdateConnectionButton();
+    }
+
+    public void OnActivated()
+    {
+        UpdateConnectionButton();
+        UpdateBridgeStatus();
     }
 
     private async void OnScan(object sender, RoutedEventArgs e)
@@ -559,6 +564,7 @@ public sealed partial class SpawnerPage : Page
     {
         if (_busy) return;
         _busy = true;
+        BusyRing.IsActive = true;
         ScanButton.IsEnabled = false;
         SpawnButton.IsEnabled = false;
         // SpawnTeamButton.IsEnabled = false;
@@ -578,6 +584,7 @@ public sealed partial class SpawnerPage : Page
         finally
         {
             _busy = false;
+            BusyRing.IsActive = false;
             UpdateConnectionButton();
             UpdateSpawnButton();
         }
@@ -607,13 +614,6 @@ public sealed partial class SpawnerPage : Page
 
     private void UpdateConnectionButton()
         => ScanButton.IsEnabled = !_busy && _game.IsConnected;
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        _game.ConnectionChanged -= OnGameConnectionChanged;
-        _spawner.Dispose();
-        _vehicleSpawner.Dispose();
-    }
 
     private void UpdateBridgeStatus()
     {

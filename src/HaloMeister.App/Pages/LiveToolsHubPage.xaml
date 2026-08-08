@@ -38,6 +38,28 @@
             </Grid>
         </Border>
 
-        <Frame x:Name="ToolFrame" Grid.Row="1" />
+        <Grid Grid.Row="1">
+            <Frame x:Name="ToolFrame" />
+            <Grid
+                x:Name="ToolLoadingOverlay"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                Visibility="Collapsed">
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="12">
+                    <ProgressRing
+                        x:Name="ToolLoadingRing"
+                        Width="36"
+                        Height="36"
+                        IsActive="False" />
+                    <TextBlock
+                        x:Name="ToolLoadingText"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{i18n:Loc Key='common.loading'}" />
+                </StackPanel>
+            </Grid>
+        </Grid>
     </Grid>
 </Page>

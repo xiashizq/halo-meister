@@ -8,7 +8,7 @@ using Windows.System;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class CustomizationPage : Page
+public sealed partial class CustomizationPage : Page, IActivatablePage
 {
     private readonly AppState _state = AppState.Current;
     private readonly CustomizationStore _store = new();
@@ -34,10 +34,23 @@ public sealed partial class CustomizationPage : Page
     public CustomizationPage()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
         _autoApplyTimer.Tick += OnAutoApplyTick;
     }
+
+    public void OnActivated()
+    {
+        if (!_initialized)
+        {
+            _initialized = true;
+            LoadProfiles();
+        }
+
+        MarkDirty();
+        UpdateSafetyNotice();
+        _autoApplyTimer.Start();
+    }
+
+    public void OnDeactivated() => _autoApplyTimer.Stop();
 
     // Keep the closed width while open. Setting Width causes clipping; MinWidth does not.
     private void OnProfileDropDownOpened(object sender, object e)
@@ -48,19 +61,6 @@ public sealed partial class CustomizationPage : Page
 
     private void OnProfileDropDownClosed(object sender, object e)
         => ProfilePicker.MinWidth = 360;
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        if (!_initialized)
-        {
-            _initialized = true;
-            LoadProfiles();
-        }
-        _autoApplyTimer.Start();
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e) =>
-        _autoApplyTimer.Stop();
 
     private void LoadProfiles()
     {
@@ -184,6 +184,8 @@ public sealed partial class CustomizationPage : Page
 
     private async void OnSave(object sender, RoutedEventArgs e)
     {
+        LoadingRing.IsActive = true;
+        SaveButton.IsEnabled = false;
         try
         {
             CosmeticChoice? blocked = _slots
@@ -200,7 +202,6 @@ public sealed partial class CustomizationPage : Page
                 .ToArray();
 
             ConfigBackup backup = await _store.SaveAsync(selected);
-            SaveButton.IsEnabled = false;
             DirtyText.Text = L.Get("customization.saved");
             UpdateSummary();
             Report(
@@ -209,9 +210,14 @@ public sealed partial class CustomizationPage : Page
         }
         catch (Exception ex)
         {
+            MarkDirty();
             Report(ex.Message, ex is InvalidOperationException
                 ? InfoBarSeverity.Warning
                 : InfoBarSeverity.Error);
+        }
+        finally
+        {
+            LoadingRing.IsActive = false;
         }
     }
 
@@ -278,6 +284,8 @@ public sealed partial class CustomizationPage : Page
         }
         if (!_store.IsGameRunning) return;
 
+        if (!silent)
+            LoadingRing.IsActive = true;
         try
         {
             if (!_game.IsConnected)
@@ -338,6 +346,11 @@ public sealed partial class CustomizationPage : Page
                         ? InfoBarSeverity.Informational
                         : InfoBarSeverity.Error);
             }
+        }
+        finally
+        {
+            if (!silent)
+                LoadingRing.IsActive = false;
         }
     }
 

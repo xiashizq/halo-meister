@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization"
-    Loaded="OnLoaded">
+    >
 
     <ScrollViewer>
         <StackPanel Padding="24" Spacing="18">

@@ -204,6 +204,7 @@ public sealed class EnemySpawnerService : IDisposable
                 "One native AI batch can contain between one and five actors.");
         if (campaignTeam is ushort team && team > 13)
             throw new ArgumentOutOfRangeException(nameof(campaignTeam));
+        await WarmUpAsync(cancellationToken);
         WorldPoint playerPosition =
             await ReadPlayerPositionAsync(cancellationToken);
         // Select the scaffold first, then clear THAT squad's objective. The old
@@ -923,11 +924,16 @@ public sealed class EnemySpawnerService : IDisposable
     {
         if (!_memory.IsConnected)
             throw new InvalidOperationException("Connect to the running mission first.");
-        _tags = _memory.ReadTags();
-        RuntimeTagEntry character = _tags.FirstOrDefault(tag =>
-                tag.Index == choice.CharacterTag.Index &&
-                string.Equals(tag.Group, "char", StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException(
+        await WarmUpAsync(cancellationToken);
+
+        RuntimeTagEntry? character = FindCachedCharacter(choice.CharacterTag);
+        if (character is null)
+        {
+            _tags = _memory.ReadTags();
+            character = FindCachedCharacter(choice.CharacterTag);
+        }
+        if (character is null)
+            throw new InvalidOperationException(
                 "That character tag is no longer loaded. Rescan the mission.");
         RuntimeTagFieldValue unit = ReadRoot(character).FirstOrDefault(field =>
                 field.IsTagReference &&
@@ -954,17 +960,32 @@ public sealed class EnemySpawnerService : IDisposable
     {
         if (!_memory.IsConnected)
             throw new InvalidOperationException("Connect to the running mission first.");
-        _tags = _memory.ReadTags();
-        RuntimeTagEntry biped = _tags.FirstOrDefault(tag =>
-                tag.Index == choice.BipedTag.Index &&
-                string.Equals(tag.Group, "bipd", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(tag.Name, choice.BipedTag.Name, StringComparison.OrdinalIgnoreCase) &&
-                tag.DataAddress > 0)
-            ?? throw new InvalidOperationException(
+        await WarmUpAsync(cancellationToken);
+
+        RuntimeTagEntry? biped = FindCachedBiped(choice.BipedTag);
+        if (biped is null)
+        {
+            _tags = _memory.ReadTags();
+            biped = FindCachedBiped(choice.BipedTag);
+        }
+        if (biped is null)
+            throw new InvalidOperationException(
                 "The Spartan biped is no longer loaded. Rescan the mission.");
 
         return await SpawnVariantBodyCoreAsync(biped, variant, cancellationToken);
     }
+
+    private RuntimeTagEntry? FindCachedCharacter(RuntimeTagEntry characterTag)
+        => _tags.FirstOrDefault(tag =>
+            tag.Index == characterTag.Index &&
+            string.Equals(tag.Group, "char", StringComparison.OrdinalIgnoreCase));
+
+    private RuntimeTagEntry? FindCachedBiped(RuntimeTagEntry bipedTag)
+        => _tags.FirstOrDefault(tag =>
+            tag.Index == bipedTag.Index &&
+            string.Equals(tag.Group, "bipd", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(tag.Name, bipedTag.Name, StringComparison.OrdinalIgnoreCase) &&
+            tag.DataAddress > 0);
 
     private async Task<ScriptExecutionResult> SpawnVariantBodyCoreAsync(
         RuntimeTagEntry biped,

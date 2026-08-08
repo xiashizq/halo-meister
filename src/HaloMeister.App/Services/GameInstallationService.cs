@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Microsoft.Win32;
 
 namespace HaloMeister.App.Services;
@@ -9,6 +11,15 @@ namespace HaloMeister.App.Services;
 /// </summary>
 public sealed class GameInstallationService
 {
+    /// <summary>
+    /// Title folder names used by Microsoft Store / Xbox PC Game Pass installs.
+    /// </summary>
+    public static readonly string[] XboxTitleFolderNames =
+    [
+        "Halo Campaign Evolved",
+        "Halo- Campaign Evolved",
+    ];
+
     private readonly string _rememberedPath;
     private string? _binaryDirectory;
 
@@ -59,6 +70,12 @@ public sealed class GameInstallationService
         return null;
     }
 
+    /// <summary>
+    /// Installation roots worth probing for binaries / Paks / UE4SS. Shared by
+    /// bridge discovery so Store WinGDK and Steam Win64 stay aligned.
+    /// </summary>
+    public IEnumerable<string> EnumerateCandidateRoots() => CandidateRoots();
+
     private IEnumerable<string> CandidateRoots()
     {
         string? configured = Environment.GetEnvironmentVariable("HALO_CAMPAIGN_EVOLVED_ROOT");
@@ -77,6 +94,11 @@ public sealed class GameInstallationService
 
         foreach (string location in EnumerateUninstallLocations())
             yield return location;
+
+        // Microsoft Store / Xbox PC libraries from .GamingRoot (custom install drives).
+        foreach (string titleRoot in EnumerateXboxTitleRoots())
+            yield return titleRoot;
+
         foreach (string library in EnumerateSteamLibraries())
             yield return Path.Combine(library, "steamapps", "common", "Halo Campaign Evolved");
 
@@ -98,13 +120,105 @@ public sealed class GameInstallationService
         }
     }
 
+    /// <summary>
+    /// Reads each drive's <c>.GamingRoot</c> marker and yields Halo title folders under
+    /// the Xbox library path. Default layout is <c>{Drive}\XboxGames\Halo Campaign Evolved</c>;
+    /// users can relocate the library folder in the Xbox app.
+    /// </summary>
+    public static IEnumerable<string> EnumerateXboxTitleRoots()
+    {
+        foreach (string library in EnumerateXboxLibraryFolders())
+        {
+            foreach (string title in XboxTitleFolderNames)
+                yield return Path.Combine(library, title);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateXboxLibraryFolders()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (DriveInfo drive in DriveInfo.GetDrives())
+        {
+            if (!drive.IsReady)
+                continue;
+
+            string driveRoot = drive.RootDirectory.FullName;
+            string? gamingRootPath = Path.Combine(driveRoot, ".GamingRoot");
+            bool foundFromMarker = false;
+            foreach (string library in ReadGamingRootLibraries(gamingRootPath))
+            {
+                foundFromMarker = true;
+                if (seen.Add(library))
+                    yield return library;
+            }
+
+            // Drive is Xbox-eligible even when the marker has no Folder path — default library.
+            if (foundFromMarker || File.Exists(gamingRootPath))
+            {
+                string defaultLibrary = Path.Combine(driveRoot, "XboxGames");
+                if (seen.Add(defaultLibrary))
+                    yield return defaultLibrary;
+            }
+        }
+    }
+
+    private static IEnumerable<string> ReadGamingRootLibraries(string gamingRootPath)
+    {
+        if (!File.Exists(gamingRootPath))
+            return [];
+
+        string text;
+        try
+        {
+            // Xbox writes .GamingRoot as UTF-16 LE; fall back to UTF-8 for hand-edited files.
+            byte[] bytes = File.ReadAllBytes(gamingRootPath);
+            text = bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE
+                ? Encoding.Unicode.GetString(bytes)
+                : Encoding.UTF8.GetString(bytes);
+        }
+        catch
+        {
+            return [];
+        }
+
+        var libraries = new List<string>();
+        // Preferred: <Folder path="D:\XboxGames" />
+        try
+        {
+            XDocument document = XDocument.Parse(text);
+            foreach (XElement folder in document.Descendants().Where(element =>
+                         element.Name.LocalName.Equals("Folder", StringComparison.OrdinalIgnoreCase)))
+            {
+                string? path = (string?)folder.Attribute("path") ?? (string?)folder.Attribute("Path");
+                if (!string.IsNullOrWhiteSpace(path))
+                    libraries.Add(path.Trim());
+            }
+        }
+        catch
+        {
+            // Not well-formed XML — try a loose path attribute match.
+            foreach (Match match in Regex.Matches(
+                         text,
+                         "path\\s*=\\s*\"(?<path>[^\"]+)\"",
+                         RegexOptions.IgnoreCase))
+            {
+                string path = match.Groups["path"].Value.Trim();
+                if (!string.IsNullOrWhiteSpace(path))
+                    libraries.Add(path);
+            }
+        }
+
+        return libraries;
+    }
+
     private static IEnumerable<string> PaksCandidates(string root)
     {
         string? current;
         try { current = Path.GetFullPath(root); }
         catch { yield break; }
 
-        for (int depth = 0; depth < 6 && current is not null; depth++)
+        // From WinGDK\...\Scripts\main.lua up to Content needs ~8 hops; keep margin.
+        for (int depth = 0; depth < 10 && current is not null; depth++)
         {
             yield return Path.Combine(current, "Content", "Meteorite", "Content", "Paks");
             yield return Path.Combine(current, "Meteorite", "Content", "Paks");

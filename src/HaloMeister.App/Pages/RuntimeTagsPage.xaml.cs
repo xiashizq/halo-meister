@@ -11,7 +11,7 @@ using Windows.Storage.Pickers;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class RuntimeTagsPage : Page
+public sealed partial class RuntimeTagsPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _memory = RuntimeTagMemoryService.Current;
     private readonly RuntimeTagDefinitionService _definitions = new();
@@ -54,8 +54,20 @@ public sealed partial class RuntimeTagsPage : Page
         FieldList.ItemsSource = _state.Fields;
         StagedChangesList.ItemsSource = Array.Empty<RuntimeTagEditPatch>();
         _memory.ConnectionChanged += OnGameConnectionChanged;
-        Unloaded += OnUnloaded;
         UpdateConnectionButtons();
+    }
+
+    public void OnActivated()
+    {
+        UpdateConnectionButtons();
+        if (_selectedTag is { } tag)
+            UpdateWeaponActions(tag);
+    }
+
+    public void OnDeactivated()
+    {
+        _tagFilterTimer.Stop();
+        _fieldIndexCancellation?.Cancel();
     }
 
     private nint Hwnd => MainWindow.Instance is { } window
@@ -502,6 +514,7 @@ public sealed partial class RuntimeTagsPage : Page
         }
 
         _busy = true;
+        BusyRing.IsActive = true;
         SpawnTagButton.IsEnabled = false;
         try
         {
@@ -518,6 +531,7 @@ public sealed partial class RuntimeTagsPage : Page
         finally
         {
             _busy = false;
+            BusyRing.IsActive = false;
             if (_selectedTag is { } selected) UpdateWeaponActions(selected);
         }
     }
@@ -1218,6 +1232,7 @@ public sealed partial class RuntimeTagsPage : Page
             RuntimeTagModDocument document = CreateTagModDocument(
                 Path.GetFileNameWithoutExtension(file.Name));
             _busy = true;
+            BusyRing.IsActive = true;
             UpdateTagModActions();
             try
             {
@@ -1238,6 +1253,7 @@ public sealed partial class RuntimeTagsPage : Page
             finally
             {
                 _busy = false;
+                BusyRing.IsActive = false;
                 UpdateTagModActions();
             }
         }
@@ -1272,11 +1288,14 @@ public sealed partial class RuntimeTagsPage : Page
             };
             if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
 
-            NativeTagModInstallResult result =
-                await Task.Run(() => _nativeTagMods.InstallOverlay(file.Path));
-            ShowStatus(
-                L.Format("runtime_tags.installed_overlay", result.Name, result.PaksDirectory),
-                InfoBarSeverity.Success);
+            await RunBusy(async () =>
+            {
+                NativeTagModInstallResult result =
+                    await Task.Run(() => _nativeTagMods.InstallOverlay(file.Path));
+                ShowStatus(
+                    L.Format("runtime_tags.installed_overlay", result.Name, result.PaksDirectory),
+                    InfoBarSeverity.Success);
+            });
         }
         catch (Exception ex)
         {
@@ -1363,12 +1382,14 @@ public sealed partial class RuntimeTagsPage : Page
     private async Task RunBusy(Func<Task> operation)
     {
         _busy = true;
+        BusyRing.IsActive = true;
         ScanButton.IsEnabled = false;
         RefreshButton.IsEnabled = false;
         InjectFieldButton.IsEnabled = false;
         CommitStagedButton.IsEnabled = false;
         UndoCommitButton.IsEnabled = false;
         DiscardStagedButton.IsEnabled = false;
+        InstallOverlayButton.IsEnabled = false;
         try { await operation(); }
         catch (Exception ex)
         {
@@ -1377,10 +1398,12 @@ public sealed partial class RuntimeTagsPage : Page
         finally
         {
             _busy = false;
+            BusyRing.IsActive = false;
             UpdateConnectionButtons();
             InjectFieldButton.IsEnabled = _selectedField?.CanWrite == true;
             UpdateTagModActions();
             UpdateEditSessionUi();
+            InstallOverlayButton.IsEnabled = !_busy;
         }
     }
 
@@ -1398,13 +1421,6 @@ public sealed partial class RuntimeTagsPage : Page
         }
         UpdateTagModActions();
         UpdateEditSessionUi();
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        _tagFilterTimer.Stop();
-        _fieldIndexCancellation?.Cancel();
-        _memory.ConnectionChanged -= OnGameConnectionChanged;
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)

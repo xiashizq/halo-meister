@@ -215,7 +215,31 @@
                 -->
             </NavigationView.FooterMenuItems>
 
-            <Frame x:Name="ContentFrame" />
+            <Grid>
+                <Frame
+                    x:Name="ContentFrame"
+                    CacheSize="32" />
+                <Grid
+                    x:Name="NavigationLoadingOverlay"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    Visibility="Collapsed">
+                    <StackPanel
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="12">
+                        <ProgressRing
+                            x:Name="NavigationLoadingRing"
+                            Width="40"
+                            Height="40"
+                            IsActive="False" />
+                        <TextBlock
+                            x:Name="NavigationLoadingText"
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{i18n:Loc Key='common.loading'}" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
         </NavigationView>
     </Grid>
 </Window>

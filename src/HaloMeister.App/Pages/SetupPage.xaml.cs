@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class SetupPage : Page
+public sealed partial class SetupPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
@@ -17,26 +17,32 @@ public sealed partial class SetupPage : Page
     public SetupPage()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
         _refreshTimer.Tick += OnRefreshTick;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
+        // Cached page trees do not reliably re-fire Loaded; refresh on show.
+        _bridge.InvalidateStatusCaches();
         PopulateLanguageCombo();
         ApplyStatus(_bridge.GetStatus());
         StartHeartbeatWatch();
         _refreshTimer.Start();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    public void OnDeactivated()
     {
         _refreshTimer.Stop();
         StopHeartbeatWatch();
     }
 
-    private void OnRefreshTick(object? sender, object e) => ApplyStatus(_bridge.GetStatus());
+    private void OnRefreshTick(object? sender, object e)
+    {
+        // Heartbeat watch already polls GetStatus while waiting; avoid doubling work.
+        if (_checkingBridge)
+            return;
+        ApplyStatus(_bridge.GetStatus());
+    }
 
     private void PopulateLanguageCombo()
     {
@@ -134,10 +140,26 @@ public sealed partial class SetupPage : Page
         else
             BridgeStatusText.Text = status.Summary;
 
+        bool busy = MainWindow.Instance?.IsInstallingLiveTools == true;
+        SetBridgeBusy(busy);
         InstallButton.Content = status.IsInstalled
             ? L.Get("common.repair_update")
             : L.Get("common.install");
-        InstallButton.IsEnabled = MainWindow.Instance?.IsInstallingLiveTools != true;
+        InstallButton.IsEnabled = !busy;
+        UninstallButton.IsEnabled = !busy && _bridge.HasRemovableInstall();
+        ChangeFolderButton.IsEnabled = !busy;
+    }
+
+    private void SetBridgeBusy(bool busy)
+    {
+        BusyRing.IsActive = busy;
+        BusyRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void SetConnectBusy(bool busy)
+    {
+        ConnectBusyRing.IsActive = busy;
+        ConnectBusyRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void OnLaunchGame(object sender, RoutedEventArgs e)
@@ -149,17 +171,55 @@ public sealed partial class SetupPage : Page
 
     private async void OnConnect(object sender, RoutedEventArgs e)
     {
-        await (MainWindow.Instance?.ConnectToGameAsync() ?? Task.CompletedTask);
-        StartHeartbeatWatch();
-        ApplyStatus(_bridge.GetStatus());
+        ConnectButton.IsEnabled = false;
+        SetConnectBusy(true);
+        try
+        {
+            await (MainWindow.Instance?.ConnectToGameAsync() ?? Task.CompletedTask);
+        }
+        finally
+        {
+            SetConnectBusy(false);
+            ConnectButton.IsEnabled = true;
+            StartHeartbeatWatch();
+            ApplyStatus(_bridge.GetStatus());
+        }
     }
 
     private async void OnInstall(object sender, RoutedEventArgs e)
     {
         InstallButton.IsEnabled = false;
+        UninstallButton.IsEnabled = false;
+        ChangeFolderButton.IsEnabled = false;
+        SetBridgeBusy(true);
         InstallButton.Content = L.Get("common.working");
         await (MainWindow.Instance?.InstallLiveToolsAsync() ?? Task.CompletedTask);
         StartHeartbeatWatch();
+        ApplyStatus(_bridge.GetStatus());
+    }
+
+    private async void OnUninstall(object sender, RoutedEventArgs e)
+    {
+        InstallButton.IsEnabled = false;
+        UninstallButton.IsEnabled = false;
+        ChangeFolderButton.IsEnabled = false;
+        SetBridgeBusy(true);
+        UninstallButton.Content = L.Get("common.working");
+        await (MainWindow.Instance?.UninstallLiveToolsAsync() ?? Task.CompletedTask);
+        UninstallButton.Content = L.Get("setup.uninstall");
+        StartHeartbeatWatch();
+        ApplyStatus(_bridge.GetStatus());
+    }
+
+    private async void OnChangeFolder(object sender, RoutedEventArgs e)
+    {
+        InstallButton.IsEnabled = false;
+        UninstallButton.IsEnabled = false;
+        ChangeFolderButton.IsEnabled = false;
+        SetBridgeBusy(true);
+        ChangeFolderButton.Content = L.Get("common.working");
+        await (MainWindow.Instance?.ChangeLiveToolsFolderAsync() ?? Task.CompletedTask);
+        ChangeFolderButton.Content = L.Get("setup.change_folder");
         ApplyStatus(_bridge.GetStatus());
     }
 

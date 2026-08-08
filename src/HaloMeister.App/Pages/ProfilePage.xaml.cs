@@ -6,9 +6,10 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class ProfilePage : Page
+public sealed partial class ProfilePage : Page, IActivatablePage
 {
     private readonly AppState _state = AppState.Current;
+    private bool _subscribed;
 
     public ProfilePage()
     {
@@ -17,8 +18,6 @@ public sealed partial class ProfilePage : Page
         FlagList.ItemsSource = _state.Flags;
         NumberList.ItemsSource = _state.Numbers;
         ApplyBuildPolicy();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
     }
 
     private void ApplyBuildPolicy()
@@ -31,17 +30,25 @@ public sealed partial class ProfilePage : Page
         CustomEntitlementExpander.IsEnabled = false;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
-        _state.SaveLoaded += OnSaveLoaded;
+        if (!_subscribed)
+        {
+            _state.SaveLoaded += OnSaveLoaded;
+            _subscribed = true;
+        }
+
         SubscribeRows();
         RefreshEntitlements();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    public void OnDeactivated()
     {
+        if (!_subscribed)
+            return;
         _state.SaveLoaded -= OnSaveLoaded;
         UnsubscribeRows();
+        _subscribed = false;
     }
 
     private void OnSaveLoaded()

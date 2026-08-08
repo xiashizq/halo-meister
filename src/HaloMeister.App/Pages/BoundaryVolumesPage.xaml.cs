@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class BoundaryVolumesPage : Page
+public sealed partial class BoundaryVolumesPage : Page, IActivatablePage
 {
     private readonly RuntimeBoundaryService _boundaries = new();
     private readonly SoftCeilingService _softCeilings = new();
@@ -16,6 +16,12 @@ public sealed partial class BoundaryVolumesPage : Page
     public BoundaryVolumesPage()
     {
         InitializeComponent();
+        UpdatePhysicalStatus();
+        UpdateButtons();
+    }
+
+    public void OnActivated()
+    {
         UpdatePhysicalStatus();
         UpdateButtons();
     }

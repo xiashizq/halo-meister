@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
-    <Grid Padding="24,16,24,12" RowSpacing="10">
+    <Grid Padding="28,20,28,16" RowSpacing="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -12,20 +12,31 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Style="{StaticResource LiveToolInsetStyle}">
+        <Border
+            Padding="14,12"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="10">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <SymbolIcon
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Symbol="Link" />
                 <TextBlock
                     x:Name="BridgeStatusText"
+                    Grid.Column="1"
                     VerticalAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap" />
                 <ProgressRing
                     x:Name="BusyRing"
-                    Grid.Column="1"
+                    Grid.Column="2"
                     Width="20"
                     Height="20"
                     IsActive="False" />
@@ -38,8 +49,8 @@
                     x:Name="CheatsScrollViewer"
                     HorizontalScrollBarVisibility="Disabled"
                     VerticalScrollBarVisibility="Auto">
-                    <StackPanel Padding="0,12,0,16" Spacing="12">
-                        <Border Style="{StaticResource LiveToolCardStyle}">
+                    <StackPanel Padding="0,14,0,18" Spacing="14">
+                        <Border Padding="18,16" Style="{StaticResource LiveToolCardStyle}">
                             <Grid ColumnSpacing="18">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -69,17 +80,28 @@
 
                         <Border
                             x:Name="CheatsEmptyPanel"
+                            MinHeight="260"
                             Padding="28"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
                             CornerRadius="10">
-                            <StackPanel HorizontalAlignment="Center" Spacing="6">
+                            <StackPanel
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="8">
                                 <FontIcon
                                     HorizontalAlignment="Center"
-                                    FontSize="24"
+                                    FontSize="28"
                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                     Glyph="&#xE90F;" />
-                                <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.load_the_mission_cheats'}" />
                                 <TextBlock
+                                    HorizontalAlignment="Center"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Text="{i18n:Loc Key='cheat_globals.load_the_mission_cheats'}" />
+                                <TextBlock
+                                    MaxWidth="460"
                                     HorizontalAlignment="Center"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Text="{i18n:Loc Key='cheat_globals.start_or_resume_an_offline_mission_then_c_1672f7'}"
@@ -126,8 +148,8 @@
                     x:Name="ModifiersScrollViewer"
                     HorizontalScrollBarVisibility="Disabled"
                     VerticalScrollBarVisibility="Auto">
-                    <StackPanel Padding="0,12,0,16" Spacing="12">
-                        <Border Style="{StaticResource LiveToolCardStyle}">
+                    <StackPanel Padding="0,14,0,18" Spacing="14">
+                        <Border Padding="18,16" Style="{StaticResource LiveToolCardStyle}">
                             <Grid ColumnSpacing="18">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -156,17 +178,28 @@
 
                         <Border
                             x:Name="ModifiersEmptyPanel"
+                            MinHeight="260"
                             Padding="28"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
                             CornerRadius="10">
-                            <StackPanel HorizontalAlignment="Center" Spacing="6">
+                            <StackPanel
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="8">
                                 <FontIcon
                                     HorizontalAlignment="Center"
-                                    FontSize="24"
+                                    FontSize="28"
                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                     Glyph="&#xE713;" />
-                                <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.load_the_player_traits'}" />
                                 <TextBlock
+                                    HorizontalAlignment="Center"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Text="{i18n:Loc Key='cheat_globals.load_the_player_traits'}" />
+                                <TextBlock
+                                    MaxWidth="460"
                                     HorizontalAlignment="Center"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Text="{i18n:Loc Key='cheat_globals.choose_load_traits_after_entering_an_offl_051ba4'}"
@@ -223,8 +256,8 @@
                 <ScrollViewer
                     HorizontalScrollBarVisibility="Disabled"
                     VerticalScrollBarVisibility="Auto">
-                    <StackPanel Padding="0,12,0,16" Spacing="12">
-                        <Border Style="{StaticResource LiveToolCardStyle}">
+                    <StackPanel Padding="0,14,0,18" Spacing="14">
+                        <Border Padding="18,16" Style="{StaticResource LiveToolCardStyle}">
                             <StackPanel Spacing="18">
                                 <StackPanel Spacing="3">
                                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.player_allegiance'}" />
@@ -279,7 +312,7 @@
                                 Text="{i18n:Loc Key='cheat_globals.allegiance_applies_only_to_the_current_pl_77e9dd'}" />
                         </Border>
 
-                        <Border Style="{StaticResource LiveToolCardStyle}">
+                        <Border Padding="18,16" Style="{StaticResource LiveToolCardStyle}">
                             <StackPanel Spacing="18">
                                 <StackPanel Spacing="3">
                                     <TextBlock
@@ -325,7 +358,7 @@
             </PivotItem>
         </Pivot>
 
-        <Border Grid.Row="2" Style="{StaticResource LiveToolInsetStyle}">
+        <Border Grid.Row="2" Padding="14,10" Style="{StaticResource LiveToolInsetStyle}">
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class PlayerToolsPage : Page
+public sealed partial class PlayerToolsPage : Page, IActivatablePage
 {
     private readonly PlayerToolsService _tools = new();
     private readonly PlayerLocationStore _locations = new();
@@ -25,6 +25,12 @@ public sealed partial class PlayerToolsPage : Page
     {
         InitializeComponent();
         ReloadSavedLocations();
+        UpdateBridgeStatus();
+        UpdateButtons();
+    }
+
+    public void OnActivated()
+    {
         UpdateBridgeStatus();
         UpdateButtons();
     }

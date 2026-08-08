@@ -2,22 +2,17 @@ using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Navigation;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class BuiltinModPage : Page
+public sealed partial class BuiltinModPage : Page, IActivatablePage
 {
     private readonly FullPalettesOverlayService _mod = new();
     private bool _busy;
 
     public BuiltinModPage() => InitializeComponent();
 
-    protected override void OnNavigatedTo(NavigationEventArgs e)
-    {
-        base.OnNavigatedTo(e);
-        RefreshStatus();
-    }
+    public void OnActivated() => RefreshStatus();
 
     private void OnRefresh(object sender, RoutedEventArgs e) => RefreshStatus();
 
@@ -81,7 +76,7 @@ public sealed partial class BuiltinModPage : Page
         });
     }
 
-    private void RefreshStatus()
+    public void RefreshStatus()
     {
         bool bundled = _mod.IsBundledAvailable();
         bool installed = false;

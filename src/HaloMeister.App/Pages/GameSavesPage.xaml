@@ -473,12 +473,27 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <Button Click="OnBackupAll" Content="{i18n:Loc Key='game_saves.back_up_all_slots'}" />
-                                        <Button Grid.Column="1" Click="OnImport" Content="{i18n:Loc Key='game_saves.import_archive'}" />
+                                        <Button
+                                            x:Name="BackupAllButton"
+                                            Click="OnBackupAll"
+                                            Content="{i18n:Loc Key='game_saves.back_up_all_slots'}" />
+                                        <Button
+                                            x:Name="ImportButton"
+                                            Grid.Column="1"
+                                            Click="OnImport"
+                                            Content="{i18n:Loc Key='game_saves.import_archive'}" />
+                                        <ProgressRing
+                                            x:Name="BusyRing"
+                                            Grid.Column="3"
+                                            Width="22"
+                                            Height="22"
+                                            VerticalAlignment="Center"
+                                            IsActive="False" />
                                         <Button
                                             x:Name="RestoreButton"
-                                            Grid.Column="3"
+                                            Grid.Column="4"
                                             Click="OnRestoreBackup"
                                             Content="{i18n:Loc Key='game_saves.restore_to_this_slot'}"
                                             IsEnabled="False"

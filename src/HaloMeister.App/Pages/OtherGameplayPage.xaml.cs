@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class OtherGameplayPage : Page
+public sealed partial class OtherGameplayPage : Page, IActivatablePage
 {
     private sealed record OtherFeatureDefinition(
         string TitleKey,
@@ -79,18 +79,16 @@ public sealed partial class OtherGameplayPage : Page
         }
 
         FeaturesList.ItemsSource = _features;
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
         _statusTimer.Tick += OnStatusTimer;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
         UpdateBridgeStatus();
         _statusTimer.Start();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e) => _statusTimer.Stop();
+    public void OnDeactivated() => _statusTimer.Stop();
 
     private void OnStatusTimer(object? sender, object e) => UpdateBridgeStatus();
 
@@ -101,6 +99,7 @@ public sealed partial class OtherGameplayPage : Page
             return;
 
         _busy = true;
+        BusyRing.IsActive = true;
         UpdateFeatureEnabled();
         try
         {
@@ -120,6 +119,7 @@ public sealed partial class OtherGameplayPage : Page
         finally
         {
             _busy = false;
+            BusyRing.IsActive = false;
             UpdateBridgeStatus();
         }
     }
@@ -133,12 +133,12 @@ public sealed partial class OtherGameplayPage : Page
                 status.RunningVersion,
                 status.LastHeartbeat?.ToString("HH:mm:ss") ?? L.Get("common.unknown"))
             : status.Summary;
-        UpdateFeatureEnabled();
+        UpdateFeatureEnabled(status);
     }
 
-    private void UpdateFeatureEnabled()
+    private void UpdateFeatureEnabled(ScriptingBridgeStatus? status = null)
     {
-        ScriptingBridgeStatus status = _bridge.GetStatus();
+        status ??= _bridge.GetStatus();
         bool enabled = !_busy && status.IsRuntimeReady && !status.IsStale;
         foreach (OtherFeatureItem feature in _features)
             feature.IsEnabled = enabled;

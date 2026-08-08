@@ -186,21 +186,7 @@ public sealed class NativeTagModExportService
     }
 
     private static IEnumerable<string> CandidateGameRoots()
-    {
-        string? configured =
-            Environment.GetEnvironmentVariable("HALO_CAMPAIGN_EVOLVED_ROOT");
-        if (!string.IsNullOrWhiteSpace(configured)) yield return configured;
-        foreach (DriveInfo drive in DriveInfo.GetDrives())
-        {
-            if (!drive.IsReady) continue;
-            yield return Path.Combine(
-                drive.RootDirectory.FullName, "Games", "Halo- Campaign Evolved");
-            yield return Path.Combine(
-                drive.RootDirectory.FullName, "XboxGames", "Halo Campaign Evolved");
-            yield return Path.Combine(
-                drive.RootDirectory.FullName, "XboxGames", "Halo- Campaign Evolved");
-        }
-    }
+        => GameInstallationService.Current.EnumerateCandidateRoots();
 }
 
 public sealed record NativeTagModExportResult(

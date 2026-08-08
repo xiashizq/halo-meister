@@ -241,6 +241,9 @@ public sealed class VehicleWorkshopService : IDisposable
         if (status.IsStale)
             throw new InvalidOperationException(status.Summary);
 
+        // Move one-time native hook install off the first spawn click.
+        await WarmUpAsync(cancellationToken);
+
         RuntimeTagEntry? live = FindLive(selected);
         if (live is null)
         {

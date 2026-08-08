@@ -48,6 +48,11 @@
                     Content="{i18n:Loc Key='weapon_loader.scan_loaded_weapons'}"
                     IsEnabled="False"
                     Style="{StaticResource AccentButtonStyle}" />
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Width="22"
+                    Height="22"
+                    IsActive="False" />
             </StackPanel>
         </Grid>
 

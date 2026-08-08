@@ -14,7 +14,7 @@ using Windows.UI.Core;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class ScriptingPage : Page
+public sealed partial class ScriptingPage : Page, IActivatablePage
 {
     private sealed record ScriptExample(string NameKey, string Code)
     {
@@ -68,18 +68,16 @@ public sealed partial class ScriptingPage : Page
         SetExamples(HaloScriptExamples);
         LoadHaloScriptCatalog();
         UpdateScriptStats();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
         _statusTimer.Tick += OnStatusTimer;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
         UpdateBridgeStatus();
         _statusTimer.Start();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    public void OnDeactivated()
     {
         _statusTimer.Stop();
         _executionCancellation?.Cancel();
@@ -242,6 +240,7 @@ public sealed partial class ScriptingPage : Page
             return;
 
         _busy = true;
+        BusyRing.IsActive = true;
         SetButtonsEnabled(false);
         _executionCancellation = new CancellationTokenSource();
         try
@@ -282,6 +281,7 @@ public sealed partial class ScriptingPage : Page
             _executionCancellation?.Dispose();
             _executionCancellation = null;
             _busy = false;
+            BusyRing.IsActive = false;
             UpdateBridgeStatus();
         }
     }

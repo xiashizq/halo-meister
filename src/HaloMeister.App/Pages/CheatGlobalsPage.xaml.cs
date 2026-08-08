@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class CheatGlobalsPage : Page
+public sealed partial class CheatGlobalsPage : Page, IActivatablePage
 {
     private readonly CheatGlobalsService _cheats = new();
     private readonly PlayerModifiersService _modifiers =
@@ -37,6 +37,12 @@ public sealed partial class CheatGlobalsPage : Page
         GlobalAllegianceTeamComboBox.SelectedItem = globalTeams.FirstOrDefault(
             option => option.Value == AllegianceDemoService.HostileTeam)
             ?? globalTeams.FirstOrDefault();
+        UpdateBridgeStatus();
+        UpdateButtons();
+    }
+
+    public void OnActivated()
+    {
         UpdateBridgeStatus();
         UpdateButtons();
     }

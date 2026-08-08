@@ -88,13 +88,22 @@
                                         Style="{StaticResource CompactSafetyTextStyle}"
                                         Text="{i18n:Loc Key='remote_control.creates_a_temporary_private_pairing_link_2977d0'}" />
                                 </StackPanel>
-                                <Button
-                                    x:Name="ToggleButton"
+                                <StackPanel
                                     Grid.Column="1"
                                     VerticalAlignment="Center"
-                                    Click="OnToggleRemote"
-                                    Content="{i18n:Loc Key='remote_control.enable_remote'}"
-                                    Style="{StaticResource AccentButtonStyle}" />
+                                    Orientation="Horizontal"
+                                    Spacing="8">
+                                    <Button
+                                        x:Name="ToggleButton"
+                                        Click="OnToggleRemote"
+                                        Content="{i18n:Loc Key='remote_control.enable_remote'}"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                    <ProgressRing
+                                        x:Name="BusyRing"
+                                        Width="22"
+                                        Height="22"
+                                        IsActive="False" />
+                                </StackPanel>
                             </Grid>
                         </Border>
 

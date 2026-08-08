@@ -41,7 +41,7 @@
 
                 <Border Style="{StaticResource DashboardCardStyle}">
                     <StackPanel Spacing="10">
-                        <FontIcon HorizontalAlignment="Left" FontSize="22" Glyph="&#xE896;" />
+                        <SymbolIcon HorizontalAlignment="Left" Symbol="Map" />
                         <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.edit_progress_or_profile_data'}" />
                         <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.open_progress_profile_authenticate_with_p_5d20bd'}" TextWrapping="Wrap" />
                     </StackPanel>
@@ -49,7 +49,7 @@
 
                 <Border Grid.Column="1" Style="{StaticResource DashboardCardStyle}">
                     <StackPanel Spacing="10">
-                        <FontIcon HorizontalAlignment="Left" FontSize="22" Glyph="&#xE8B7;" />
+                        <SymbolIcon HorizontalAlignment="Left" Symbol="Folder" />
                         <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.manage_local_game_files'}" />
                         <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.use_game_files_for_equipped_customization_ca1c62'}" TextWrapping="Wrap" />
                     </StackPanel>
@@ -57,7 +57,11 @@
 
                 <Border Grid.Row="1" Style="{StaticResource DashboardCardStyle}">
                     <StackPanel Spacing="10">
-                        <FontIcon HorizontalAlignment="Left" FontSize="22" Glyph="&#xE768;" />
+                        <FontIcon
+                            HorizontalAlignment="Left"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                            FontSize="22"
+                            Glyph="&#xE7FC;" />
                         <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.use_live_tools'}" />
                         <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.open_setup_while_the_game_is_closed_insta_4c4892'}" TextWrapping="Wrap" />
                     </StackPanel>
@@ -65,7 +69,7 @@
 
                 <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource DashboardCardStyle}">
                     <StackPanel Spacing="10">
-                        <FontIcon HorizontalAlignment="Left" FontSize="22" Glyph="&#xE774;" />
+                        <SymbolIcon HorizontalAlignment="Left" Symbol="Phone" />
                         <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='readme.control_from_your_phone'}" />
                         <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='readme.open_phone_remote_enable_the_local_server_32d3ea'}" TextWrapping="Wrap" />
                     </StackPanel>

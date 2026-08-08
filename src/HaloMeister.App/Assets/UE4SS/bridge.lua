@@ -1,5 +1,5 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 103
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 104
 do
     local hm_ok, hm_error = pcall(function()
         -- UE4SS can load a mod before its shared helper module becomes available.
@@ -14,7 +14,7 @@ do
         -- Keep in step with the VERSION marker above; Halo Meister compares the
         -- version reported here against the copy it ships so it can tell you when
         -- the game is still running a stale bridge.
-        local bridge_version = 103
+        local bridge_version = 104
         -- User scripts execute in a dedicated environment. Expose the UE4SS
         -- helper module there while retaining normal access to global UE4SS
         -- APIs and preserving the historical global assignment behavior.
@@ -154,6 +154,70 @@ do
             return object and object:IsValid()
         end
 
+        -- Cache native exports and the controlled Blam unit across spawn/load
+        -- requests. FindAllOf + package.loadlib on every weapon/vehicle click is
+        -- a measurable hitch on the UE game thread.
+        local cached_blam_invoke = nil
+        local cached_cheat_invoke = nil
+        local cached_controlled_unit = nil
+
+        local function get_blam_invoke()
+            if cached_blam_invoke then
+                return cached_blam_invoke
+            end
+            local invoke, load_error = package.loadlib(
+                native_module_path,
+                "HaloMeisterBlamInvoke"
+            )
+            if not invoke then
+                error(
+                    "Could not load the native Blam bridge at "
+                        .. native_module_path .. ": " .. tostring(load_error)
+                )
+            end
+            cached_blam_invoke = invoke
+            return invoke
+        end
+
+        local function get_cheat_invoke()
+            if cached_cheat_invoke then
+                return cached_cheat_invoke
+            end
+            local invoke, load_error = package.loadlib(
+                native_module_path,
+                "HaloMeisterCheatInvoke"
+            )
+            if not invoke then
+                error(
+                    "Could not load the separate gameplay-cheat hook: "
+                        .. tostring(load_error)
+                )
+            end
+            cached_cheat_invoke = invoke
+            return invoke
+        end
+
+        local function find_controlled_unit_component()
+            if valid_remote_object(cached_controlled_unit) then
+                local ok, controlled = pcall(function()
+                    return cached_controlled_unit:IsControlledByAnyPlayer()
+                end)
+                if ok and controlled then
+                    return cached_controlled_unit
+                end
+            end
+
+            cached_controlled_unit = nil
+            for _, candidate in ipairs(FindAllOf("BlamUnitComponent") or {}) do
+                if valid_remote_object(candidate)
+                    and candidate:IsControlledByAnyPlayer() then
+                    cached_controlled_unit = candidate
+                    return candidate
+                end
+            end
+            return nil
+        end
+
         -- ExecuteConsoleCommand returns void and Unreal silently discards a command
         -- it does not recognize, so a successful call proves only that the string was
         -- handed to the console. Never report this as a confirmed execution.
@@ -273,16 +337,7 @@ do
         local function execute_player_unit_tag_read(request_id)
             ExecuteInGameThread(function()
                 local ok, value = xpcall(function()
-                    local unit_component = nil
-                    for _, candidate in ipairs(
-                        FindAllOf("BlamUnitComponent") or {}
-                    ) do
-                        if valid_remote_object(candidate)
-                            and candidate:IsControlledByAnyPlayer() then
-                            unit_component = candidate
-                            break
-                        end
-                    end
+                    local unit_component = find_controlled_unit_component()
                     if not valid_remote_object(unit_component) then
                         error(
                             "Could not find the controlled player's Blam unit."
@@ -401,13 +456,11 @@ do
         end
 
         local function controlled_player_actor()
-            for _, candidate in ipairs(FindAllOf("BlamUnitComponent") or {}) do
-                if valid_remote_object(candidate)
-                    and candidate:IsControlledByAnyPlayer() then
-                    local owner = candidate:GetOwner()
-                    if valid_remote_object(owner) then
-                        return owner
-                    end
+            local unit_component = find_controlled_unit_component()
+            if valid_remote_object(unit_component) then
+                local owner = unit_component:GetOwner()
+                if valid_remote_object(owner) then
+                    return owner
                 end
             end
             error("Could not find the controlled player's Unreal actor.")
@@ -1044,14 +1097,7 @@ do
                         or operation == "object_team"
                         or ((operation == "ai" or operation == "ai_team")
                             and friendly_companion) then
-                        local unit_component = nil
-                        for _, candidate in ipairs(FindAllOf("BlamUnitComponent") or {}) do
-                            if valid_remote_object(candidate)
-                                and candidate:IsControlledByAnyPlayer() then
-                                unit_component = candidate
-                                break
-                            end
-                        end
+                        local unit_component = find_controlled_unit_component()
                         if not unit_component then
                             error("Could not find the controlled player's Blam unit.")
                         end
@@ -1213,17 +1259,7 @@ do
                         error("Could not write the native spawn request: " .. tostring(write_error))
                     end
 
-                    local invoke, load_error = package.loadlib(
-                        native_module_path,
-                        "HaloMeisterBlamInvoke"
-                    )
-                    if not invoke then
-                        error(
-                            "Could not load the native Blam bridge at "
-                                .. native_module_path .. ": " .. tostring(load_error)
-                        )
-                    end
-                    invoke()
+                    get_blam_invoke()()
                 end, debug.traceback)
 
                 if not ok then
@@ -1309,15 +1345,7 @@ do
                         error("Could not write the gameplay-cheat request: "
                             .. tostring(write_error))
                     end
-                    local invoke, load_error = package.loadlib(
-                        native_module_path,
-                        "HaloMeisterCheatInvoke"
-                    )
-                    if not invoke then
-                        error("Could not load the separate gameplay-cheat hook: "
-                            .. tostring(load_error))
-                    end
-                    invoke()
+                    get_cheat_invoke()()
                 end, debug.traceback)
 
                 if not ok then

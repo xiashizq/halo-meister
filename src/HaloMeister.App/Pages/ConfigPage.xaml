@@ -56,6 +56,11 @@
                         <TextBlock Text="{i18n:Loc Key='config.save_changes'}" />
                     </StackPanel>
                 </Button>
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Width="22"
+                    Height="22"
+                    IsActive="False" />
             </StackPanel>
         </Grid>
 

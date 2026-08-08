@@ -10,7 +10,7 @@ using Windows.System;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class ConfigPage : Page
+public sealed partial class ConfigPage : Page, IActivatablePage
 {
     private readonly MeteoriteConfigStore _store = new();
     private readonly ScriptingBridgeService _scriptingBridge = ScriptingBridgeService.Current;
@@ -18,17 +18,25 @@ public sealed partial class ConfigPage : Page
     private readonly Dictionary<ConfigDocument, DocumentViewState> _documentViews = [];
     private readonly Dictionary<ConfigDocument, DocumentListItemState> _documentListItems = [];
     private ConfigDocument? _selectedDocument;
+    private bool _initialized;
 
     public ConfigPage()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
-        Loaded -= OnLoaded;
-        ReloadDocuments();
+        if (!_initialized)
+        {
+            _initialized = true;
+            ReloadDocuments();
+            return;
+        }
+
+        // Refresh from disk only when the editor has no unsaved edits.
+        if (!_documents.Any(document => document.IsDirty))
+            ReloadDocuments();
     }
 
     private void ReloadDocuments()
@@ -1125,6 +1133,8 @@ public sealed partial class ConfigPage : Page
 
     private async void OnSave(object sender, RoutedEventArgs e)
     {
+        BusyRing.IsActive = true;
+        SaveButton.IsEnabled = false;
         try
         {
             List<ConfigDocument> changedDocuments =
@@ -1181,6 +1191,11 @@ public sealed partial class ConfigPage : Page
         catch (Exception ex)
         {
             Report(ex.Message, ex is InvalidOperationException ? InfoBarSeverity.Warning : InfoBarSeverity.Error);
+        }
+        finally
+        {
+            BusyRing.IsActive = false;
+            RefreshDocumentChrome();
         }
     }
 

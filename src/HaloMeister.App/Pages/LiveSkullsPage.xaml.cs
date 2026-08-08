@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class LiveSkullsPage : Page
+public sealed partial class LiveSkullsPage : Page, IActivatablePage
 {
     private readonly LiveSkullsService _skulls = new();
     private IReadOnlyList<LiveSkullItem> _items = [];
@@ -17,17 +17,18 @@ public sealed partial class LiveSkullsPage : Page
     public LiveSkullsPage()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
         UpdateBridgeStatus();
         UpdateButtons();
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
+        UpdateBridgeStatus();
+        UpdateButtons();
         if (_items.Count == 0 &&
             _skulls.BridgeStatus is { IsRuntimeReady: true, IsStale: false })
         {
-            await RefreshAsync();
+            _ = RefreshAsync();
         }
     }
 

@@ -9,7 +9,7 @@ using Windows.Storage.Pickers;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class GameSavesPage : Page
+public sealed partial class GameSavesPage : Page, IActivatablePage
 {
     private readonly SteamGameSaveStore _steamStore = new();
     private readonly WgsGameSaveStore _storeStore = new();
@@ -17,12 +17,13 @@ public sealed partial class GameSavesPage : Page
     private IReadOnlyList<WgsSaveSlot> _slots = [];
     private IReadOnlyList<WgsBackupEntry> _backups = [];
     private bool _suppressPlatformChange;
+    private bool _busy;
+    private bool _initialized;
 
     public GameSavesPage()
     {
         _store = _steamStore;
         InitializeComponent();
-        Loaded += OnLoaded;
     }
 
     private nint Hwnd => MainWindow.Instance is { } window
@@ -33,11 +34,15 @@ public sealed partial class GameSavesPage : Page
     private WgsBackupEntry? SelectedBackup => BackupBox.SelectedItem as WgsBackupEntry;
     private bool IsSteamPlatform => _store.PlatformId == SteamGameSaveStore.Platform;
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
-        Loaded -= OnLoaded;
-        SelectInitialPlatform();
-        ApplyPlatformChrome();
+        if (!_initialized)
+        {
+            _initialized = true;
+            SelectInitialPlatform();
+            ApplyPlatformChrome();
+        }
+
         Refresh();
     }
 
@@ -163,13 +168,16 @@ public sealed partial class GameSavesPage : Page
         WgsBackupEntry? backup = SelectedBackup;
         bool selected = slot is not null;
 
-        ExportButton.IsEnabled = selected;
         EmptySelectionText.Visibility = selected ? Visibility.Collapsed : Visibility.Visible;
         DetailsGrid.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
         RestoreButton.IsEnabled =
+            !_busy &&
             slot?.Save.Kind == WgsGameSaveKind.Checkpoint &&
             backup?.Save.Kind == WgsGameSaveKind.Checkpoint &&
             !_store.IsGameRunning;
+        BackupAllButton.IsEnabled = !_busy;
+        ImportButton.IsEnabled = !_busy;
+        ExportButton.IsEnabled = selected && !_busy;
         RecoveryHintText.Text = _store.IsGameRunning
             ? L.Get("game_saves.close_game_before_restore")
             : IsSteamPlatform
@@ -205,6 +213,8 @@ public sealed partial class GameSavesPage : Page
 
     private void OnBackupAll(object sender, RoutedEventArgs e)
     {
+        if (_busy) return;
+        SetBusy(true);
         try
         {
             WgsBackupResult result = _store.BackupAll("manual");
@@ -217,12 +227,17 @@ public sealed partial class GameSavesPage : Page
         {
             Report(ex.Message, InfoBarSeverity.Error);
         }
+        finally
+        {
+            SetBusy(false);
+        }
     }
 
     private void OnExport(object sender, RoutedEventArgs e)
     {
-        if (Selected is not { } slot) return;
+        if (_busy || Selected is not { } slot) return;
 
+        SetBusy(true);
         try
         {
             WgsBackupEntry exported = _store.ExportToLibrary(slot);
@@ -238,10 +253,15 @@ public sealed partial class GameSavesPage : Page
         {
             Report(ex.Message, InfoBarSeverity.Error);
         }
+        finally
+        {
+            SetBusy(false);
+        }
     }
 
     private async void OnImport(object sender, RoutedEventArgs e)
     {
+        if (_busy) return;
         try
         {
             var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
@@ -251,21 +271,30 @@ public sealed partial class GameSavesPage : Page
             StorageFile? file = await picker.PickSingleFileAsync();
             if (file is null) return;
 
-            WgsBackupEntry imported = _store.ImportToLibrary(file.Path);
-            Refresh(Selected?.ContainerId, imported.Id);
-            Report(
-                L.Format("game_saves.imported_review_restore", Path.GetFileName(file.Path)),
-                InfoBarSeverity.Success);
+            SetBusy(true);
+            try
+            {
+                WgsBackupEntry imported = _store.ImportToLibrary(file.Path);
+                Refresh(Selected?.ContainerId, imported.Id);
+                Report(
+                    L.Format("game_saves.imported_review_restore", Path.GetFileName(file.Path)),
+                    InfoBarSeverity.Success);
+            }
+            finally
+            {
+                SetBusy(false);
+            }
         }
         catch (Exception ex)
         {
+            SetBusy(false);
             Report(ex.Message, InfoBarSeverity.Error);
         }
     }
 
     private async void OnRestoreBackup(object sender, RoutedEventArgs e)
     {
-        if (Selected is not { } slot || SelectedBackup is not { } backup) return;
+        if (_busy || Selected is not { } slot || SelectedBackup is not { } backup) return;
 
         try
         {
@@ -289,21 +318,37 @@ public sealed partial class GameSavesPage : Page
             };
             if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
 
-            WgsReplaceResult result = _store.RestoreBackup(slot, backup);
-            Refresh(result.UpdatedSlot.ContainerId);
-            Report(
-                L.Format(
-                    IsSteamPlatform
-                        ? "game_saves.restored_with_snapshot_steam"
-                        : "game_saves.restored_with_snapshot",
-                    backup.DisplayName,
-                    result.BackupPath),
-                InfoBarSeverity.Success);
+            SetBusy(true);
+            try
+            {
+                WgsReplaceResult result = _store.RestoreBackup(slot, backup);
+                Refresh(result.UpdatedSlot.ContainerId);
+                Report(
+                    L.Format(
+                        IsSteamPlatform
+                            ? "game_saves.restored_with_snapshot_steam"
+                            : "game_saves.restored_with_snapshot",
+                        backup.DisplayName,
+                        result.BackupPath),
+                    InfoBarSeverity.Success);
+            }
+            finally
+            {
+                SetBusy(false);
+            }
         }
         catch (Exception ex)
         {
+            SetBusy(false);
             Report(ex.Message, InfoBarSeverity.Error);
         }
+    }
+
+    private void SetBusy(bool busy)
+    {
+        _busy = busy;
+        BusyRing.IsActive = busy;
+        UpdateSelection();
     }
 
     private void OnOpenLiveFolder(object sender, RoutedEventArgs e)

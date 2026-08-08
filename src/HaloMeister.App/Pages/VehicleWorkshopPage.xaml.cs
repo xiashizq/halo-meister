@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class VehicleWorkshopPage : Page
+public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly VehicleWorkshopService _vehicles = new();
@@ -23,7 +23,12 @@ public sealed partial class VehicleWorkshopPage : Page
     {
         InitializeComponent();
         _game.ConnectionChanged += OnConnectionChanged;
-        Unloaded += OnUnloaded;
+        RefreshFullPalettesState();
+        UpdateControls();
+    }
+
+    public void OnActivated()
+    {
         RefreshFullPalettesState();
         UpdateControls();
     }
@@ -298,12 +303,6 @@ public sealed partial class VehicleWorkshopPage : Page
             !_busy &&
             _game.IsConnected &&
             _variants.Count > 0;
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        _game.ConnectionChanged -= OnConnectionChanged;
-        _vehicles.Dispose();
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)

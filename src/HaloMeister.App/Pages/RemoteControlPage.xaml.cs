@@ -11,29 +11,36 @@ using Windows.System;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class RemoteControlPage : Page
+public sealed partial class RemoteControlPage : Page, IActivatablePage
 {
     private readonly RemoteControlService _remote = RemoteControlService.Current;
     private readonly RemoteControlFirewallService _firewall = new();
     private bool _busy;
     private int _statusVersion;
+    private bool _subscribed;
 
     public RemoteControlPage()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
-        _remote.StateChanged += OnRemoteStateChanged;
+        if (!_subscribed)
+        {
+            _remote.StateChanged += OnRemoteStateChanged;
+            _subscribed = true;
+        }
+
         _ = UpdateStateAsync();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    public void OnDeactivated()
     {
+        if (!_subscribed)
+            return;
         _remote.StateChanged -= OnRemoteStateChanged;
+        _subscribed = false;
     }
 
     private void OnRemoteStateChanged(object? sender, EventArgs e)
@@ -230,6 +237,7 @@ public sealed partial class RemoteControlPage : Page
     private void SetBusy(bool busy)
     {
         _busy = busy;
+        BusyRing.IsActive = busy;
         ToggleButton.IsEnabled = !busy;
         ConfigureFirewallButton.IsEnabled = !busy;
         RemoveFirewallButton.IsEnabled = !busy;

@@ -75,7 +75,15 @@
                             <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='home.game_session'}" />
                         </StackPanel>
                         <TextBlock x:Name="GameStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.checking'}" TextWrapping="Wrap" />
-                        <Button x:Name="ConnectButton" HorizontalAlignment="Left" Click="OnConnectGame" Content="{i18n:Loc Key='home.connect'}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="ConnectButton" Click="OnConnectGame" Content="{i18n:Loc Key='home.connect'}" />
+                            <ProgressRing
+                                x:Name="ConnectBusyRing"
+                                Width="20"
+                                Height="20"
+                                VerticalAlignment="Center"
+                                IsActive="False" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -115,12 +123,23 @@
                             IsTextSelectionEnabled="True"
                             Text="{i18n:Loc Key='home.game_path_disconnected'}"
                             TextWrapping="Wrap" />
-                        <Button
-                            x:Name="OpenGamePathButton"
-                            HorizontalAlignment="Left"
-                            Click="OnOpenGamePath"
-                            Content="{i18n:Loc Key='home.open_game_folder'}"
-                            IsEnabled="False" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                x:Name="ChangeGamePathButton"
+                                Click="OnChangeGamePath"
+                                Content="{i18n:Loc Key='home.change_game_folder'}" />
+                            <Button
+                                x:Name="OpenGamePathButton"
+                                Click="OnOpenGamePath"
+                                Content="{i18n:Loc Key='home.open_game_folder'}"
+                                IsEnabled="False" />
+                            <ProgressRing
+                                x:Name="PathBusyRing"
+                                Width="20"
+                                Height="20"
+                                VerticalAlignment="Center"
+                                IsActive="False" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -152,7 +171,7 @@
                     <Button Grid.Column="1" Style="{StaticResource TaskCardButtonStyle}" Click="OnOpenCustomization">
                         <Grid ColumnSpacing="14">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <SymbolIcon Symbol="Edit" />
+                            <SymbolIcon Symbol="Folder" />
                             <StackPanel Grid.Column="1" Spacing="3">
                                 <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='home.manage_game_files'}" />
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.customization_settings_backups_and_game_saves'}" TextWrapping="Wrap" />
@@ -164,7 +183,7 @@
                     <Button Grid.Row="1" Style="{StaticResource TaskCardButtonStyle}" Click="OnOpenLiveTools">
                         <Grid ColumnSpacing="14">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <SymbolIcon Symbol="Play" />
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE7FC;" />
                             <StackPanel Grid.Column="1" Spacing="3">
                                 <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='home.use_live_tools'}" />
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.gameplay_spawning_player_appearance_camer_2a634e'}" TextWrapping="Wrap" />

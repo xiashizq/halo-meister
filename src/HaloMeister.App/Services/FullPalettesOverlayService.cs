@@ -212,54 +212,34 @@ public sealed class FullPalettesOverlayService
 
     private static IEnumerable<string> CandidateGameRoots()
     {
-        string? configured =
-            Environment.GetEnvironmentVariable("HALO_CAMPAIGN_EVOLVED_ROOT");
-        if (!string.IsNullOrWhiteSpace(configured))
-            yield return configured;
-
         string? remembered = TryRememberedGameRoot();
         if (!string.IsNullOrWhiteSpace(remembered))
             yield return remembered!;
 
-        foreach (string root in EnumerateUninstallLocations())
+        foreach (string root in GameInstallationService.Current.EnumerateCandidateRoots())
             yield return root;
-
-        foreach (DriveInfo drive in DriveInfo.GetDrives())
-        {
-            if (!drive.IsReady) continue;
-            string letter = drive.RootDirectory.FullName;
-            yield return Path.Combine(letter, "Games", "Halo- Campaign Evolved");
-            yield return Path.Combine(letter, "Games", "Halo Campaign Evolved");
-            yield return Path.Combine(letter, "XboxGames", "Halo Campaign Evolved");
-            yield return Path.Combine(letter, "XboxGames", "Halo- Campaign Evolved");
-            yield return Path.Combine(
-                letter, "Program Files (x86)", "Steam", "steamapps", "common",
-                "Halo Campaign Evolved");
-            yield return Path.Combine(
-                letter, "SteamLibrary", "steamapps", "common",
-                "Halo Campaign Evolved");
-            yield return Path.Combine(
-                letter, "PG", "Steam", "steamapps", "common",
-                "Halo Campaign Evolved");
-        }
     }
 
     private static string? TryRememberedGameRoot()
     {
         try
         {
+            // Binary directory is already the WinGDK/Win64 folder; walking from there
+            // reaches Content\Meteorite\Content\Paks in a few hops.
+            string? binaryDirectory = GameInstallationService.Current.BinaryDirectory;
+            if (!string.IsNullOrWhiteSpace(binaryDirectory))
+            {
+                string? fromBinary = WalkToGameRoot(binaryDirectory);
+                if (fromBinary is not null)
+                    return fromBinary;
+            }
+
             string? mainPath = ScriptingBridgeService.Current.FindInstalledMainPath();
             if (string.IsNullOrWhiteSpace(mainPath)) return null;
-            string? directory = Path.GetDirectoryName(mainPath);
-            // ...\Meteorite\Binaries\WinGDK\HaloCampaignEvolved.exe → game root
-            for (int i = 0; i < 4 && directory is not null; i++)
-            {
-                if (Directory.Exists(Path.Combine(directory, "Meteorite", "Content", "Paks")) ||
-                    Directory.Exists(Path.Combine(directory, "Content", "Meteorite", "Content", "Paks")))
-                    return directory;
-                directory = Path.GetDirectoryName(directory);
-            }
-            return Path.GetDirectoryName(mainPath);
+            // main.lua lives under ...\WinGDK\ue4ss\Mods\HaloMeister\Scripts\ — about
+            // 8 parents up to the Store game root. Older code only walked 4 levels and
+            // stopped inside WinGDK, missing Paks for Microsoft Store installs.
+            return WalkToGameRoot(Path.GetDirectoryName(mainPath));
         }
         catch
         {
@@ -267,39 +247,21 @@ public sealed class FullPalettesOverlayService
         }
     }
 
-    private static IEnumerable<string> EnumerateUninstallLocations()
+    private static string? WalkToGameRoot(string? startDirectory)
     {
-        foreach (string location in EnumerateUninstallHive(
-                     Microsoft.Win32.Registry.LocalMachine,
-                     @"Software\Microsoft\Windows\CurrentVersion\Uninstall"))
-            yield return location;
-        foreach (string location in EnumerateUninstallHive(
-                     Microsoft.Win32.Registry.LocalMachine,
-                     @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"))
-            yield return location;
-        foreach (string location in EnumerateUninstallHive(
-                     Microsoft.Win32.Registry.CurrentUser,
-                     @"Software\Microsoft\Windows\CurrentVersion\Uninstall"))
-            yield return location;
-    }
-
-    private static IEnumerable<string> EnumerateUninstallHive(
-        Microsoft.Win32.RegistryKey root,
-        string path)
-    {
-        using Microsoft.Win32.RegistryKey? hive = root.OpenSubKey(path);
-        if (hive is null) yield break;
-        foreach (string name in hive.GetSubKeyNames())
+        string? directory = startDirectory;
+        for (int i = 0; i < 10 && directory is not null; i++)
         {
-            using Microsoft.Win32.RegistryKey? sub = hive.OpenSubKey(name);
-            string? display = sub?.GetValue("DisplayName") as string;
-            string? location = sub?.GetValue("InstallLocation") as string;
-            if (string.IsNullOrWhiteSpace(display) ||
-                string.IsNullOrWhiteSpace(location))
-                continue;
-            if (display.Contains("Campaign Evolved", StringComparison.OrdinalIgnoreCase))
-                yield return location;
+            if (Directory.Exists(Path.Combine(directory, "Meteorite", "Content", "Paks")) ||
+                Directory.Exists(Path.Combine(directory, "Content", "Meteorite", "Content", "Paks")))
+            {
+                return directory;
+            }
+
+            directory = Path.GetDirectoryName(directory);
         }
+
+        return null;
     }
 }
 

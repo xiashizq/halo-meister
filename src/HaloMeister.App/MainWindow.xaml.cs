@@ -6,6 +6,7 @@ using HaloMeister.App.Services;
 using HaloMeister.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -26,9 +27,16 @@ public sealed partial class MainWindow : Window
     private bool _cloudBusy;
     private bool _awaitingAuthCapture;
     private bool _authSavedDuringCapture;
+    private int _navigationGeneration;
+    private readonly Dictionary<Type, Page> _pageCache = new();
+    private Page? _activePage;
     private readonly DispatcherTimer _statusDismissTimer = new()
     {
         Interval = TimeSpan.FromSeconds(4),
+    };
+    private readonly DispatcherTimer _patchSerializeTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(300),
     };
 
     public MainWindow()
@@ -55,10 +63,11 @@ public sealed partial class MainWindow : Window
             _statusDismissTimer.Stop();
             Status.IsOpen = false;
         };
+        _patchSerializeTimer.Tick += OnPatchSerializeTick;
 
         TryLoadSavedPlayFabSession();
         Nav.SelectedItem = HomeNavItem;
-        ContentFrame.Navigate(typeof(HomePage));
+        PresentPage(GetOrCreatePage(typeof(HomePage), out _));
         UpdateChrome();
         UpdateGameConnectionChrome();
         UpdateCloudActions();
@@ -121,17 +130,11 @@ public sealed partial class MainWindow : Window
             if (tag is null)
                 return;
 
-            bool isCloudContext = tag is "campaign-progress" or "profile" or "raw";
-            CloudActionsBar.Visibility = isCloudContext
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-
             Type page = ResolvePageType(tag);
-            ContentFrame.Content = null;
-            if (page == typeof(LiveToolsHubPage))
-                ContentFrame.Navigate(page, tag);
-            else
-                ContentFrame.Navigate(page);
+            _ = NavigateContentAsync(
+                page,
+                page == typeof(LiveToolsHubPage) ? tag : null,
+                forceReload: true);
         });
     }
 
@@ -141,6 +144,7 @@ public sealed partial class MainWindow : Window
         CloudTitleText.Text = L.Get("shell.playfab_cloud_save");
         GetUserDataButton.Label = L.Get("shell.download_save");
         PatchSettingsButton.Label = L.Get("shell.upload_changes");
+        NavigationLoadingText.Text = L.Get("common.loading");
 
         HomeNavItem.Content = L.Get("shell.home");
         ProgressProfileNavItem.Content = L.Get("shell.progress_profile");
@@ -170,7 +174,14 @@ public sealed partial class MainWindow : Window
     private void UpdateChrome()
     {
         UpdateCloudActions();
+        // DirtyChanged can fire per field edit; debounce the full-document serialize.
+        _patchSerializeTimer.Stop();
+        _patchSerializeTimer.Start();
+    }
 
+    private void OnPatchSerializeTick(object? sender, object e)
+    {
+        _patchSerializeTimer.Stop();
         try
         {
             Volatile.Write(ref _patchPayload, _state.Save?.Document.Serialize());
@@ -255,15 +266,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    public async Task InstallLiveToolsAsync()
+    public async Task InstallLiveToolsAsync(bool forcePickFolder = false)
     {
         if (_installingBridge) return;
 
-        string? selectedRoot = _loaderInstaller.FindGameBinaryDirectory()
-            ?? _loaderInstaller.FindInstalledBinaryDirectory();
+        string? selectedRoot = forcePickFolder
+            ? null
+            : _loaderInstaller.FindGameBinaryDirectory()
+                ?? _loaderInstaller.FindInstalledBinaryDirectory();
         try
         {
-            if (_bridge.FindInstalledMainPath() is null && selectedRoot is null)
+            // forcePickFolder lets Setup recover from a wrong remembered path after a
+            // failed or partial install. Without it, the first successful folder pick
+            // permanently skips the picker even when the bridge never finished installing.
+            if (forcePickFolder || (_bridge.FindInstalledMainPath() is null && selectedRoot is null))
             {
                 var picker = new FolderPicker
                 {
@@ -275,6 +291,8 @@ public sealed partial class MainWindow : Window
                 if (folder is null) return;
                 selectedRoot = folder.Path;
                 GameInstallationService.Current.Remember(selectedRoot);
+                if (forcePickFolder)
+                    _bridge.ClearRememberedInstallLocation();
             }
 
             bool installLoader =
@@ -288,7 +306,7 @@ public sealed partial class MainWindow : Window
                     Content = L.Format(
                         "shell.install_bridge_body",
                         Ue4ssLoaderInstaller.Version),
-                    PrimaryButtonText = L.Get("shell.download_and_install"),
+                    PrimaryButtonText = L.Get("common.install"),
                     CloseButtonText = L.Get("common.cancel"),
                     DefaultButton = ContentDialogButton.Close,
                 };
@@ -300,8 +318,11 @@ public sealed partial class MainWindow : Window
             Ue4ssLoaderInstallResult? loaderResult = null;
             if (installLoader)
             {
-                loaderResult = await Task.Run(
-                    () => _loaderInstaller.InstallAsync(selectedRoot!));
+                var downloadProgress = new Progress<Ue4ssDownloadProgress>(
+                    ReportUe4ssDownloadProgress);
+                loaderResult = await _loaderInstaller.InstallAsync(
+                    selectedRoot!,
+                    downloadProgress);
                 selectedRoot = loaderResult.BinaryDirectory;
             }
 
@@ -329,10 +350,136 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void ReportUe4ssDownloadProgress(Ue4ssDownloadProgress progress)
+    {
+        // HttpClient completions may resume off the UI thread.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            string speed = FormatTransferSpeed(progress.BytesPerSecond);
+            if (progress.TotalBytes is { } total && total > 0)
+            {
+                double percent = 100.0 * progress.BytesReceived / total;
+                Report(
+                    L.Format(
+                        "shell.ue4ss_download_progress",
+                        FormatTransferBytes(progress.BytesReceived),
+                        FormatTransferBytes(total),
+                        percent.ToString("0.0"),
+                        speed),
+                    InfoBarSeverity.Informational,
+                    L.Get("shell.ue4ss_downloading_title"));
+                return;
+            }
+
+            Report(
+                L.Format(
+                    "shell.ue4ss_download_progress_unknown",
+                    FormatTransferBytes(progress.BytesReceived),
+                    speed),
+                InfoBarSeverity.Informational,
+                L.Get("shell.ue4ss_downloading_title"));
+        });
+    }
+
+    private static string FormatTransferBytes(long bytes)
+    {
+        const double kib = 1024;
+        const double mib = kib * 1024;
+        if (bytes >= mib)
+            return $"{bytes / mib:0.00} MiB";
+        if (bytes >= kib)
+            return $"{bytes / kib:0.0} KiB";
+        return $"{bytes} B";
+    }
+
+    private static string FormatTransferSpeed(double bytesPerSecond)
+    {
+        if (bytesPerSecond <= 0)
+            return "—";
+        return $"{FormatTransferBytes((long)bytesPerSecond)}/s";
+    }
+
+    public async Task UninstallLiveToolsAsync()
+    {
+        if (_installingBridge) return;
+
+        try
+        {
+            if (!_bridge.HasRemovableInstall())
+            {
+                Report(
+                    L.Get("shell.bridge_not_installed_msg"),
+                    InfoBarSeverity.Informational,
+                    L.Get("shell.bridge_uninstalled_title"));
+                return;
+            }
+
+            var dialog = new ContentDialog
+            {
+                XamlRoot = RootGrid.XamlRoot,
+                Title = L.Get("setup.uninstall"),
+                Content = L.Get("setup.uninstall_confirm"),
+                PrimaryButtonText = L.Get("setup.uninstall"),
+                CloseButtonText = L.Get("common.cancel"),
+                DefaultButton = ContentDialogButton.Close,
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                return;
+
+            _installingBridge = true;
+            string removedPath = await Task.Run(_bridge.UninstallBridge);
+            Report(
+                string.IsNullOrEmpty(removedPath)
+                    ? L.Get("shell.bridge_uninstalled_cleared_msg")
+                    : L.Format("shell.bridge_uninstalled_msg", removedPath),
+                InfoBarSeverity.Success,
+                L.Get("shell.bridge_uninstalled_title"));
+        }
+        catch (Exception ex)
+        {
+            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_uninstall_bridge"));
+        }
+        finally
+        {
+            _installingBridge = false;
+        }
+    }
+
+    public async Task ChangeLiveToolsFolderAsync()
+    {
+        if (_installingBridge) return;
+
+        try
+        {
+            var picker = new FolderPicker
+            {
+                SuggestedStartLocation = PickerLocationId.ComputerFolder,
+            };
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, Hwnd);
+            StorageFolder? folder = await picker.PickSingleFolderAsync();
+            if (folder is null) return;
+
+            GameInstallationService.Current.Remember(folder.Path);
+            _bridge.ClearRememberedInstallLocation();
+            _bridge.InvalidateStatusCaches();
+            Report(
+                L.Format("shell.bridge_folder_updated_msg", folder.Path),
+                InfoBarSeverity.Success,
+                L.Get("shell.bridge_folder_updated_title"));
+        }
+        catch (Exception ex)
+        {
+            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_change_bridge_folder"));
+        }
+    }
+
     public bool IsInstallingLiveTools => _installingBridge;
 
     private byte[]? GetPatchPayload()
     {
+        if (_patchSerializeTimer.IsEnabled)
+            OnPatchSerializeTick(null, EventArgs.Empty);
         byte[]? snapshot = Volatile.Read(ref _patchPayload);
         return snapshot?.ToArray();
     }
@@ -378,7 +525,7 @@ public sealed partial class MainWindow : Window
         _ => typeof(MissionsPage),
     };
 
-    private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    private async void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (args.SelectedItem is not NavigationViewItem item) return;
 
@@ -387,25 +534,144 @@ public sealed partial class MainWindow : Window
         if (string.IsNullOrEmpty(tag))
             return;
 
-        bool isCloudContext = tag is "campaign-progress" or "profile" or "raw";
+        // Return to the dispatcher first so the NavigationView can paint the
+        // selected item before any page create / swap work runs.
+        await Task.Yield();
+
+        Type page = ResolvePageType(tag);
+        await NavigateContentAsync(
+            page,
+            page == typeof(LiveToolsHubPage) ? tag : null);
+    }
+
+    private async Task NavigateContentAsync(
+        Type page,
+        object? parameter = null,
+        bool forceReload = false)
+    {
+        if (forceReload)
+            ResetPageCache();
+
+        bool isCloudContext =
+            page == typeof(CampaignProgressPage) ||
+            page == typeof(ProfilePage) ||
+            page == typeof(RawPage);
         CloudActionsBar.Visibility = isCloudContext
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        Type page = ResolvePageType(tag);
+        // Same live-tools shell: swap section without recreating the hub page.
+        if (!forceReload &&
+            page == typeof(LiveToolsHubPage) &&
+            parameter is string section &&
+            ContentFrame.Content is LiveToolsHubPage hub)
+        {
+            try
+            {
+                await hub.ShowSectionAsync(section);
+            }
+            catch (Exception ex)
+            {
+                App.LogCrash("Navigate", ex);
+                Report(ex.Message, InfoBarSeverity.Error);
+            }
+            return;
+        }
+
+        if (!forceReload && ContentFrame.Content?.GetType() == page)
+        {
+            // Already visible: still refresh volatile status (bridge install, etc.).
+            ActivatePage(ContentFrame.Content as Page);
+            return;
+        }
+
+        bool coldStart = !_pageCache.ContainsKey(page);
+        int generation = ++_navigationGeneration;
+        if (coldStart)
+        {
+            SetNavigationLoading(true);
+            await Task.Yield();
+            if (generation != _navigationGeneration)
+                return;
+        }
 
         try
         {
-            if (page == typeof(LiveToolsHubPage))
-                ContentFrame.Navigate(page, tag);
-            else if (ContentFrame.CurrentSourcePageType != page)
-                ContentFrame.Navigate(page);
+            Page instance = GetOrCreatePage(page, out _);
+            PresentPage(instance);
+
+            if (page == typeof(LiveToolsHubPage) &&
+                parameter is string liveSection &&
+                instance is LiveToolsHubPage liveHub)
+            {
+                await liveHub.ShowSectionAsync(liveSection);
+            }
         }
         catch (Exception ex)
         {
             App.LogCrash("Navigate", ex);
             Report(ex.Message, InfoBarSeverity.Error);
         }
+        finally
+        {
+            if (generation == _navigationGeneration)
+                SetNavigationLoading(false);
+        }
+    }
+
+    private Page GetOrCreatePage(Type pageType, out bool created)
+    {
+        if (_pageCache.TryGetValue(pageType, out Page? existing))
+        {
+            created = false;
+            return existing;
+        }
+
+        Page page = (Page)Activator.CreateInstance(pageType)!;
+        page.NavigationCacheMode = NavigationCacheMode.Required;
+        _pageCache[pageType] = page;
+        created = true;
+        return page;
+    }
+
+    private void PresentPage(Page page)
+    {
+        if (!ReferenceEquals(_activePage, page))
+        {
+            DeactivatePage(_activePage);
+            ContentFrame.Content = page;
+            _activePage = page;
+        }
+
+        ActivatePage(page);
+    }
+
+    private static void ActivatePage(Page? page)
+    {
+        if (page is IActivatablePage activatable)
+            activatable.OnActivated();
+    }
+
+    private static void DeactivatePage(Page? page)
+    {
+        if (page is IActivatablePage activatable)
+            activatable.OnDeactivated();
+    }
+
+    private void ResetPageCache()
+    {
+        DeactivatePage(_activePage);
+        _activePage = null;
+        ContentFrame.Content = null;
+        _pageCache.Clear();
+        _navigationGeneration++;
+    }
+
+    private void SetNavigationLoading(bool loading)
+    {
+        NavigationLoadingOverlay.Visibility =
+            loading ? Visibility.Visible : Visibility.Collapsed;
+        NavigationLoadingRing.IsActive = loading;
     }
 
     public void NavigateTo(string tag)
@@ -864,6 +1130,8 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _patchSerializeTimer.Stop();
+        _statusDismissTimer.Stop();
         RemoteControlService.Current.StopForShutdown(TimeSpan.FromSeconds(3));
         LocalizationService.Current.LanguageChanged -= OnAppLanguageChanged;
         _proxy.Error -= OnProxyError;

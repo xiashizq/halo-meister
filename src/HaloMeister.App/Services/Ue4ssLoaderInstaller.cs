@@ -13,27 +13,42 @@ public sealed record Ue4ssLoaderInstallResult(
     string BackupDirectory,
     string Version);
 
+/// <summary>Progress while fetching the UE4SS archive from GitHub as a fallback.</summary>
+public sealed record Ue4ssDownloadProgress(
+    long BytesReceived,
+    long? TotalBytes,
+    double BytesPerSecond);
+
 /// <summary>
 /// Installs a pinned, verified upstream UE4SS build and the Campaign Evolved
 /// signatures Halo Meister needs. The game must be closed during installation.
+/// Prefers the archive shipped under Assets/UE4SSLoader; if that file is missing
+/// or fails SHA-256, downloads the same pinned build from GitHub.
 /// </summary>
 public sealed class Ue4ssLoaderInstaller
 {
     // Includes UE4SS's FName-constructor verification guard (upstream PR #1277).
     public const string Version = "v3.0.1-1018-g662df915";
-    public const string DownloadUrl =
+    /// <summary>
+    /// Bundled archive filename. Underscores avoid WinAppSDK PRI qualifier parsing
+    /// that treats hyphenated tokens in Content asset names as invalid qualifiers.
+    /// </summary>
+    public const string ArchiveFileName = "UE4SS_v3.0.1_1018_g662df915.zip";
+    /// <summary>Upstream download URL used only when the bundled archive is unusable.</summary>
+    public const string UpstreamArchiveUrl =
         "https://github.com/UE4SS-RE/RE-UE4SS/releases/download/experimental-latest/" +
         "UE4SS_v3.0.1-1018-g662df915.zip";
     public const string ArchiveSha256 =
         "590AE4C6463DB61497123B9ED35373596C39FB27F736E2078A02B476599671BA";
     private const int ScannerTimeoutSeconds = 90;
-
     private const long MaximumDownloadBytes = 32L * 1024 * 1024;
+
     private static readonly UTF8Encoding Utf8 = new(false);
     private static readonly HttpClient Http = CreateHttpClient();
 
     private readonly string _downloadRoot;
     private readonly string _backupRoot;
+    private readonly string _loaderAssetRoot;
     private readonly string _signatureAssetRoot;
     private readonly Func<bool> _isGameRunning;
 
@@ -48,10 +63,12 @@ public sealed class Ue4ssLoaderInstaller
             Path.Combine(localAppData, "HaloMeister");
         _downloadRoot = Path.Combine(haloMeisterDataRoot, "Downloads");
         _backupRoot = Path.Combine(haloMeisterDataRoot, "UE4SSBackups");
-        _signatureAssetRoot = signatureAssetRoot ?? Path.Combine(
+        _loaderAssetRoot = Path.Combine(
             AppContext.BaseDirectory,
             "Assets",
-            "UE4SSLoader",
+            "UE4SSLoader");
+        _signatureAssetRoot = signatureAssetRoot ?? Path.Combine(
+            _loaderAssetRoot,
             "Signatures");
         _isGameRunning = isGameRunning ??
             (() => Process.GetProcessesByName("HaloCampaignEvolved").Length > 0);
@@ -88,6 +105,7 @@ public sealed class Ue4ssLoaderInstaller
 
     public async Task<Ue4ssLoaderInstallResult> InstallAsync(
         string selectedPath,
+        IProgress<Ue4ssDownloadProgress>? downloadProgress = null,
         CancellationToken cancellationToken = default)
     {
         if (_isGameRunning())
@@ -104,7 +122,10 @@ public sealed class Ue4ssLoaderInstaller
             throw new DirectoryNotFoundException(
                 "The packaged Campaign Evolved UE4SS signatures are missing.");
 
-        string archivePath = await GetVerifiedArchiveAsync(cancellationToken);
+        string archivePath = await GetVerifiedArchiveAsync(
+            downloadProgress,
+            cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         string stagingRoot = Path.Combine(
             Path.GetTempPath(),
             $"HaloMeister-UE4SS-{Guid.NewGuid():N}");
@@ -116,6 +137,7 @@ public sealed class Ue4ssLoaderInstaller
         {
             Directory.CreateDirectory(stagingRoot);
             ExtractArchiveSafely(archivePath, stagingRoot);
+            cancellationToken.ThrowIfCancellationRequested();
             PrepareCampaignEvolvedPackage(stagingRoot);
             InstallStagedFiles(stagingRoot, binaryDirectory, backupDirectory);
         }
@@ -178,29 +200,51 @@ public sealed class Ue4ssLoaderInstaller
         }
     }
 
-    private async Task<string> GetVerifiedArchiveAsync(CancellationToken cancellationToken)
+    private async Task<string> GetVerifiedArchiveAsync(
+        IProgress<Ue4ssDownloadProgress>? downloadProgress,
+        CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(_downloadRoot);
-        string archivePath = Path.Combine(
-            _downloadRoot,
-            $"UE4SS_{Version}.zip");
-        if (File.Exists(archivePath) &&
-            await HasExpectedHashAsync(archivePath, cancellationToken))
+        string bundledPath = Path.Combine(_loaderAssetRoot, ArchiveFileName);
+        if (File.Exists(bundledPath) &&
+            await HasExpectedHashAsync(bundledPath, cancellationToken))
         {
-            return archivePath;
+            return bundledPath;
         }
 
+        Directory.CreateDirectory(_downloadRoot);
+        string cachedPath = Path.Combine(_downloadRoot, ArchiveFileName);
+        if (File.Exists(cachedPath) &&
+            await HasExpectedHashAsync(cachedPath, cancellationToken))
+        {
+            return cachedPath;
+        }
+
+        await DownloadVerifiedArchiveAsync(
+            cachedPath,
+            downloadProgress,
+            cancellationToken);
+        return cachedPath;
+    }
+
+    private async Task DownloadVerifiedArchiveAsync(
+        string archivePath,
+        IProgress<Ue4ssDownloadProgress>? downloadProgress,
+        CancellationToken cancellationToken)
+    {
         string temporaryPath = archivePath + $".{Guid.NewGuid():N}.tmp";
         try
         {
             using HttpResponseMessage response = await Http.GetAsync(
-                DownloadUrl,
+                UpstreamArchiveUrl,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            if (response.Content.Headers.ContentLength is > MaximumDownloadBytes)
+            long? totalBytes = response.Content.Headers.ContentLength;
+            if (totalBytes is > MaximumDownloadBytes)
                 throw new InvalidDataException("The UE4SS download is unexpectedly large.");
+
+            downloadProgress?.Report(new Ue4ssDownloadProgress(0, totalBytes, 0));
 
             await using Stream source =
                 await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -214,6 +258,8 @@ public sealed class Ue4ssLoaderInstaller
             {
                 byte[] buffer = new byte[81920];
                 long total = 0;
+                var stopwatch = Stopwatch.StartNew();
+                long lastReportTicks = 0;
                 while (true)
                 {
                     int read = await source.ReadAsync(buffer, cancellationToken);
@@ -221,24 +267,61 @@ public sealed class Ue4ssLoaderInstaller
                         break;
                     total += read;
                     if (total > MaximumDownloadBytes)
+                    {
                         throw new InvalidDataException(
                             "The UE4SS download exceeded the allowed size.");
-                    await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    }
+
+                    await destination.WriteAsync(
+                        buffer.AsMemory(0, read),
+                        cancellationToken);
+
+                    long elapsedTicks = stopwatch.ElapsedTicks;
+                    bool shouldReport = elapsedTicks - lastReportTicks >=
+                                        Stopwatch.Frequency / 5; // ~200ms
+                    if (shouldReport || (totalBytes is { } expected && total >= expected))
+                    {
+                        lastReportTicks = elapsedTicks;
+                        double seconds = Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001);
+                        downloadProgress?.Report(new Ue4ssDownloadProgress(
+                            total,
+                            totalBytes,
+                            total / seconds));
+                    }
                 }
+
+                double finalSeconds = Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001);
+                downloadProgress?.Report(new Ue4ssDownloadProgress(
+                    total,
+                    totalBytes ?? total,
+                    total / finalSeconds));
             }
 
             if (!await HasExpectedHashAsync(temporaryPath, cancellationToken))
+            {
                 throw new InvalidDataException(
                     "The downloaded UE4SS archive failed SHA-256 verification. " +
                     "Nothing was installed.");
+            }
 
             File.Move(temporaryPath, archivePath, overwrite: true);
-            return archivePath;
         }
         finally
         {
             TryDeleteFile(temporaryPath);
         }
+    }
+
+    private static HttpClient CreateHttpClient()
+    {
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromMinutes(10),
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(
+            $"HaloMeister/{ReleaseUpdateService.Current.CurrentVersion} " +
+            "(+https://github.com/NicmeisteR/halo-meister)");
+        return client;
     }
 
     private static async Task<bool> HasExpectedHashAsync(
@@ -480,48 +563,7 @@ public sealed class Ue4ssLoaderInstaller
     }
 
     private static IEnumerable<string> CandidateGameRoots()
-    {
-        string? configured =
-            Environment.GetEnvironmentVariable("HALO_CAMPAIGN_EVOLVED_ROOT");
-        if (!string.IsNullOrWhiteSpace(configured))
-            yield return configured;
-
-        foreach (DriveInfo drive in DriveInfo.GetDrives())
-        {
-            if (!drive.IsReady)
-                continue;
-            string root = drive.RootDirectory.FullName;
-            yield return Path.Combine(root, "Games", "Halo- Campaign Evolved");
-            yield return Path.Combine(root, "Games", "Halo Campaign Evolved");
-            yield return Path.Combine(root, "XboxGames", "Halo Campaign Evolved");
-            yield return Path.Combine(root, "XboxGames", "Halo- Campaign Evolved");
-            yield return Path.Combine(
-                root,
-                "Program Files (x86)",
-                "Steam",
-                "steamapps",
-                "common",
-                "Halo Campaign Evolved");
-            yield return Path.Combine(
-                root,
-                "SteamLibrary",
-                "steamapps",
-                "common",
-                "Halo Campaign Evolved");
-        }
-    }
-
-    private static HttpClient CreateHttpClient()
-    {
-        var client = new HttpClient
-        {
-            Timeout = TimeSpan.FromMinutes(3),
-        };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd(
-            $"HaloMeister/{ReleaseUpdateService.Current.CurrentVersion} " +
-            "(+https://github.com/NicmeisteR/halo-meister)");
-        return client;
-    }
+        => GameInstallationService.Current.EnumerateCandidateRoots();
 
     private static void TryDeleteFile(string path)
     {

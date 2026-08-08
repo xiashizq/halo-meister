@@ -122,6 +122,9 @@ public sealed class WeaponLoaderService : IDisposable
         if (status.IsStale)
             throw new InvalidOperationException(status.Summary);
 
+        // Move one-time native hook install off the first pickup click.
+        await WarmUpAsync(cancellationToken);
+
         RuntimeTagEntry live = _tags.FirstOrDefault(tag =>
                 tag.Index == selected.Tag.Index &&
                 string.Equals(tag.Group, "weap", StringComparison.OrdinalIgnoreCase) &&

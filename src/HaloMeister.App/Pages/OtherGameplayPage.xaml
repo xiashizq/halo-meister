@@ -11,10 +11,23 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock
-            x:Name="BridgeStatusText"
-            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            TextWrapping="Wrap" />
+        <Grid ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="BridgeStatusText"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
+            <ProgressRing
+                x:Name="BusyRing"
+                Grid.Column="1"
+                Width="22"
+                Height="22"
+                VerticalAlignment="Center"
+                IsActive="False" />
+        </Grid>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <ItemsControl x:Name="FeaturesList">

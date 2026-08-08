@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class AllegianceDemoPage : Page
+public sealed partial class AllegianceDemoPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly AllegianceDemoService _demo = new();
@@ -36,10 +36,16 @@ public sealed partial class AllegianceDemoPage : Page
         SquadList.ItemsSource = _squad;
         _game.ConnectionChanged += OnConnectionChanged;
         _statusTimer.Tick += OnStatusTick;
-        _statusTimer.Start();
-        Unloaded += OnUnloaded;
         UpdateControls();
     }
+
+    public void OnActivated()
+    {
+        UpdateControls();
+        _statusTimer.Start();
+    }
+
+    public void OnDeactivated() => _statusTimer.Stop();
 
     private void OnOpenBuiltinMod(object sender, RoutedEventArgs e) =>
         MainWindow.Instance?.NavigateTo("builtin-mod");
@@ -274,10 +280,11 @@ public sealed partial class AllegianceDemoPage : Page
 
     private void UpdateControls()
     {
-        BridgeStatusText.Text = _demo.BridgeStatus.Summary;
+        ScriptingBridgeStatus bridge = _demo.BridgeStatus;
+        BridgeStatusText.Text = bridge.Summary;
         BusyRing.IsActive = _busy;
         bool connected = _game.IsConnected;
-        bool ready = _demo.BridgeStatus.IsRuntimeReady;
+        bool ready = bridge.IsRuntimeReady;
         bool modReady = _builtinMod.IsInstalled();
         ModRequiredBanner.IsOpen = !modReady;
         bool workspaceActive = !_busy && modReady;
@@ -332,16 +339,6 @@ public sealed partial class AllegianceDemoPage : Page
         DispatcherQueue.TryEnqueue(UpdateControls);
 
     private void OnStatusTick(object? sender, object e) => UpdateControls();
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        _statusTimer.Stop();
-        _statusTimer.Tick -= OnStatusTick;
-        _game.ConnectionChanged -= OnConnectionChanged;
-        foreach (AllegianceSquadItem item in _squad)
-            item.PropertyChanged -= OnSquadItemPropertyChanged;
-        Unloaded -= OnUnloaded;
-    }
 
     private sealed record WeaponOption(string Label, AiWeaponChoice? Weapon)
     {

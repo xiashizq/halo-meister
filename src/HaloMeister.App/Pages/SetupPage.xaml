@@ -59,18 +59,37 @@
                 <Grid ColumnSpacing="18">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <Border Width="42" Height="42" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="10">
-                        <SymbolIcon HorizontalAlignment="Center" VerticalAlignment="Center" Symbol="Setting" />
+                        <SymbolIcon HorizontalAlignment="Center" VerticalAlignment="Center" Symbol="Download" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                         <TextBlock FontSize="17" FontWeight="SemiBold" Text="{i18n:Loc Key='setup.2_install_the_live_tools_bridge'}" />
                         <TextBlock x:Name="BridgeStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='setup.checking_installation'}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button
-                        x:Name="InstallButton"
+                    <StackPanel
                         Grid.Column="2"
                         VerticalAlignment="Center"
-                        Click="OnInstall"
-                        Content="{i18n:Loc Key='setup.install_repair'}" />
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <ProgressRing
+                            x:Name="BusyRing"
+                            Width="22"
+                            Height="22"
+                            VerticalAlignment="Center"
+                            IsActive="False"
+                            Visibility="Collapsed" />
+                        <Button
+                            x:Name="InstallButton"
+                            Click="OnInstall"
+                            Content="{i18n:Loc Key='setup.install_repair'}" />
+                        <Button
+                            x:Name="UninstallButton"
+                            Click="OnUninstall"
+                            Content="{i18n:Loc Key='setup.uninstall'}" />
+                        <Button
+                            x:Name="ChangeFolderButton"
+                            Click="OnChangeFolder"
+                            Content="{i18n:Loc Key='setup.change_folder'}" />
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -84,7 +103,24 @@
                         <TextBlock FontSize="17" FontWeight="SemiBold" Text="{i18n:Loc Key='setup.3_connect_to_the_running_mission'}" />
                         <TextBlock x:Name="GameStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='setup.checking_game_session'}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button x:Name="ConnectButton" Grid.Column="2" VerticalAlignment="Center" Click="OnConnect" Style="{StaticResource AccentButtonStyle}" Content="{i18n:Loc Key='setup.connect'}" />
+                    <StackPanel
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <ProgressRing
+                            x:Name="ConnectBusyRing"
+                            Width="22"
+                            Height="22"
+                            VerticalAlignment="Center"
+                            IsActive="False"
+                            Visibility="Collapsed" />
+                        <Button
+                            x:Name="ConnectButton"
+                            Click="OnConnect"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Content="{i18n:Loc Key='setup.connect'}" />
+                    </StackPanel>
                 </Grid>
             </Border>
 

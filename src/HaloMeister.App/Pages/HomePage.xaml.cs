@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Media;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class HomePage : Page
+public sealed partial class HomePage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
@@ -22,23 +22,20 @@ public sealed partial class HomePage : Page
     public HomePage()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
         _refreshTimer.Tick += OnRefreshTick;
         _platform.Changed += OnPlatformPreferenceChanged;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    public void OnActivated()
     {
         ApplyPlatformChrome();
         RefreshStatus();
         _refreshTimer.Start();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    public void OnDeactivated()
     {
         _refreshTimer.Stop();
-        _platform.Changed -= OnPlatformPreferenceChanged;
     }
 
     private void OnRefreshTick(object? sender, object e) => RefreshStatus();
@@ -86,9 +83,10 @@ public sealed partial class HomePage : Page
             ? _state.IsDirty ? L.Get("home.cloud_dirty") : L.Get("home.cloud_clean")
             : cloudReady ? L.Get("home.cloud_auth") : L.Get("home.cloud_need_auth");
 
-        _gameDirectory = connected
-            ? ResolveGameDirectory(_game.ModulePath)
-            : GameInstallationService.Current.BinaryDirectory;
+        // Prefer the remembered install path so a manual correction stays visible.
+        // While connected, fall back to the running module directory if nothing is remembered.
+        _gameDirectory = GameInstallationService.Current.BinaryDirectory
+            ?? (connected ? ResolveGameDirectory(_game.ModulePath) : null);
         bool hasGamePath = !string.IsNullOrWhiteSpace(_gameDirectory) && Directory.Exists(_gameDirectory);
         GamePathStatusDot.Fill = StatusBrush(hasGamePath);
         GamePathText.Text = hasGamePath
@@ -96,6 +94,8 @@ public sealed partial class HomePage : Page
             : connected
                 ? L.Get("home.game_path_unavailable")
                 : L.Get("home.game_path_disconnected");
+        bool busy = MainWindow.Instance?.IsInstallingLiveTools == true;
+        ChangeGamePathButton.IsEnabled = !busy;
         OpenGamePathButton.IsEnabled = hasGamePath;
     }
 
@@ -124,8 +124,17 @@ public sealed partial class HomePage : Page
 
     private async void OnConnectGame(object sender, RoutedEventArgs e)
     {
-        await (MainWindow.Instance?.ConnectToGameAsync() ?? Task.CompletedTask);
-        RefreshStatus();
+        ConnectButton.IsEnabled = false;
+        ConnectBusyRing.IsActive = true;
+        try
+        {
+            await (MainWindow.Instance?.ConnectToGameAsync() ?? Task.CompletedTask);
+        }
+        finally
+        {
+            ConnectBusyRing.IsActive = false;
+            RefreshStatus();
+        }
     }
 
     private void OnOpenProgress(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("campaign-progress");
@@ -133,6 +142,21 @@ public sealed partial class HomePage : Page
     private void OnOpenLiveTools(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("live-gameplay");
     private void OnOpenSetup(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("setup");
     private void OnOpenHelp(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("help");
+
+    private async void OnChangeGamePath(object sender, RoutedEventArgs e)
+    {
+        ChangeGamePathButton.IsEnabled = false;
+        PathBusyRing.IsActive = true;
+        try
+        {
+            await (MainWindow.Instance?.ChangeLiveToolsFolderAsync() ?? Task.CompletedTask);
+        }
+        finally
+        {
+            PathBusyRing.IsActive = false;
+            RefreshStatus();
+        }
+    }
 
     private void OnOpenGamePath(object sender, RoutedEventArgs e)
     {

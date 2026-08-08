@@ -98,6 +98,11 @@
                     Click="OnRefresh"
                     Content="{i18n:Loc Key='runtime_tags.refresh'}"
                     IsEnabled="False" />
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Width="22"
+                    Height="22"
+                    IsActive="False" />
             </StackPanel>
         </Grid>
 

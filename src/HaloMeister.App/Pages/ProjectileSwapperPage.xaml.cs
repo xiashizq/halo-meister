@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace HaloMeister.App.Pages;
 
-public sealed partial class ProjectileSwapperPage : Page
+public sealed partial class ProjectileSwapperPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly ProjectileSwapperService _swapper = new();
@@ -19,9 +19,10 @@ public sealed partial class ProjectileSwapperPage : Page
     {
         InitializeComponent();
         _game.ConnectionChanged += OnGameConnectionChanged;
-        Unloaded += OnUnloaded;
         UpdateConnectionButtons();
     }
+
+    public void OnActivated() => UpdateConnectionButtons();
 
     private async void OnScan(object sender, RoutedEventArgs e)
     {
@@ -175,6 +176,7 @@ public sealed partial class ProjectileSwapperPage : Page
     {
         if (_busy) return;
         _busy = true;
+        BusyRing.IsActive = true;
         ScanButton.IsEnabled = false;
         RefreshButton.IsEnabled = false;
         ProjectilePicker.IsEnabled = false;
@@ -184,6 +186,7 @@ public sealed partial class ProjectileSwapperPage : Page
         finally
         {
             _busy = false;
+            BusyRing.IsActive = false;
             UpdateConnectionButtons();
             ProjectilePicker.IsEnabled = _selectedWeapon is not null;
             UpdateSwapButton();
@@ -198,12 +201,6 @@ public sealed partial class ProjectileSwapperPage : Page
         ScanButton.IsEnabled = !_busy && _game.IsConnected;
         RefreshButton.IsEnabled = !_busy && _game.IsConnected && _session is not null;
         UpdateSwapButton();
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        _game.ConnectionChanged -= OnGameConnectionChanged;
-        _swapper.Dispose();
     }
 
     private void UpdateSwapButton()
