@@ -80,11 +80,7 @@ public sealed class PlayerBipedService : IDisposable
         CancellationToken cancellationToken = default)
     {
         ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(
-                L.Get("bridge.error_not_responding"));
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
 
         RuntimeTagEntry target = _tags.FirstOrDefault(tag =>
                 tag.Index == choice.BipedTag.Index && IsUsableBiped(tag))
@@ -126,11 +122,7 @@ public sealed class PlayerBipedService : IDisposable
         CancellationToken cancellationToken = default)
     {
         ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(
-                L.Get("bridge.error_not_responding"));
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
 
         ScriptExecutionResult result = await _bridge.ExecuteAsync(
             ScriptLanguage.BlamBumpPossessionOff,
@@ -202,10 +194,7 @@ public sealed class PlayerBipedService : IDisposable
         CancellationToken cancellationToken = default)
     {
         ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(L.Get("bridge.error_not_responding"));
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
 
         ScriptExecutionResult result = await _bridge.ExecuteAsync(
             ScriptLanguage.HaloScript,

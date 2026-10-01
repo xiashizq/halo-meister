@@ -150,12 +150,12 @@ fn run() -> Result<()> {
         let output =
             priority_output(output.context("--output is required with --expand-characters")?);
         let report =
-            expand_palettes::write_superior_character_overlay(&archives, &output, dry_run)?;
+            expand_palettes::write_character_ai_overlay(&archives, &output, dry_run)?;
         for line in &report.lines {
             println!("{line}");
         }
         println!(
-            "Summary: {} superior AI character overlay(s){}",
+            "Summary: {} character AI overlay(s){}",
             report.written,
             if dry_run { " (dry run)" } else { "" }
         );

@@ -312,16 +312,10 @@
 
                     <Border Padding="18,16" Style="{StaticResource LiveToolCardStyle}">
                         <StackPanel Spacing="18">
-                            <StackPanel Spacing="3">
-                                <TextBlock
-                                    FontSize="18"
-                                    FontWeight="SemiBold"
-                                    Text="{i18n:Loc Key='cheat_globals.global_allegiance_title'}" />
-                                <TextBlock
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="{i18n:Loc Key='cheat_globals.global_allegiance_hint'}"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
+                            <TextBlock
+                                FontSize="18"
+                                FontWeight="SemiBold"
+                                Text="{i18n:Loc Key='cheat_globals.global_allegiance_title'}" />
 
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>

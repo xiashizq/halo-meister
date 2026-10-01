@@ -198,11 +198,15 @@ public sealed partial class ArmorMixerPage : Page, IActivatablePage
     private void UpdateChrome()
     {
         ScriptingBridgeStatus bridge = _mixer.BridgeStatus;
-        bool bridgeReady = bridge.IsRuntimeReady && !bridge.IsStale;
+        bool gameConnected = _game.IsConnected;
+        bool bridgeReady = gameConnected && bridge.IsRuntimeReady && !bridge.IsStale;
         ConnectionStatusText.Text = _mixer.ConnectionSummary;
-        BridgeStatusText.Text = bridgeReady
-            ? L.Format("armor_mixer.bridge_ready_version", bridge.RunningVersion)
-            : bridge.Summary;
+        BridgeStatusText.Visibility = gameConnected ? Visibility.Visible : Visibility.Collapsed;
+        BridgeStatusText.Text = !gameConnected
+            ? ""
+            : bridgeReady
+                ? L.Format("armor_mixer.bridge_ready_version", bridge.RunningVersion)
+                : bridge.Summary;
         ScanButton.Content = _session is null
             ? L.Get("armor_mixer.scan_armor")
             : L.Get("armor_mixer.rescan");

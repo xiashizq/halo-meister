@@ -41,9 +41,11 @@
                                 <MenuFlyoutItem
                                     Click="OnSelectSteamPlatform"
                                     Text="{i18n:Loc Key='game_saves.platform_steam'}" />
+                                <!-- Microsoft Store launch is disabled; Steam only.
                                 <MenuFlyoutItem
                                     Click="OnSelectStorePlatform"
                                     Text="{i18n:Loc Key='game_saves.platform_microsoft_store'}" />
+                                -->
                             </MenuFlyout>
                         </DropDownButton.Flyout>
                     </DropDownButton>

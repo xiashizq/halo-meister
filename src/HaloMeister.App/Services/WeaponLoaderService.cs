@@ -117,11 +117,7 @@ public sealed class WeaponLoaderService : IDisposable
         CancellationToken cancellationToken = default)
     {
         ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(
-                L.Get("bridge.error_not_responding"));
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
 
         // Move one-time native hook install off the first pickup click.
         await WarmUpAsync(cancellationToken);
@@ -257,11 +253,7 @@ public sealed class WeaponLoaderService : IDisposable
         CancellationToken cancellationToken = default)
     {
         ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(
-                L.Get("bridge.error_not_responding"));
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
 
         RuntimeTagEntry live = FindLiveWeapon(selected);
         WeaponVariantCatalog catalog = ReadVariants(selected);
@@ -297,11 +289,7 @@ public sealed class WeaponLoaderService : IDisposable
         if (stanchion is null)
         {
             ScriptingBridgeStatus status = _bridge.GetStatus();
-            if (!status.IsRuntimeReady)
-                throw new InvalidOperationException(
-                    L.Get("bridge.error_not_responding_repair"));
-            if (status.IsStale)
-                throw new InvalidOperationException(status.Summary);
+            status.EnsureRuntimeReady();
 
             ScriptExecutionResult loaded = await _bridge.ExecuteAsync(
                 ScriptLanguage.BlamTagAssetLoad,

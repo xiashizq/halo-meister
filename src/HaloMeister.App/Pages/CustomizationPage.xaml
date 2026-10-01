@@ -121,12 +121,6 @@
                                         Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                         CornerRadius="6">
                                         <Grid>
-                                            <FontIcon
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                FontSize="22"
-                                                Glyph="&#xE790;"
-                                                Opacity="0.2" />
                                             <Image Source="{Binding SelectedImageUri}" Stretch="UniformToFill" />
                                         </Grid>
                                     </Border>
@@ -161,12 +155,6 @@
                                 Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                 CornerRadius="10">
                                 <Grid>
-                                    <FontIcon
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        FontSize="54"
-                                        Glyph="&#xE790;"
-                                        Opacity="0.14" />
                                     <Image
                                         x:Name="HeroImage"
                                         Source="{x:Null}"

@@ -86,10 +86,6 @@ public sealed class RuntimeBoundaryService
     private void EnsureBridgeReady()
     {
         ScriptingBridgeStatus status = BridgeStatus;
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(
-                L.Get("bridge.error_not_responding"));
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
     }
 }

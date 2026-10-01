@@ -5,11 +5,12 @@ namespace HaloMeister.App.Services;
 public enum GamePlatformKind
 {
     Steam,
-    MicrosoftStore,
+    // Microsoft Store / Xbox PC is not supported right now.
+    // MicrosoftStore,
 }
 
 /// <summary>
-/// Shared Steam vs Microsoft Store preference for launch and save tooling.
+/// Shared launch and save preference. Microsoft Store selection is disabled; Steam only.
 /// </summary>
 public sealed class GamePlatformPreference
 {
@@ -40,8 +41,12 @@ public sealed class GamePlatformPreference
         set
         {
             EnsureLoaded();
-            if (_platform == value) return;
-            _platform = value;
+            // Microsoft Store builds are disabled; keep Steam even if a saved value asks for it.
+            // if (_platform == value) return;
+            // _platform = value;
+            _ = value;
+            if (_platform == GamePlatformKind.Steam) return;
+            _platform = GamePlatformKind.Steam;
             Persist();
             Changed?.Invoke(this, EventArgs.Empty);
         }
@@ -49,23 +54,29 @@ public sealed class GamePlatformPreference
 
     public bool IsSteam => Platform == GamePlatformKind.Steam;
 
-    public string PlatformId => IsSteam
-        ? SteamGameSaveStore.Platform
-        : WgsGameSaveStore.Platform;
+    public string PlatformId => SteamGameSaveStore.Platform;
+    // public string PlatformId => IsSteam
+    //     ? SteamGameSaveStore.Platform
+    //     : WgsGameSaveStore.Platform;
 
-    public Uri LaunchUri => IsSteam
-        ? new Uri($"steam://rungameid/{SteamGameSaveStore.SteamAppId}")
-        : new Uri("ms-xbl-7c27bae7:");
+    public Uri LaunchUri => new Uri($"steam://rungameid/{SteamGameSaveStore.SteamAppId}");
+    // public Uri LaunchUri => IsSteam
+    //     ? new Uri($"steam://rungameid/{SteamGameSaveStore.SteamAppId}")
+    //     : new Uri("ms-xbl-7c27bae7:");
 
     public Task<bool> LaunchGameAsync() => Launcher.LaunchUriAsync(LaunchUri).AsTask();
 
-    public static GamePlatformKind Parse(string? value) =>
-        string.Equals(value, WgsGameSaveStore.Platform, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(value, "microsoftstore", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(value, "store", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(value, "msstore", StringComparison.OrdinalIgnoreCase)
-            ? GamePlatformKind.MicrosoftStore
-            : GamePlatformKind.Steam;
+    public static GamePlatformKind Parse(string? value)
+    {
+        // string.Equals(value, WgsGameSaveStore.Platform, StringComparison.OrdinalIgnoreCase) ||
+        // string.Equals(value, "microsoftstore", StringComparison.OrdinalIgnoreCase) ||
+        // string.Equals(value, "store", StringComparison.OrdinalIgnoreCase) ||
+        // string.Equals(value, "msstore", StringComparison.OrdinalIgnoreCase)
+        //     ? GamePlatformKind.MicrosoftStore
+        //     : GamePlatformKind.Steam;
+        _ = value;
+        return GamePlatformKind.Steam;
+    }
 
     private void EnsureLoaded()
     {
@@ -84,37 +95,39 @@ public sealed class GamePlatformPreference
             // Fall through to heuristic default.
         }
 
-        _platform = DetectDefault();
+        // _platform = DetectDefault();
+        _platform = GamePlatformKind.Steam;
         Persist();
     }
 
-    private static GamePlatformKind DetectDefault()
-    {
-        try
-        {
-            var steam = new SteamGameSaveStore();
-            var store = new WgsGameSaveStore();
-            bool steamHasSaves = steam.LiveRootExists && steam.Discover().Count > 0;
-            bool storeHasSaves = store.LiveRootExists && store.Discover().Count > 0;
-            if (!steamHasSaves && storeHasSaves)
-                return GamePlatformKind.MicrosoftStore;
-        }
-        catch
-        {
-            // Prefer Steam when discovery fails.
-        }
-
-        return GamePlatformKind.Steam;
-    }
+    // private static GamePlatformKind DetectDefault()
+    // {
+    //     try
+    //     {
+    //         var steam = new SteamGameSaveStore();
+    //         var store = new WgsGameSaveStore();
+    //         bool steamHasSaves = steam.LiveRootExists && steam.Discover().Count > 0;
+    //         bool storeHasSaves = store.LiveRootExists && store.Discover().Count > 0;
+    //         if (!steamHasSaves && storeHasSaves)
+    //             return GamePlatformKind.MicrosoftStore;
+    //     }
+    //     catch
+    //     {
+    //         // Prefer Steam when discovery fails.
+    //     }
+    //
+    //     return GamePlatformKind.Steam;
+    // }
 
     private void Persist()
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllText(
-                _path,
-                IsSteam ? SteamGameSaveStore.Platform : WgsGameSaveStore.Platform);
+            File.WriteAllText(_path, SteamGameSaveStore.Platform);
+            // File.WriteAllText(
+            //     _path,
+            //     IsSteam ? SteamGameSaveStore.Platform : WgsGameSaveStore.Platform);
         }
         catch
         {

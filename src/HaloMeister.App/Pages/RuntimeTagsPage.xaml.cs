@@ -1222,7 +1222,8 @@ public sealed partial class RuntimeTagsPage : Page, IActivatablePage
             var picker = new FileSavePicker
             {
                 SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-                SuggestedFileName = $"{SanitizeFileName(leaf)}-WinGDK_P",
+                // SuggestedFileName = $"{SanitizeFileName(leaf)}-WinGDK_P",
+                SuggestedFileName = $"{SanitizeFileName(leaf)}-Windows_P",
             };
             WinRT.Interop.InitializeWithWindow.Initialize(picker, Hwnd);
             picker.FileTypeChoices.Add(L.Get("runtime_tags.file_type_iostore_overlay"), [".utoc"]);

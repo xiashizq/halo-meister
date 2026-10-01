@@ -18,6 +18,7 @@ public sealed partial class HomePage : Page, IActivatablePage
     private readonly GamePlatformPreference _platform = GamePlatformPreference.Current;
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private string? _gameDirectory;
+    private bool _connecting;
 
     public HomePage()
     {
@@ -28,6 +29,12 @@ public sealed partial class HomePage : Page, IActivatablePage
 
     public void OnActivated()
     {
+        if (MainWindow.Instance is { } window)
+        {
+            window.LiveToolsMaintenanceChanged -= OnLiveToolsMaintenanceChanged;
+            window.LiveToolsMaintenanceChanged += OnLiveToolsMaintenanceChanged;
+        }
+
         ApplyPlatformChrome();
         RefreshStatus();
         _refreshTimer.Start();
@@ -35,8 +42,13 @@ public sealed partial class HomePage : Page, IActivatablePage
 
     public void OnDeactivated()
     {
+        if (MainWindow.Instance is { } window)
+            window.LiveToolsMaintenanceChanged -= OnLiveToolsMaintenanceChanged;
         _refreshTimer.Stop();
     }
+
+    private void OnLiveToolsMaintenanceChanged(object? sender, EventArgs e)
+        => RefreshStatus();
 
     private void OnRefreshTick(object? sender, object e) => RefreshStatus();
 
@@ -46,18 +58,20 @@ public sealed partial class HomePage : Page, IActivatablePage
     private void OnSelectSteamPlatform(object sender, RoutedEventArgs e)
         => _platform.Platform = GamePlatformKind.Steam;
 
-    private void OnSelectStorePlatform(object sender, RoutedEventArgs e)
-        => _platform.Platform = GamePlatformKind.MicrosoftStore;
+    // private void OnSelectStorePlatform(object sender, RoutedEventArgs e)
+    //     => _platform.Platform = GamePlatformKind.MicrosoftStore;
 
     private void ApplyPlatformChrome()
     {
-        bool steam = _platform.IsSteam;
-        PlatformButtonText.Text = steam
-            ? L.Get("game_saves.platform_steam")
-            : L.Get("game_saves.platform_microsoft_store");
-        LaunchGameButtonText.Text = steam
-            ? L.Get("home.launch_game_steam")
-            : L.Get("home.launch_game_store");
+        // bool steam = _platform.IsSteam;
+        PlatformButtonText.Text = L.Get("game_saves.platform_steam");
+        // PlatformButtonText.Text = steam
+        //     ? L.Get("game_saves.platform_steam")
+        //     : L.Get("game_saves.platform_microsoft_store");
+        LaunchGameButtonText.Text = L.Get("home.launch_game_steam");
+        // LaunchGameButtonText.Text = steam
+        //     ? L.Get("home.launch_game_steam")
+        //     : L.Get("home.launch_game_store");
     }
 
     private void RefreshStatus()
@@ -68,6 +82,11 @@ public sealed partial class HomePage : Page, IActivatablePage
             ? L.Format("home.game_connected_pid", _game.ProcessId)
             : L.Get("home.game_not_connected");
         ConnectButton.Content = connected ? L.Get("common.reconnect") : L.Get("common.connect");
+        bool blockConnect = MainWindow.Instance?.IsLiveToolsBlockingConnect == true;
+        ConnectButton.IsEnabled = !_connecting && !blockConnect;
+        ToolTipService.SetToolTip(
+            ConnectButton,
+            blockConnect ? L.Get("shell.live_tools_connect_blocked") : null);
 
         ScriptingBridgeStatus bridge = _bridge.GetStatus();
         BridgeStatusDot.Fill = StatusBrush(bridge.IsRuntimeReady);
@@ -124,6 +143,10 @@ public sealed partial class HomePage : Page, IActivatablePage
 
     private async void OnConnectGame(object sender, RoutedEventArgs e)
     {
+        if (MainWindow.Instance?.IsLiveToolsBlockingConnect == true)
+            return;
+
+        _connecting = true;
         ConnectButton.IsEnabled = false;
         ConnectBusyRing.IsActive = true;
         try
@@ -132,6 +155,7 @@ public sealed partial class HomePage : Page, IActivatablePage
         }
         finally
         {
+            _connecting = false;
             ConnectBusyRing.IsActive = false;
             RefreshStatus();
         }

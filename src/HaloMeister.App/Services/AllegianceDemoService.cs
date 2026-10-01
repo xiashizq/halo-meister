@@ -699,13 +699,7 @@ public sealed class AllegianceDemoService
     private void EnsureBridgeReady()
     {
         ScriptingBridgeStatus status = BridgeStatus;
-        if (!status.IsRuntimeReady)
-        {
-            throw new InvalidOperationException(
-                L.Get("bridge.error_not_responding_restart"));
-        }
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
         if (status.RunningVersion is < 107)
         {
             throw new InvalidOperationException(
@@ -716,13 +710,7 @@ public sealed class AllegianceDemoService
     private void EnsureObjectBridgeReady()
     {
         ScriptingBridgeStatus status = BridgeStatus;
-        if (!status.IsRuntimeReady)
-        {
-            throw new InvalidOperationException(
-                L.Get("bridge.error_not_responding_restart"));
-        }
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
         if (status.RunningVersion is < 106)
         {
             throw new InvalidOperationException(

@@ -1,6 +1,6 @@
 # Expand every Campaign Evolved scenario biped/vehicle/weapon/character palette
 # and dedicated hm_ally / hm_hostile squads into MMYJ_FULL_VEHI_WAP_P, then
-# write Superior Marines/Covenant [char] AI as the independent MMYJ_FULL_CHAR_P
+# write character AI [char] tags as the independent MMYJ_FULL_CHAR_P
 # overlay. Engine palette limits: objects 256 entries and characters 64.
 param(
     [string]$Paks,

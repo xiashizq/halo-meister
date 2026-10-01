@@ -1,9 +1,9 @@
-using System.Diagnostics;
-using System.IO.Compression;
-using System.Text.Json;
-using HaloMeister.App.Localization;
+// using System.Diagnostics;
+// using System.IO.Compression;
+// using System.Text.Json;
+// using HaloMeister.App.Localization;
 using HaloMeister.Core;
-using Windows.System;
+// using Windows.System;
 
 namespace HaloMeister.App.Services;
 
@@ -80,6 +80,7 @@ public sealed record WgsBackupEntry(
 public sealed record WgsBackupResult(string DirectoryPath, int FileCount);
 public sealed record WgsReplaceResult(string BackupPath, WgsSaveSlot UpdatedSlot);
 
+/*
 public sealed class WgsGameSaveStore : IGameSaveStore
 {
     public const string PackageFamilyName = "Microsoft.198377053870B_8wekyb3d8bbwe";
@@ -484,3 +485,4 @@ public sealed class WgsGameSaveStore : IGameSaveStore
 
     private sealed record BackupManifest(DateTime CreatedUtc, string Reason);
 }
+*/

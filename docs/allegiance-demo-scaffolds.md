@@ -22,9 +22,10 @@ Allegiance Demo needs bridge **v107** (AI spawn beside the player). Install/repa
 `hm_ally` / `hm_hostile` are baked into the same bundled overlay as Full
 Palettes vehicle/weapon expansions, a curated AI character-palette fill
 (schema max 64; representatives first, then secondary variants to fill;
-drivers/pilots and broken helpers excluded), plus Superior Marines (`trooper.character`, retuned to press/melee and hide less)
-and Superior Covenant (elite/grunt/jackal/brute/hunter)
-AI overlays: `MMYJ_FULL_VEHI_WAP_P.{utoc,ucas,pak}`
+drivers/pilots and broken helpers excluded). Character AI covers the marine trooper
+(`trooper.character`, retuned to press/melee and hide less)
+and elite, grunt, jackal, brute, and hunter, as `MMYJ_FULL_CHAR_P`.
+Campaign extras: `MMYJ_FULL_VEHI_WAP_P.{utoc,ucas,pak}`
 under `src/HaloMeister.App/Assets/Overlays/`.
 
 In the app: **Game files → Built-in mod** (also listed under Live tools → Spawn).

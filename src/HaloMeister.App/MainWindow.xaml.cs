@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
@@ -24,6 +26,16 @@ public sealed partial class MainWindow : Window
     private byte[]? _patchPayload;
     private bool _connectingToGame;
     private bool _installingBridge;
+    private bool _liveToolsGateOpen;
+    private bool _suppressAutoLiveTools;
+    private bool _windowClosed;
+    private bool _liveToolsIsUpdate;
+    private LiveToolsCardKind _liveToolsCardKind = LiveToolsCardKind.Hidden;
+    private string? _liveToolsDetailKey;
+    private string? _liveToolsDetailLiteral;
+    private double? _liveToolsCardProgress;
+    private Ue4ssDownloadProgress? _liveToolsDownload;
+    private int _liveToolsDownloadGeneration;
     private bool _cloudBusy;
     private bool _awaitingAuthCapture;
     private bool _authSavedDuringCapture;
@@ -37,6 +49,10 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _patchSerializeTimer = new()
     {
         Interval = TimeSpan.FromMilliseconds(300),
+    };
+    private readonly DispatcherTimer _liveToolsCardTimer = new()
+    {
+        Interval = TimeSpan.FromSeconds(5),
     };
 
     public MainWindow()
@@ -64,6 +80,8 @@ public sealed partial class MainWindow : Window
             Status.IsOpen = false;
         };
         _patchSerializeTimer.Tick += OnPatchSerializeTick;
+        _liveToolsCardTimer.Tick += OnLiveToolsCardTimerTick;
+        RootGrid.Loaded += OnRootGridLoaded;
 
         TryLoadSavedPlayFabSession();
         Nav.SelectedItem = HomeNavItem;
@@ -71,6 +89,29 @@ public sealed partial class MainWindow : Window
         UpdateChrome();
         UpdateGameConnectionChrome();
         UpdateCloudActions();
+        DispatcherQueue.TryEnqueue(() => _ = RunLiveToolsMaintenanceAsync(automatic: true, forcePickFolder: false));
+    }
+
+    public event EventHandler? LiveToolsMaintenanceChanged;
+
+    /// <summary>
+    /// True while an automatic or manual live-tools install/update still has to finish.
+    /// Game-session connect stays disabled until this is false.
+    /// </summary>
+    public bool IsLiveToolsBlockingConnect => !_liveToolsGateOpen || _installingBridge;
+
+    public string? LiveToolsActivityText
+    {
+        get
+        {
+            if (_liveToolsCardKind is LiveToolsCardKind.Hidden or LiveToolsCardKind.Succeeded)
+                return null;
+            if (_liveToolsDownload is { } progress)
+                return FormatDownloadDetail(progress);
+            if (_liveToolsDetailLiteral is not null)
+                return _liveToolsDetailLiteral;
+            return _liveToolsDetailKey is null ? null : L.Get(_liveToolsDetailKey);
+        }
     }
 
     public static MainWindow? Instance { get; private set; }
@@ -122,6 +163,7 @@ public sealed partial class MainWindow : Window
             UpdateGameConnectionChrome();
             UpdateCloudActions();
             ApplyBuildPolicy();
+            ApplyLiveToolsCard();
 
             if (Nav.SelectedItem is not NavigationViewItem item)
                 return;
@@ -199,7 +241,8 @@ public sealed partial class MainWindow : Window
 
     public async Task ConnectToGameAsync()
     {
-        if (_connectingToGame) return;
+        if (_connectingToGame || IsLiveToolsBlockingConnect)
+            return;
 
         _connectingToGame = true;
         UpdateGameConnectionChrome();
@@ -244,20 +287,24 @@ public sealed partial class MainWindow : Window
         GameConnectionButton.Content = connected
             ? L.Get("common.reconnect")
             : L.Get("common.connect");
-        GameConnectionButton.IsEnabled = !_connectingToGame;
+        GameConnectionButton.IsEnabled = !_connectingToGame && !IsLiveToolsBlockingConnect;
+        ToolTipService.SetToolTip(
+            GameConnectionButton,
+            IsLiveToolsBlockingConnect ? L.Get("shell.live_tools_connect_blocked") : null);
     }
 
     public async Task LaunchGameAsync()
     {
         try
         {
-            bool steam = GamePlatformPreference.Current.IsSteam;
+            // bool steam = GamePlatformPreference.Current.IsSteam;
             bool launched = await GamePlatformPreference.Current.LaunchGameAsync();
             Report(
                 launched
-                    ? L.Get(steam
-                        ? "shell.launch_requested_steam"
-                        : "shell.launch_requested")
+                    ? L.Get("shell.launch_requested_steam")
+                    // ? L.Get(steam
+                    //     ? "shell.launch_requested_steam"
+                    //     : "shell.launch_requested")
                     : L.Get("shell.launch_rejected"),
                 launched ? InfoBarSeverity.Success : InfoBarSeverity.Warning,
                 launched ? L.Get("shell.launching_game") : L.Get("shell.could_not_launch"));
@@ -268,38 +315,80 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    public async Task InstallLiveToolsAsync(bool forcePickFolder = false)
-    {
-        if (_installingBridge) return;
+    public Task InstallLiveToolsAsync(bool forcePickFolder = false)
+        => RunLiveToolsMaintenanceAsync(automatic: false, forcePickFolder: forcePickFolder);
 
-        string? selectedRoot = forcePickFolder
-            ? null
-            : _loaderInstaller.FindGameBinaryDirectory()
-                ?? _loaderInstaller.FindInstalledBinaryDirectory();
+    private async Task RunLiveToolsMaintenanceAsync(bool automatic, bool forcePickFolder)
+    {
+        if (_installingBridge || _windowClosed)
+            return;
+        if (automatic && _suppressAutoLiveTools && !forcePickFolder)
+        {
+            _liveToolsGateOpen = true;
+            SetLiveToolsCard(LiveToolsCardKind.Hidden);
+            return;
+        }
+
+        _installingBridge = true;
+        _liveToolsGateOpen = false;
+        _liveToolsCardTimer.Stop();
+        _liveToolsDownload = null;
+        if (!automatic)
+            _suppressAutoLiveTools = false;
+        PublishLiveToolsMaintenance();
+
+        bool succeeded = false;
         try
         {
-            // forcePickFolder lets Setup recover from a wrong remembered path after a
-            // failed or partial install. Without it, the first successful folder pick
-            // permanently skips the picker even when the bridge never finished installing.
-            if (forcePickFolder || (_bridge.FindInstalledMainPath() is null && selectedRoot is null))
+            Task<LiveToolsPlan> inspectTask = Task.Run(InspectLiveTools);
+            if (await Task.WhenAny(inspectTask, Task.Delay(400)) != inspectTask)
             {
-                var picker = new FolderPicker
-                {
-                    SuggestedStartLocation = PickerLocationId.ComputerFolder,
-                };
-                picker.FileTypeFilter.Add("*");
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, Hwnd);
-                StorageFolder? folder = await picker.PickSingleFolderAsync();
-                if (folder is null) return;
-                selectedRoot = folder.Path;
-                GameInstallationService.Current.Remember(selectedRoot);
-                if (forcePickFolder)
-                    _bridge.ClearRememberedInstallLocation();
+                SetLiveToolsCard(
+                    LiveToolsCardKind.Checking,
+                    detailKey: "shell.live_tools_card_checking_detail");
             }
 
-            bool installLoader =
-                selectedRoot is not null && !_loaderInstaller.IsInstalled(selectedRoot);
-            if (installLoader)
+            LiveToolsPlan plan = await inspectTask;
+            if (forcePickFolder || (!automatic && plan.NeedsFolder))
+            {
+                string? picked = await PickGameFolderAsync(forcePickFolder);
+                if (picked is null)
+                {
+                    if (plan.NeedsWork)
+                    {
+                        SetLiveToolsCard(
+                            LiveToolsCardKind.NeedFolder,
+                            detailKey: "shell.live_tools_card_need_folder");
+                    }
+                    else
+                    {
+                        succeeded = true;
+                        SetLiveToolsCard(LiveToolsCardKind.Hidden);
+                    }
+
+                    return;
+                }
+
+                plan = await Task.Run(InspectLiveTools);
+            }
+
+            if (automatic && !plan.NeedsWork)
+            {
+                succeeded = true;
+                SetLiveToolsCard(LiveToolsCardKind.Hidden);
+                return;
+            }
+
+            if (plan.NeedsFolder)
+            {
+                SetLiveToolsCard(
+                    LiveToolsCardKind.NeedFolder,
+                    detailKey: "shell.live_tools_card_need_folder");
+                return;
+            }
+
+            _liveToolsIsUpdate = plan.BridgeInstalled && !plan.NeedsLoader;
+            if (!automatic && plan.NeedsLoader)
             {
                 var dialog = new ContentDialog
                 {
@@ -313,74 +402,383 @@ public sealed partial class MainWindow : Window
                     DefaultButton = ContentDialogButton.Close,
                 };
                 if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    SetLiveToolsCard(
+                        LiveToolsCardKind.Failed,
+                        detailKey: "shell.live_tools_card_cancelled");
                     return;
+                }
             }
 
-            _installingBridge = true;
-            Ue4ssLoaderInstallResult? loaderResult = null;
-            if (installLoader)
-            {
-                var downloadProgress = new Progress<Ue4ssDownloadProgress>(
-                    ReportUe4ssDownloadProgress);
-                loaderResult = await _loaderInstaller.InstallAsync(
-                    selectedRoot!,
-                    downloadProgress);
-                selectedRoot = loaderResult.BinaryDirectory;
-            }
-
-            string installedPath = await Task.Run(
-                () => _bridge.InstallOrUpdateBridge(selectedRoot));
-            Report(
-                loaderResult is null
-                    ? L.Format("shell.bridge_installed_msg", installedPath)
-                    : L.Format(
-                        "shell.live_tools_installed_msg",
-                        loaderResult.Version,
-                        loaderResult.BackupDirectory),
-                InfoBarSeverity.Success,
-                loaderResult is null
-                    ? L.Get("shell.bridge_installed_title")
-                    : L.Get("shell.live_tools_installed_title"));
+            await PerformLiveToolsInstallAsync(plan);
+            succeeded = true;
+        }
+        catch (OperationCanceledException) when (_windowClosed)
+        {
         }
         catch (Exception ex)
         {
+            SetLiveToolsCard(
+                LiveToolsCardKind.Failed,
+                detailLiteral: ex.Message);
             Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_install_bridge"));
         }
         finally
         {
             _installingBridge = false;
+            if (succeeded)
+                _liveToolsGateOpen = true;
+            PublishLiveToolsMaintenance();
         }
     }
 
-    private void ReportUe4ssDownloadProgress(Ue4ssDownloadProgress progress)
+    private async Task PerformLiveToolsInstallAsync(LiveToolsPlan plan)
     {
-        // HttpClient completions may resume off the UI thread.
-        DispatcherQueue.TryEnqueue(() =>
+        string? root = plan.GameDirectory;
+        bool needsLoader = plan.NeedsLoader;
+        SetLiveToolsCard(
+            _liveToolsIsUpdate ? LiveToolsCardKind.Updating : LiveToolsCardKind.Installing,
+            detailKey: "shell.live_tools_card_preparing");
+        while (!_windowClosed)
         {
-            string speed = FormatTransferSpeed(progress.BytesPerSecond);
-            if (progress.TotalBytes is { } total && total > 0)
+            if (IsCampaignGameRunning())
             {
-                double percent = 100.0 * progress.BytesReceived / total;
-                Report(
-                    L.Format(
-                        "shell.ue4ss_download_progress",
-                        FormatTransferBytes(progress.BytesReceived),
-                        FormatTransferBytes(total),
-                        percent.ToString("0.0"),
-                        speed),
-                    InfoBarSeverity.Informational,
-                    L.Get("shell.ue4ss_downloading_title"));
-                return;
+                SetLiveToolsCard(
+                    LiveToolsCardKind.WaitingForGame,
+                    detailKey: "shell.live_tools_card_wait_for_game");
+                while (!_windowClosed && IsCampaignGameRunning())
+                    await Task.Delay(1000);
+                if (_windowClosed)
+                    throw new OperationCanceledException();
             }
 
-            Report(
-                L.Format(
-                    "shell.ue4ss_download_progress_unknown",
-                    FormatTransferBytes(progress.BytesReceived),
-                    speed),
-                InfoBarSeverity.Informational,
-                L.Get("shell.ue4ss_downloading_title"));
+            try
+            {
+                Ue4ssLoaderInstallResult? loaderResult = null;
+                if (needsLoader)
+                {
+                    if (root is null)
+                    {
+                        throw new DirectoryNotFoundException(
+                            "Could not find HaloCampaignEvolved.exe under the selected folder.");
+                    }
+
+                    SetLiveToolsCard(
+                        LiveToolsCardKind.Installing,
+                        detailKey: "shell.live_tools_card_preparing");
+                    int downloadGeneration = _liveToolsDownloadGeneration;
+                    var downloadProgress = new Progress<Ue4ssDownloadProgress>(
+                        progress => OnUe4ssDownloadProgress(progress, downloadGeneration));
+                    loaderResult = await _loaderInstaller.InstallAsync(root, downloadProgress);
+                    root = loaderResult.BinaryDirectory;
+                    needsLoader = false;
+                }
+
+                SetLiveToolsCard(
+                    _liveToolsIsUpdate ? LiveToolsCardKind.Updating : LiveToolsCardKind.Installing,
+                    detailKey: _liveToolsIsUpdate
+                        ? "shell.live_tools_card_updating_bridge"
+                        : "shell.live_tools_card_writing_bridge");
+                string installedPath = await Task.Run(() => _bridge.InstallOrUpdateBridge(root));
+                SetLiveToolsCard(
+                    LiveToolsCardKind.Succeeded,
+                    detailKey: _liveToolsIsUpdate
+                        ? "shell.live_tools_card_update_done_detail"
+                        : "shell.live_tools_card_install_done_detail");
+                ScheduleHideLiveToolsCard();
+                Report(
+                    loaderResult is null
+                        ? L.Format("shell.bridge_installed_msg", installedPath)
+                        : L.Format(
+                            "shell.live_tools_installed_msg",
+                            loaderResult.Version,
+                            loaderResult.BackupDirectory),
+                    InfoBarSeverity.Success,
+                    loaderResult is null
+                        ? L.Get(_liveToolsIsUpdate
+                            ? "shell.live_tools_card_update_done_title"
+                            : "shell.bridge_installed_title")
+                        : L.Get("shell.live_tools_installed_title"));
+                return;
+            }
+            catch (InvalidOperationException) when (IsCampaignGameRunning())
+            {
+            }
+            catch (IOException) when (IsCampaignGameRunning())
+            {
+            }
+        }
+
+        throw new OperationCanceledException();
+    }
+
+    private LiveToolsPlan InspectLiveTools()
+    {
+        string? directory = _loaderInstaller.FindGameBinaryDirectory()
+            ?? _loaderInstaller.FindInstalledBinaryDirectory();
+        ScriptingBridgeStatus status = _bridge.GetStatus();
+        bool loaderInstalled = directory is not null && _loaderInstaller.IsInstalled(directory);
+        int? packaged = _bridge.PackagedVersion;
+        bool bridgeStale = status.IsInstalled &&
+            packaged is int expected &&
+            (status.InstalledVersion is null || status.InstalledVersion < expected);
+        return new LiveToolsPlan(directory, loaderInstalled, status.IsInstalled, bridgeStale);
+    }
+
+    private async Task<string?> PickGameFolderAsync(bool clearRememberedBridge)
+    {
+        var picker = new FolderPicker
+        {
+            SuggestedStartLocation = PickerLocationId.ComputerFolder,
+        };
+        picker.FileTypeFilter.Add("*");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, Hwnd);
+        StorageFolder? folder = await picker.PickSingleFolderAsync();
+        if (folder is null)
+            return null;
+
+        GameInstallationService.Current.Remember(folder.Path);
+        if (clearRememberedBridge)
+            _bridge.ClearRememberedInstallLocation();
+        _bridge.InvalidateStatusCaches();
+        return GameInstallationService.Current.BinaryDirectory ?? folder.Path;
+    }
+
+    private void OnUe4ssDownloadProgress(Ue4ssDownloadProgress progress, int generation)
+    {
+        RunOnUi(() =>
+        {
+            if (generation != _liveToolsDownloadGeneration)
+                return;
+            _liveToolsDownload = progress;
+            _liveToolsCardKind = LiveToolsCardKind.Installing;
+            _liveToolsDetailKey = null;
+            _liveToolsDetailLiteral = null;
+            _liveToolsCardProgress = progress.TotalBytes is { } total && total > 0
+                ? 100.0 * progress.BytesReceived / total
+                : null;
+            ApplyLiveToolsCard();
         });
+    }
+
+    private string FormatDownloadDetail(Ue4ssDownloadProgress progress)
+    {
+        string speed = FormatTransferSpeed(progress.BytesPerSecond);
+        if (progress.TotalBytes is { } total && total > 0)
+        {
+            double percent = 100.0 * progress.BytesReceived / total;
+            return L.Format(
+                "shell.ue4ss_download_progress",
+                FormatTransferBytes(progress.BytesReceived),
+                FormatTransferBytes(total),
+                percent.ToString("0.0"),
+                speed);
+        }
+
+        return L.Format(
+            "shell.ue4ss_download_progress_unknown",
+            FormatTransferBytes(progress.BytesReceived),
+            speed);
+    }
+
+    private void OnLiveToolsCardAction(object sender, RoutedEventArgs e)
+    {
+        if (_installingBridge)
+            return;
+        if (_liveToolsCardKind == LiveToolsCardKind.NeedFolder)
+            _ = RunLiveToolsMaintenanceAsync(automatic: true, forcePickFolder: true);
+        else if (_liveToolsCardKind == LiveToolsCardKind.Failed)
+            _ = RunLiveToolsMaintenanceAsync(automatic: true, forcePickFolder: false);
+    }
+
+    private void OnRootGridLoaded(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            LiveToolsStatusCard.Shadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
+            LiveToolsStatusCard.Translation = new Vector3(0, 0, 32);
+        }
+        catch (Exception ex)
+        {
+            App.LogCrash("LiveToolsCardShadow", ex);
+        }
+    }
+
+    private void OnLiveToolsCardTimerTick(object? sender, object e)
+    {
+        _liveToolsCardTimer.Stop();
+        if (_liveToolsCardKind == LiveToolsCardKind.Succeeded)
+            SetLiveToolsCard(LiveToolsCardKind.Hidden);
+    }
+
+    private void ScheduleHideLiveToolsCard()
+    {
+        RunOnUi(() =>
+        {
+            _liveToolsCardTimer.Stop();
+            _liveToolsCardTimer.Start();
+        });
+    }
+
+    private void SetLiveToolsCard(
+        LiveToolsCardKind kind,
+        string? detailKey = null,
+        string? detailLiteral = null,
+        double? progress = null,
+        bool notify = true)
+    {
+        _liveToolsDownloadGeneration++;
+        _liveToolsDownload = null;
+        _liveToolsCardKind = kind;
+        _liveToolsDetailKey = detailKey;
+        _liveToolsDetailLiteral = detailLiteral;
+        _liveToolsCardProgress = progress;
+        RunOnUi(() =>
+        {
+            ApplyLiveToolsCard();
+            if (notify)
+                PublishLiveToolsMaintenanceCore();
+        });
+    }
+
+    private void ApplyLiveToolsCard()
+    {
+        if (_liveToolsCardKind == LiveToolsCardKind.Hidden)
+        {
+            LiveToolsStatusCard.Visibility = Visibility.Collapsed;
+            LiveToolsCardRing.IsActive = false;
+            return;
+        }
+
+        bool busy = _liveToolsCardKind is LiveToolsCardKind.Checking
+            or LiveToolsCardKind.Installing
+            or LiveToolsCardKind.Updating
+            or LiveToolsCardKind.WaitingForGame;
+        LiveToolsStatusCard.Visibility = Visibility.Visible;
+        LiveToolsCardTitle.Text = _liveToolsCardKind switch
+        {
+            LiveToolsCardKind.Checking => L.Get("shell.live_tools_card_checking_title"),
+            LiveToolsCardKind.Updating => L.Get("shell.live_tools_card_updating_title"),
+            LiveToolsCardKind.WaitingForGame => L.Get(_liveToolsIsUpdate
+                ? "shell.live_tools_card_updating_title"
+                : "shell.live_tools_card_installing_title"),
+            LiveToolsCardKind.NeedFolder => L.Get("shell.live_tools_card_need_folder_title"),
+            LiveToolsCardKind.Succeeded => L.Get(_liveToolsIsUpdate
+                ? "shell.live_tools_card_update_done_title"
+                : "shell.live_tools_card_install_done_title"),
+            LiveToolsCardKind.Failed => L.Get("shell.live_tools_card_failed_title"),
+            _ => L.Get("shell.live_tools_card_installing_title"),
+        };
+        LiveToolsCardDetail.Text = _liveToolsDownload is { } progress
+            ? FormatDownloadDetail(progress)
+            : _liveToolsDetailLiteral
+                ?? (_liveToolsDetailKey is null ? "" : L.Get(_liveToolsDetailKey));
+
+        LiveToolsCardRing.IsActive = busy;
+        LiveToolsCardRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        LiveToolsCardIcon.Visibility = busy ? Visibility.Collapsed : Visibility.Visible;
+        LiveToolsCardIcon.Symbol = _liveToolsCardKind switch
+        {
+            LiveToolsCardKind.NeedFolder => Symbol.Folder,
+            LiveToolsCardKind.Failed => Symbol.Important,
+            _ => Symbol.Accept,
+        };
+        string brushKey = _liveToolsCardKind switch
+        {
+            LiveToolsCardKind.Failed => "SystemFillColorCriticalBrush",
+            LiveToolsCardKind.Succeeded => "SystemFillColorSuccessBrush",
+            _ => "TextFillColorPrimaryBrush",
+        };
+        if (Application.Current.Resources.TryGetValue(brushKey, out object resource) &&
+            resource is Microsoft.UI.Xaml.Media.Brush brush)
+        {
+            LiveToolsCardIcon.Foreground = brush;
+        }
+
+        if (_liveToolsCardProgress is { } value)
+        {
+            LiveToolsCardProgress.Visibility = Visibility.Visible;
+            LiveToolsCardProgress.Value = value;
+        }
+        else
+        {
+            LiveToolsCardProgress.Visibility = Visibility.Collapsed;
+        }
+
+        if (_liveToolsCardKind == LiveToolsCardKind.NeedFolder)
+        {
+            LiveToolsCardAction.Visibility = Visibility.Visible;
+            LiveToolsCardAction.Content = L.Get("shell.live_tools_card_pick_folder");
+        }
+        else if (_liveToolsCardKind == LiveToolsCardKind.Failed)
+        {
+            LiveToolsCardAction.Visibility = Visibility.Visible;
+            LiveToolsCardAction.Content = L.Get("shell.live_tools_card_retry");
+        }
+        else
+        {
+            LiveToolsCardAction.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void PublishLiveToolsMaintenance()
+        => RunOnUi(PublishLiveToolsMaintenanceCore);
+
+    private void PublishLiveToolsMaintenanceCore()
+    {
+        UpdateGameConnectionChrome();
+        LiveToolsMaintenanceChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void RunOnUi(Action action)
+    {
+        if (_windowClosed)
+            return;
+        if (DispatcherQueue.HasThreadAccess)
+            action();
+        else
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_windowClosed)
+                    action();
+            });
+    }
+
+    private static bool IsCampaignGameRunning()
+    {
+        Process[] processes = Process.GetProcessesByName("HaloCampaignEvolved");
+        try
+        {
+            return processes.Length > 0;
+        }
+        finally
+        {
+            foreach (Process process in processes)
+                process.Dispose();
+        }
+    }
+
+    private readonly record struct LiveToolsPlan(
+        string? GameDirectory,
+        bool LoaderInstalled,
+        bool BridgeInstalled,
+        bool BridgeStale)
+    {
+        public bool NeedsFolder => GameDirectory is null && !BridgeInstalled;
+        public bool NeedsLoader => GameDirectory is not null && !LoaderInstalled;
+        public bool NeedsWork => NeedsFolder || NeedsLoader || !BridgeInstalled || BridgeStale;
+    }
+
+    private enum LiveToolsCardKind
+    {
+        Hidden,
+        Checking,
+        Installing,
+        Updating,
+        WaitingForGame,
+        NeedFolder,
+        Succeeded,
+        Failed,
     }
 
     private static string FormatTransferBytes(long bytes)
@@ -429,7 +827,11 @@ public sealed partial class MainWindow : Window
                 return;
 
             _installingBridge = true;
+            PublishLiveToolsMaintenance();
             string removedPath = await Task.Run(_bridge.UninstallBridge);
+            _suppressAutoLiveTools = true;
+            _liveToolsGateOpen = true;
+            SetLiveToolsCard(LiveToolsCardKind.Hidden);
             Report(
                 string.IsNullOrEmpty(removedPath)
                     ? L.Get("shell.bridge_uninstalled_cleared_msg")
@@ -444,6 +846,7 @@ public sealed partial class MainWindow : Window
         finally
         {
             _installingBridge = false;
+            PublishLiveToolsMaintenance();
         }
     }
 
@@ -465,10 +868,12 @@ public sealed partial class MainWindow : Window
             GameInstallationService.Current.Remember(folder.Path);
             _bridge.ClearRememberedInstallLocation();
             _bridge.InvalidateStatusCaches();
+            _suppressAutoLiveTools = false;
             Report(
                 L.Format("shell.bridge_folder_updated_msg", folder.Path),
                 InfoBarSeverity.Success,
                 L.Get("shell.bridge_folder_updated_title"));
+            await RunLiveToolsMaintenanceAsync(automatic: true, forcePickFolder: false);
         }
         catch (Exception ex)
         {
@@ -1136,8 +1541,10 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _windowClosed = true;
         _patchSerializeTimer.Stop();
         _statusDismissTimer.Stop();
+        _liveToolsCardTimer.Stop();
         RemoteControlService.Current.StopForShutdown(TimeSpan.FromSeconds(3));
         LocalizationService.Current.LanguageChanged -= OnAppLanguageChanged;
         _proxy.Error -= OnProxyError;

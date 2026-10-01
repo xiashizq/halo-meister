@@ -1,6 +1,6 @@
-using System.Text;
+// using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
+// using System.Xml.Linq;
 using Microsoft.Win32;
 
 namespace HaloMeister.App.Services;
@@ -11,14 +11,14 @@ namespace HaloMeister.App.Services;
 /// </summary>
 public sealed class GameInstallationService
 {
-    /// <summary>
-    /// Title folder names used by Microsoft Store / Xbox PC Game Pass installs.
-    /// </summary>
-    public static readonly string[] XboxTitleFolderNames =
-    [
-        "Halo Campaign Evolved",
-        "Halo- Campaign Evolved",
-    ];
+    // /// <summary>
+    // /// Title folder names used by Microsoft Store / Xbox PC Game Pass installs.
+    // /// </summary>
+    // public static readonly string[] XboxTitleFolderNames =
+    // [
+    //     "Halo Campaign Evolved",
+    //     "Halo- Campaign Evolved",
+    // ];
 
     private readonly string _rememberedPath;
     private string? _binaryDirectory;
@@ -96,8 +96,8 @@ public sealed class GameInstallationService
             yield return location;
 
         // Microsoft Store / Xbox PC libraries from .GamingRoot (custom install drives).
-        foreach (string titleRoot in EnumerateXboxTitleRoots())
-            yield return titleRoot;
+        // foreach (string titleRoot in EnumerateXboxTitleRoots())
+        //     yield return titleRoot;
 
         foreach (string library in EnumerateSteamLibraries())
             yield return Path.Combine(library, "steamapps", "common", "Halo Campaign Evolved");
@@ -109,8 +109,8 @@ public sealed class GameInstallationService
             string root = drive.RootDirectory.FullName;
             yield return Path.Combine(root, "Games", "Halo- Campaign Evolved");
             yield return Path.Combine(root, "Games", "Halo Campaign Evolved");
-            yield return Path.Combine(root, "XboxGames", "Halo Campaign Evolved");
-            yield return Path.Combine(root, "XboxGames", "Halo- Campaign Evolved");
+            // yield return Path.Combine(root, "XboxGames", "Halo Campaign Evolved");
+            // yield return Path.Combine(root, "XboxGames", "Halo- Campaign Evolved");
             yield return Path.Combine(
                 root, "Program Files (x86)", "Steam", "steamapps", "common", "Halo Campaign Evolved");
             yield return Path.Combine(
@@ -120,6 +120,7 @@ public sealed class GameInstallationService
         }
     }
 
+    /*
     /// <summary>
     /// Reads each drive's <c>.GamingRoot</c> marker and yields Halo title folders under
     /// the Xbox library path. Default layout is <c>{Drive}\XboxGames\Halo Campaign Evolved</c>;
@@ -210,6 +211,7 @@ public sealed class GameInstallationService
 
         return libraries;
     }
+    */
 
     private static IEnumerable<string> PaksCandidates(string root)
     {

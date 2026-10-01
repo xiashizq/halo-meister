@@ -466,39 +466,6 @@ do
             error("Could not find the controlled player's Unreal actor.")
         end
 
-        local function execute_player_weapon_normalize(request_id)
-            ExecuteInGameThread(function()
-                local ok, value_or_error = xpcall(function()
-                    local owner = controlled_player_actor()
-                    local inventory_class = StaticFindObject(
-                        "/Script/BlamSynchronization.BlamUnitInventoryComponent")
-                    local inventory = valid_remote_object(owner)
-                        and valid_remote_object(inventory_class)
-                        and owner:GetComponentByClass(inventory_class)
-                        or nil
-                    if not valid_remote_object(inventory) then
-                        error("The controlled player's weapon inventory is unavailable.")
-                    end
-                    local restored = 0
-                    for index = 0, 7 do
-                        local got, weapon = pcall(function()
-                            return inventory:GetWeapon(index)
-                        end)
-                        if got and valid_remote_object(weapon) then
-                            weapon:SetActorScale3D({ X = 1, Y = 1, Z = 1 })
-                            restored = restored + 1
-                        end
-                    end
-                    return string.format("Restored %d player weapon actor(s) to 1x.", restored)
-                end, debug.traceback)
-                if ok then
-                    write_result(request_id, "ok", value_or_error)
-                else
-                    write_result(request_id, "error", value_or_error)
-                end
-            end)
-        end
-
         local function machinima_state(controller)
             local world = active_world(controller)
             local manager = controller.PlayerCameraManager
@@ -1589,8 +1556,6 @@ do
                 execute_blam_spawn(request.id, "object_teleport", request.code)
             elseif request.kind == "player_input" then
                 execute_blam_spawn(request.id, "player_input", request.code)
-            elseif request.kind == "player_weapon_normalize" then
-                execute_player_weapon_normalize(request.id)
             elseif request.kind == "blam_machinima" then
                 execute_blam_spawn(request.id, "machinima", request.code)
             elseif request.kind == "blam_tag_asset_load" then

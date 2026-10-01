@@ -53,7 +53,11 @@
             Title="{i18n:Loc Key='builtin_mod.restart_title'}"
             Message="{i18n:Loc Key='builtin_mod.restart_message'}" />
 
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer
+            x:Name="ModListHost"
+            Grid.Row="2"
+            Opacity="0"
+            VerticalScrollBarVisibility="Auto">
             <ItemsControl x:Name="ModList">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -62,13 +66,16 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource LiveToolCardStyle}">
-                            <StackPanel Spacing="10">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                        <Border Padding="0" Style="{StaticResource LiveToolCardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="148" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border
+                                    Background="{Binding Definition.PosterUri, Converter={StaticResource BuiltinModPosterConverter}}"
+                                    CornerRadius="9,0,0,9" />
+                                <StackPanel Grid.Column="1" Margin="16,14,16,14" Spacing="10">
                                     <StackPanel Spacing="4">
                                         <TextBlock
                                             FontSize="16"
@@ -80,31 +87,32 @@
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Text="{Binding Stem}" />
                                     </StackPanel>
-                                </Grid>
-                                <TextBlock
-                                    Style="{StaticResource LivePageDescriptionStyle}"
-                                    Text="{Binding Description}" />
-                                <TextBlock
-                                    Style="{StaticResource CompactSafetyTextStyle}"
-                                    Text="{Binding Notes}"
-                                    Visibility="{Binding NotesVisibility}" />
-                                <TextBlock
-                                    Style="{StaticResource LivePageDescriptionStyle}"
-                                    Text="{Binding Status}" />
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button
-                                        Click="OnInstall"
-                                        Content="{Binding InstallLabel}"
-                                        IsEnabled="{Binding CanInstall}"
-                                        Style="{StaticResource AccentButtonStyle}"
-                                        Tag="{Binding}" />
-                                    <Button
-                                        Click="OnRemove"
-                                        Content="{i18n:Loc Key='builtin_mod.remove'}"
-                                        IsEnabled="{Binding CanRemove}"
-                                        Tag="{Binding}" />
+                                    <TextBlock
+                                        Style="{StaticResource LivePageDescriptionStyle}"
+                                        Text="{Binding Description}" />
+                                    <TextBlock
+                                        Style="{StaticResource CompactSafetyTextStyle}"
+                                        Text="{Binding Notes}"
+                                        Visibility="{Binding NotesVisibility}" />
+                                    <TextBlock
+                                        Style="{StaticResource LivePageDescriptionStyle}"
+                                        Text="{Binding Status}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button
+                                            Click="OnInstall"
+                                            Content="{Binding InstallLabel}"
+                                            IsEnabled="{Binding CanInstall, FallbackValue=False, TargetNullValue=False}"
+                                            Loaded="OnInstallButtonLoaded"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Tag="{Binding}" />
+                                        <Button
+                                            Click="OnRemove"
+                                            Content="{i18n:Loc Key='builtin_mod.remove'}"
+                                            IsEnabled="{Binding CanRemove}"
+                                            Tag="{Binding}" />
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
+                            </Grid>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -116,5 +124,25 @@
             Grid.Row="3"
             IsOpen="False"
             IsClosable="True" />
+
+        <Grid
+            x:Name="LoadingOverlay"
+            Grid.RowSpan="4"
+            Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="12">
+                <ProgressRing
+                    x:Name="LoadingRing"
+                    Width="40"
+                    Height="40"
+                    IsActive="True" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{i18n:Loc Key='common.loading'}" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Page>

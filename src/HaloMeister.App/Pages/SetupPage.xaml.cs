@@ -13,6 +13,7 @@ public sealed partial class SetupPage : Page, IActivatablePage
     private CancellationTokenSource? _heartbeatWatchCts;
     private bool _languageComboReady;
     private bool _checkingBridge;
+    private bool _connecting;
 
     public SetupPage()
     {
@@ -22,6 +23,12 @@ public sealed partial class SetupPage : Page, IActivatablePage
 
     public void OnActivated()
     {
+        if (MainWindow.Instance is { } window)
+        {
+            window.LiveToolsMaintenanceChanged -= OnLiveToolsMaintenanceChanged;
+            window.LiveToolsMaintenanceChanged += OnLiveToolsMaintenanceChanged;
+        }
+
         // Cached page trees do not reliably re-fire Loaded; refresh on show.
         _bridge.InvalidateStatusCaches();
         PopulateLanguageCombo();
@@ -32,9 +39,14 @@ public sealed partial class SetupPage : Page, IActivatablePage
 
     public void OnDeactivated()
     {
+        if (MainWindow.Instance is { } window)
+            window.LiveToolsMaintenanceChanged -= OnLiveToolsMaintenanceChanged;
         _refreshTimer.Stop();
         StopHeartbeatWatch();
     }
+
+    private void OnLiveToolsMaintenanceChanged(object? sender, EventArgs e)
+        => ApplyStatus(_bridge.GetStatus());
 
     private void OnRefreshTick(object? sender, object e)
     {
@@ -128,12 +140,20 @@ public sealed partial class SetupPage : Page, IActivatablePage
     private void ApplyStatus(ScriptingBridgeStatus status)
     {
         bool connected = _game.IsConnected;
+        bool blockConnect = MainWindow.Instance?.IsLiveToolsBlockingConnect == true;
         GameStatusText.Text = connected
             ? L.Format("setup.connected_ready_pid", _game.ProcessId)
             : L.Get("setup.not_connected");
         ConnectButton.Content = connected ? L.Get("common.reconnect") : L.Get("common.connect");
+        ConnectButton.IsEnabled = !_connecting && !blockConnect;
+        ToolTipService.SetToolTip(
+            ConnectButton,
+            blockConnect ? L.Get("shell.live_tools_connect_blocked") : null);
 
-        if (!status.IsRuntimeReady && (_checkingBridge || status.IsGameProcessRunning))
+        string? activity = MainWindow.Instance?.LiveToolsActivityText;
+        if (!string.IsNullOrEmpty(activity))
+            BridgeStatusText.Text = activity;
+        else if (!status.IsRuntimeReady && (_checkingBridge || status.IsGameProcessRunning))
             BridgeStatusText.Text = L.Get("setup.waiting_for_bridge_heartbeat");
         else if (status.IsRuntimeReady && !status.IsStale)
             BridgeStatusText.Text = L.Get("setup.bridge_ready");
@@ -171,6 +191,10 @@ public sealed partial class SetupPage : Page, IActivatablePage
 
     private async void OnConnect(object sender, RoutedEventArgs e)
     {
+        if (MainWindow.Instance?.IsLiveToolsBlockingConnect == true)
+            return;
+
+        _connecting = true;
         ConnectButton.IsEnabled = false;
         SetConnectBusy(true);
         try
@@ -179,8 +203,8 @@ public sealed partial class SetupPage : Page, IActivatablePage
         }
         finally
         {
+            _connecting = false;
             SetConnectBusy(false);
-            ConnectButton.IsEnabled = true;
             StartHeartbeatWatch();
             ApplyStatus(_bridge.GetStatus());
         }

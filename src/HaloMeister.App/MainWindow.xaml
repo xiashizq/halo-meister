@@ -9,7 +9,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -73,62 +72,15 @@
             </Grid>
         </Border>
 
-        <Border
-            x:Name="CloudActionsBar"
-            Grid.Row="1"
-            Padding="16,6"
-            Background="{ThemeResource LayerFillColorAltBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="0,0,0,1"
-            Visibility="Collapsed">
-            <Grid ColumnSpacing="16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="1">
-                    <TextBlock x:Name="CloudTitleText" FontWeight="SemiBold" Text="{i18n:Loc Key='shell.playfab_cloud_save'}" />
-                    <TextBlock
-                        x:Name="CloudContextText"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="{i18n:Loc Key='shell.authenticate_download_then_review_your_ca_df834a'}" />
-                </StackPanel>
-                <CommandBar
-                    Grid.Column="1"
-                    Background="Transparent"
-                    DefaultLabelPosition="Right"
-                    IsOpen="False">
-                    <AppBarButton
-                        x:Name="SaveAuthButton"
-                        Click="OnSaveAuth"
-                        Icon="Permissions"
-                        Label="{i18n:Loc Key='shell.authenticate'}" />
-                    <AppBarButton
-                        x:Name="GetUserDataButton"
-                        Click="OnGetUserData"
-                        Icon="Download"
-                        IsEnabled="False"
-                        Label="{i18n:Loc Key='shell.download_save'}" />
-                    <AppBarButton
-                        x:Name="PatchSettingsButton"
-                        Click="OnPatchSettings"
-                        Icon="Upload"
-                        IsEnabled="False"
-                        Label="{i18n:Loc Key='shell.upload_changes'}" />
-                </CommandBar>
-            </Grid>
-        </Border>
-
         <InfoBar
             x:Name="Status"
-            Grid.Row="2"
+            Grid.Row="1"
             IsClosable="True"
             IsOpen="False" />
 
         <NavigationView
             x:Name="Nav"
-            Grid.Row="3"
+            Grid.Row="2"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
             OpenPaneLength="264"
@@ -229,30 +181,136 @@
             </NavigationView.FooterMenuItems>
 
             <Grid>
-                <Frame
-                    x:Name="ContentFrame"
-                    CacheSize="32" />
-                <Grid
-                    x:Name="NavigationLoadingOverlay"
-                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Border
+                    x:Name="CloudActionsBar"
+                    Padding="28,8,16,8"
+                    Background="{ThemeResource LayerFillColorAltBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,0,1"
                     Visibility="Collapsed">
-                    <StackPanel
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Spacing="12">
-                        <ProgressRing
-                            x:Name="NavigationLoadingRing"
-                            Width="40"
-                            Height="40"
-                            IsActive="False" />
-                        <TextBlock
-                            x:Name="NavigationLoadingText"
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                            <TextBlock x:Name="CloudTitleText" FontWeight="SemiBold" Text="{i18n:Loc Key='shell.playfab_cloud_save'}" />
+                            <TextBlock
+                                x:Name="CloudContextText"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='shell.authenticate_download_then_review_your_ca_df834a'}" />
+                        </StackPanel>
+                        <CommandBar
+                            Grid.Column="1"
+                            Background="Transparent"
+                            DefaultLabelPosition="Right"
+                            IsOpen="False">
+                            <AppBarButton
+                                x:Name="SaveAuthButton"
+                                Click="OnSaveAuth"
+                                Icon="Permissions"
+                                Label="{i18n:Loc Key='shell.authenticate'}" />
+                            <AppBarButton
+                                x:Name="GetUserDataButton"
+                                Click="OnGetUserData"
+                                Icon="Download"
+                                IsEnabled="False"
+                                Label="{i18n:Loc Key='shell.download_save'}" />
+                            <AppBarButton
+                                x:Name="PatchSettingsButton"
+                                Click="OnPatchSettings"
+                                Icon="Upload"
+                                IsEnabled="False"
+                                Label="{i18n:Loc Key='shell.upload_changes'}" />
+                        </CommandBar>
+                    </Grid>
+                </Border>
+                <Grid Grid.Row="1">
+                    <Frame
+                        x:Name="ContentFrame"
+                        CacheSize="32" />
+                    <Grid
+                        x:Name="NavigationLoadingOverlay"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        Visibility="Collapsed">
+                        <StackPanel
                             HorizontalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="{i18n:Loc Key='common.loading'}" />
-                    </StackPanel>
+                            VerticalAlignment="Center"
+                            Spacing="12">
+                            <ProgressRing
+                                x:Name="NavigationLoadingRing"
+                                Width="40"
+                                Height="40"
+                                IsActive="False" />
+                            <TextBlock
+                                x:Name="NavigationLoadingText"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='common.loading'}" />
+                        </StackPanel>
+                    </Grid>
                 </Grid>
             </Grid>
         </NavigationView>
+
+        <Border
+            x:Name="LiveToolsStatusCard"
+            Grid.RowSpan="3"
+            MaxWidth="380"
+            Margin="0,0,20,20"
+            Padding="16,14"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            Canvas.ZIndex="30"
+            CornerRadius="12"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid Width="32" Height="32" VerticalAlignment="Top">
+                    <ProgressRing
+                        x:Name="LiveToolsCardRing"
+                        Width="28"
+                        Height="28"
+                        IsActive="False" />
+                    <SymbolIcon
+                        x:Name="LiveToolsCardIcon"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Symbol="Accept"
+                        Visibility="Collapsed" />
+                </Grid>
+                <StackPanel Grid.Column="1" Spacing="6">
+                    <TextBlock
+                        x:Name="LiveToolsCardTitle"
+                        FontWeight="SemiBold"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="LiveToolsCardDetail"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
+                    <ProgressBar
+                        x:Name="LiveToolsCardProgress"
+                        Maximum="100"
+                        Visibility="Collapsed" />
+                    <Button
+                        x:Name="LiveToolsCardAction"
+                        HorizontalAlignment="Left"
+                        Click="OnLiveToolsCardAction"
+                        Visibility="Collapsed" />
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

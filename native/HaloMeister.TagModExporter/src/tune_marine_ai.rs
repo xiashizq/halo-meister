@@ -56,7 +56,7 @@ const TROOPER_GUNS: &[GunPattern] = &[
     },
 ];
 
-/// Retune Superior Marines trooper AI: press, shoot sooner, hide less, melee
+/// Retune trooper AI: press, shoot sooner, hide less, melee
 /// when close. Angle fields that were authored as degrees are stored as radians.
 pub fn apply_aggressive_trooper(bytes: &[u8]) -> Result<(Vec<u8>, Vec<String>)> {
     let mut tag = TagFile::read_from_bytes(bytes)

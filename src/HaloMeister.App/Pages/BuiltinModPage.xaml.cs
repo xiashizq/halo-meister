@@ -2,20 +2,33 @@ using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace HaloMeister.App.Pages;
 
 public sealed partial class BuiltinModPage : Page, IActivatablePage
 {
     private bool _busy;
+    private int _refreshGeneration;
+    private int _installButtonWave;
+    private int _installButtonsPending;
+    private TaskCompletionSource? _installButtonsReady;
     private BuiltinModListItem[] _items = [];
 
     public BuiltinModPage() => InitializeComponent();
 
-    public void OnActivated() => _ = RefreshStatusAsync();
+    public void OnActivated() => _ = RefreshStatusAsync(showLoading: true);
+
+    public void OnDeactivated()
+    {
+        _refreshGeneration++;
+        LoadingRing.IsActive = false;
+    }
 
     private void OnRefresh(object sender, RoutedEventArgs e) =>
-        _ = RefreshStatusAsync();
+        _ = RefreshStatusAsync(showLoading: true);
 
     private async void OnInstall(object sender, RoutedEventArgs e)
     {
@@ -95,16 +108,32 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
         });
     }
 
-    private async Task RefreshStatusAsync()
+    private async Task RefreshStatusAsync(bool showLoading = false)
     {
-        BusyRing.IsActive = true;
+        int generation = ++_refreshGeneration;
+        if (showLoading)
+            SetPageLoading(true);
+        else
+            BusyRing.IsActive = true;
         RefreshButton.IsEnabled = false;
         try
         {
             IReadOnlyList<BuiltinModCatalogStatus> catalog =
                 await Task.Run(FullPalettesOverlayService.GetCatalogStatuses);
-            _items = catalog.Select(entry => CreateListItem(entry, _busy)).ToArray();
-            ModList.ItemsSource = _items;
+            if (generation != _refreshGeneration)
+                return;
+
+            BuiltinModListItem[] next = catalog
+                .Select(entry => CreateListItem(entry, _busy))
+                .ToArray();
+            bool changed = !next.SequenceEqual(_items);
+            _items = next;
+            if (changed)
+            {
+                if (showLoading)
+                    ArmInstallButtonGate(_items.Length);
+                ModList.ItemsSource = _items;
+            }
 
             BuiltinModCatalogStatus? prompt = catalog.FirstOrDefault(entry =>
                 entry.Sync.NeedsUpdatePrompt);
@@ -119,17 +148,77 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
                     entry.Sync.State == BuiltinModSyncState.BundleTampered);
                 ShowStatus(tampered.Sync.Message, InfoBarSeverity.Error);
             }
+
+            if (showLoading && changed)
+                await WaitForInstallButtonsAsync();
         }
         catch (Exception ex)
         {
+            if (generation != _refreshGeneration)
+                return;
+
             ShowStatus(ex.Message, InfoBarSeverity.Error);
-            ModList.ItemsSource = Array.Empty<BuiltinModListItem>();
+            _items = [];
+            ModList.ItemsSource = _items;
         }
         finally
         {
-            BusyRing.IsActive = _busy;
-            RefreshButton.IsEnabled = !_busy;
+            if (generation == _refreshGeneration)
+            {
+                SetPageLoading(false);
+                BusyRing.IsActive = _busy;
+                RefreshButton.IsEnabled = !_busy;
+            }
         }
+    }
+
+    private void SetPageLoading(bool loading)
+    {
+        LoadingOverlay.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+        LoadingRing.IsActive = loading;
+        ModListHost.Opacity = loading ? 0 : 1;
+    }
+
+    private void ArmInstallButtonGate(int count)
+    {
+        _installButtonWave++;
+        _installButtonsPending = count;
+        _installButtonsReady = count > 0 ? new TaskCompletionSource() : null;
+    }
+
+    private async Task WaitForInstallButtonsAsync()
+    {
+        if (_installButtonsReady is null)
+            return;
+
+        Task ready = _installButtonsReady.Task;
+        Task timeout = Task.Delay(400);
+        await Task.WhenAny(ready, timeout);
+    }
+
+    private void OnInstallButtonLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control)
+            return;
+
+        int wave = _installButtonWave;
+        control.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (control.XamlRoot is not null)
+            {
+                VisualStateManager.GoToState(
+                    control,
+                    control.IsEnabled ? "Normal" : "Disabled",
+                    false);
+            }
+
+            if (wave != _installButtonWave || _installButtonsPending <= 0)
+                return;
+
+            _installButtonsPending--;
+            if (_installButtonsPending == 0)
+                _installButtonsReady?.TrySetResult();
+        });
     }
 
     private static BuiltinModListItem CreateListItem(
@@ -196,6 +285,25 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
         StatusBar.Severity = severity;
         StatusBar.IsOpen = true;
     }
+}
+
+public sealed class BuiltinModPosterConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+    {
+        if (value is not string uri || string.IsNullOrWhiteSpace(uri))
+            return null!;
+
+        return new ImageBrush
+        {
+            ImageSource = new BitmapImage(new Uri(uri)),
+            Stretch = Stretch.UniformToFill,
+            AlignmentY = AlignmentY.Center,
+        };
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language) =>
+        throw new NotSupportedException();
 }
 
 public sealed record BuiltinModListItem(

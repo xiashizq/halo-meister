@@ -273,11 +273,7 @@ public sealed class VehicleWorkshopService : IDisposable
         CancellationToken cancellationToken = default)
     {
         ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(
-                L.Get("bridge.error_not_responding"));
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
 
         // Move one-time native hook install off the first spawn click.
         await WarmUpAsync(cancellationToken);

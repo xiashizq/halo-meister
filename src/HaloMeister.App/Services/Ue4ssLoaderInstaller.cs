@@ -170,9 +170,9 @@ public sealed class Ue4ssLoaderInstaller
             var candidates = new List<string>
             {
                 fullPath,
-                Path.Combine(fullPath, "Content", "Meteorite", "Binaries", "WinGDK"),
+                // Path.Combine(fullPath, "Content", "Meteorite", "Binaries", "WinGDK"),
                 Path.Combine(fullPath, "Content", "Meteorite", "Binaries", "Win64"),
-                Path.Combine(fullPath, "Meteorite", "Binaries", "WinGDK"),
+                // Path.Combine(fullPath, "Meteorite", "Binaries", "WinGDK"),
                 Path.Combine(fullPath, "Meteorite", "Binaries", "Win64"),
             };
 

@@ -39,7 +39,6 @@ public enum ScriptLanguage
     PlayerPosition,
     PlayerUnitTagRead,
     PlayerInput,
-    PlayerWeaponNormalize,
     BlamMachinima,
     MachinimaState,
     MachinimaNodes,
@@ -80,7 +79,14 @@ public sealed record ScriptingBridgeStatus(
     DateTimeOffset? LastHeartbeat,
     int? RunningVersion,
     bool IsStale,
-    string Summary);
+    string Summary)
+{
+    public void EnsureRuntimeReady()
+    {
+        if (!IsRuntimeReady || IsStale)
+            throw new InvalidOperationException(Summary);
+    }
+}
 
 public sealed class ScriptingBridgeService
 {
@@ -189,7 +195,7 @@ public sealed class ScriptingBridgeService
                 "bridge.summary_stale",
                 runningVersion?.ToString() ?? "1",
                 packaged),
-            (_, _, _, _, true) => L.Format(
+            (true, true, _, _, true) => L.Format(
                 "bridge.summary_installed_stale",
                 installedVersion?.ToString() ?? "unknown",
                 packaged),
@@ -197,13 +203,13 @@ public sealed class ScriptingBridgeService
                 "bridge.summary_ready",
                 runningVersion,
                 heartbeat?.ToLocalTime().ToString("HH:mm:ss")),
-            (true, true, false, false, false) => startupDiagnostic ??
-                L.Get("bridge.summary_game_running_no_heartbeat"),
-            (true, false, false, false, false) => L.Get("bridge.summary_installed_not_running"),
             (false, _, true, false, false) => L.Format(
                 "bridge.summary_running_install_missing",
                 heartbeat?.ToLocalTime().ToString("HH:mm:ss")),
-            _ => L.Get("bridge.summary_not_installed"),
+            (true, true, false, false, false) => startupDiagnostic ??
+                L.Get("bridge.summary_game_running_no_heartbeat"),
+            (false, true, false, false, false) => L.Get("bridge.summary_not_installed"),
+            _ => L.Get("shell.game_disconnected"),
         };
 
         return new ScriptingBridgeStatus(
@@ -272,8 +278,7 @@ public sealed class ScriptingBridgeService
         try
         {
             ScriptingBridgeStatus status = GetStatus();
-            if (!status.IsRuntimeReady)
-                throw new InvalidOperationException(L.Get("bridge.error_scripting_not_responding"));
+            status.EnsureRuntimeReady();
             EnsureCapabilityReady(language);
 
             string requestId = Guid.NewGuid().ToString("N");
@@ -311,7 +316,6 @@ public sealed class ScriptingBridgeService
                 ScriptLanguage.PlayerPosition => "player_position",
                 ScriptLanguage.PlayerUnitTagRead => "player_unit_tag_read",
                 ScriptLanguage.PlayerInput => "player_input",
-                ScriptLanguage.PlayerWeaponNormalize => "player_weapon_normalize",
                 ScriptLanguage.BlamMachinima => "blam_machinima",
                 ScriptLanguage.MachinimaState => "machinima_state",
                 ScriptLanguage.MachinimaNodes => "machinima_nodes",
@@ -911,7 +915,6 @@ public sealed class ScriptingBridgeService
                     ScriptLanguage.PlayerPosition or
                     ScriptLanguage.PlayerUnitTagRead or
                     ScriptLanguage.PlayerInput or
-                    ScriptLanguage.PlayerWeaponNormalize or
                     ScriptLanguage.BlamMachinima or
                     ScriptLanguage.MachinimaState or
                     ScriptLanguage.MachinimaNodes or
@@ -1211,9 +1214,9 @@ public sealed class ScriptingBridgeService
             string fullRoot = Path.GetFullPath(gameRoot);
             string[] candidates =
             [
-                Path.Combine(fullRoot, "Content", "Meteorite", "Binaries", "WinGDK", "ue4ss", "Mods"),
+                // Path.Combine(fullRoot, "Content", "Meteorite", "Binaries", "WinGDK", "ue4ss", "Mods"),
                 Path.Combine(fullRoot, "Content", "Meteorite", "Binaries", "Win64", "ue4ss", "Mods"),
-                Path.Combine(fullRoot, "Meteorite", "Binaries", "WinGDK", "ue4ss", "Mods"),
+                // Path.Combine(fullRoot, "Meteorite", "Binaries", "WinGDK", "ue4ss", "Mods"),
                 Path.Combine(fullRoot, "Meteorite", "Binaries", "Win64", "ue4ss", "Mods"),
                 Path.Combine(fullRoot, "ue4ss", "Mods"),
                 fullRoot,
@@ -1310,15 +1313,15 @@ public sealed class ScriptingBridgeService
             string fullRoot = Path.GetFullPath(gameRoot);
             string[] relatives =
             [
-                Path.Combine(
-                    "Content", "Meteorite", "Binaries", "WinGDK",
-                    "ue4ss", "Mods", "HaloMeister", "Scripts", "main.lua"),
+                // Path.Combine(
+                //     "Content", "Meteorite", "Binaries", "WinGDK",
+                //     "ue4ss", "Mods", "HaloMeister", "Scripts", "main.lua"),
                 Path.Combine(
                     "Content", "Meteorite", "Binaries", "Win64",
                     "ue4ss", "Mods", "HaloMeister", "Scripts", "main.lua"),
-                Path.Combine(
-                    "Meteorite", "Binaries", "WinGDK",
-                    "ue4ss", "Mods", "HaloMeister", "Scripts", "main.lua"),
+                // Path.Combine(
+                //     "Meteorite", "Binaries", "WinGDK",
+                //     "ue4ss", "Mods", "HaloMeister", "Scripts", "main.lua"),
                 Path.Combine(
                     "Meteorite", "Binaries", "Win64",
                     "ue4ss", "Mods", "HaloMeister", "Scripts", "main.lua"),
@@ -1420,7 +1423,6 @@ public sealed class ScriptingBridgeService
             ScriptLanguage.PlayerPosition => "player position",
             ScriptLanguage.PlayerUnitTagRead => "read controlled player unit tag",
             ScriptLanguage.PlayerInput => "suppress or restore player input",
-            ScriptLanguage.PlayerWeaponNormalize => "normalize equipped player weapons",
             ScriptLanguage.BlamMachinima => "native Blam machinima camera",
             ScriptLanguage.MachinimaState => "read Advanced Machinima state",
             ScriptLanguage.MachinimaNodes => "read live camera-location nodes",

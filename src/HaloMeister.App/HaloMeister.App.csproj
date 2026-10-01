@@ -51,6 +51,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Assets\BuiltinMods\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\HaloMeisterIcon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\HaloMeisterIcon.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Customization\**\*" CopyToOutputDirectory="PreserveNewest" />

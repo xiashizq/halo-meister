@@ -16,37 +16,37 @@ struct BakedAiOverride {
     label: &'static str,
 }
 
-/// Eridnus Superior Marines v1.3 + Superior Covenant v1.2 character AI.
-const SUPERIOR_AI_TAGS: &[BakedAiOverride] = &[
+/// Baked character AI for the marine trooper and the main covenant combatants.
+const CHARACTER_AI_TAGS: &[BakedAiOverride] = &[
     BakedAiOverride {
         file_suffix: "objects/characters/marine/ai/trooper-character.ubulk",
-        bytes: include_bytes!("../assets/superior-marines/trooper-character.ubulk"),
-        label: "Superior Marines trooper",
+        bytes: include_bytes!("../assets/character-ai/trooper-character.ubulk"),
+        label: "trooper",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/elite/ai/elite-character.ubulk",
-        bytes: include_bytes!("../assets/superior-covenant/elite-character.ubulk"),
-        label: "Superior Covenant elite",
+        bytes: include_bytes!("../assets/character-ai/elite-character.ubulk"),
+        label: "elite",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/grunt/ai/grunt-character.ubulk",
-        bytes: include_bytes!("../assets/superior-covenant/grunt-character.ubulk"),
-        label: "Superior Covenant grunt",
+        bytes: include_bytes!("../assets/character-ai/grunt-character.ubulk"),
+        label: "grunt",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/jackal/ai/jackal-character.ubulk",
-        bytes: include_bytes!("../assets/superior-covenant/jackal-character.ubulk"),
-        label: "Superior Covenant jackal",
+        bytes: include_bytes!("../assets/character-ai/jackal-character.ubulk"),
+        label: "jackal",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/brute/ai/brute-character.ubulk",
-        bytes: include_bytes!("../assets/superior-covenant/brute-character.ubulk"),
-        label: "Superior Covenant brute",
+        bytes: include_bytes!("../assets/character-ai/brute-character.ubulk"),
+        label: "brute",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/hunter/ai/hunter-character.ubulk",
-        bytes: include_bytes!("../assets/superior-covenant/hunter-character.ubulk"),
-        label: "Superior Covenant hunter",
+        bytes: include_bytes!("../assets/character-ai/hunter-character.ubulk"),
+        label: "hunter",
     },
 ];
 const BIPED_GROUP: u32 = u32::from_be_bytes(*b"bipd");
@@ -222,8 +222,8 @@ pub struct CharacterOverlayReport {
     pub lines: Vec<String>,
 }
 
-/// Superior Marines / Covenant `[char]` AI as an independent overlay.
-pub fn write_superior_character_overlay(
+/// Character `[char]` AI as an independent overlay.
+pub fn write_character_ai_overlay(
     archives: &[IoStoreArchive],
     output: &Path,
     dry_run: bool,
@@ -233,7 +233,7 @@ pub fn write_superior_character_overlay(
         lines: Vec::new(),
     };
     let mut overrides = Vec::new();
-    for baked in SUPERIOR_AI_TAGS {
+    for baked in CHARACTER_AI_TAGS {
         let bytes = if baked.file_suffix.contains("trooper-character") {
             let (tuned, lines) = tune_marine_ai::apply_aggressive_trooper(baked.bytes)?;
             report.lines.extend(lines);
@@ -270,7 +270,7 @@ pub fn write_superior_character_overlay(
         .with_context(|| format!("could not write {}", output.display()))?;
     report.written = overrides.len();
     report.lines.push(format!(
-        "Wrote {} superior AI character(s) to {}",
+        "Wrote {} character AI tag(s) to {}",
         overrides.len(),
         output.display()
     ));

@@ -76,10 +76,12 @@
                 IsSelected="True"
                 Tag="steam"
                 Text="{i18n:Loc Key='game_saves.platform_steam'}" />
+            <!-- Microsoft Store saves are disabled; Steam only.
             <SelectorBarItem
                 x:Name="StorePlatformItem"
                 Tag="store"
                 Text="{i18n:Loc Key='game_saves.platform_microsoft_store'}" />
+            -->
         </SelectorBar>
 
         <Border

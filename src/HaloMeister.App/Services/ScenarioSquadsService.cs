@@ -145,11 +145,7 @@ public sealed class ScenarioSquadsService : IDisposable
                 L.Get("squads.error_invalid_script_name"));
 
         ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(
-                L.Get("bridge.error_scripting_not_responding"));
-        if (status.IsStale)
-            throw new InvalidOperationException(status.Summary);
+        status.EnsureRuntimeReady();
 
         string expression = $"{command} {squad.ScriptName}";
         return await _bridge.ExecuteAsync(

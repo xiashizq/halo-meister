@@ -12,7 +12,7 @@ namespace HaloMeister.App.Pages;
 public sealed partial class GameSavesPage : Page, IActivatablePage
 {
     private readonly SteamGameSaveStore _steamStore = new();
-    private readonly WgsGameSaveStore _storeStore = new();
+    // private readonly WgsGameSaveStore _storeStore = new();
     private IGameSaveStore _store;
     private IReadOnlyList<WgsSaveSlot> _slots = [];
     private IReadOnlyList<WgsBackupEntry> _backups = [];
@@ -32,7 +32,7 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
 
     private WgsSaveSlot? Selected => SlotsList.SelectedItem as WgsSaveSlot;
     private WgsBackupEntry? SelectedBackup => BackupBox.SelectedItem as WgsBackupEntry;
-    private bool IsSteamPlatform => _store.PlatformId == SteamGameSaveStore.Platform;
+    // private bool IsSteamPlatform => _store.PlatformId == SteamGameSaveStore.Platform;
 
     public void OnActivated()
     {
@@ -48,15 +48,17 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
 
     private void SelectInitialPlatform()
     {
-        bool preferStore =
-            GamePlatformPreference.Current.Platform == GamePlatformKind.MicrosoftStore;
+        // bool preferStore =
+        //     GamePlatformPreference.Current.Platform == GamePlatformKind.MicrosoftStore;
 
         _suppressPlatformChange = true;
         try
         {
-            SteamPlatformItem.IsSelected = !preferStore;
-            StorePlatformItem.IsSelected = preferStore;
-            _store = preferStore ? _storeStore : _steamStore;
+            SteamPlatformItem.IsSelected = true;
+            // SteamPlatformItem.IsSelected = !preferStore;
+            // StorePlatformItem.IsSelected = preferStore;
+            _store = _steamStore;
+            // _store = preferStore ? _storeStore : _steamStore;
         }
         finally
         {
@@ -68,11 +70,14 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
     {
         if (_suppressPlatformChange) return;
         if (sender.SelectedItem?.Tag is not string platform) return;
+        _ = platform;
 
-        _store = platform == WgsGameSaveStore.Platform ? _storeStore : _steamStore;
-        GamePlatformPreference.Current.Platform = platform == WgsGameSaveStore.Platform
-            ? GamePlatformKind.MicrosoftStore
-            : GamePlatformKind.Steam;
+        _store = _steamStore;
+        // _store = platform == WgsGameSaveStore.Platform ? _storeStore : _steamStore;
+        GamePlatformPreference.Current.Platform = GamePlatformKind.Steam;
+        // GamePlatformPreference.Current.Platform = platform == WgsGameSaveStore.Platform
+        //     ? GamePlatformKind.MicrosoftStore
+        //     : GamePlatformKind.Steam;
         ApplyPlatformChrome();
         Refresh();
     }
@@ -80,15 +85,18 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
     private void ApplyPlatformChrome()
     {
         RootPathText.Text = _store.LiveRoot;
-        StorageSourceText.Text = IsSteamPlatform
-            ? L.Get("game_saves.stored_by_steam_savegames")
-            : L.Get("game_saves.stored_by_windows_gaming_services");
-        OpenLiveFolderItem.Text = IsSteamPlatform
-            ? L.Get("game_saves.open_live_steam_folder")
-            : L.Get("game_saves.open_live_wgs_folder");
-        ContainerLabelText.Text = IsSteamPlatform
-            ? L.Get("game_saves.slot_file")
-            : L.Get("game_saves.container");
+        StorageSourceText.Text = L.Get("game_saves.stored_by_steam_savegames");
+        // StorageSourceText.Text = IsSteamPlatform
+        //     ? L.Get("game_saves.stored_by_steam_savegames")
+        //     : L.Get("game_saves.stored_by_windows_gaming_services");
+        OpenLiveFolderItem.Text = L.Get("game_saves.open_live_steam_folder");
+        // OpenLiveFolderItem.Text = IsSteamPlatform
+        //     ? L.Get("game_saves.open_live_steam_folder")
+        //     : L.Get("game_saves.open_live_wgs_folder");
+        ContainerLabelText.Text = L.Get("game_saves.slot_file");
+        // ContainerLabelText.Text = IsSteamPlatform
+        //     ? L.Get("game_saves.slot_file")
+        //     : L.Get("game_saves.container");
     }
 
     private void Refresh(string? selectContainer = null, string? selectBackupId = null)
@@ -180,9 +188,12 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
         ExportButton.IsEnabled = selected && !_busy;
         RecoveryHintText.Text = _store.IsGameRunning
             ? L.Get("game_saves.close_game_before_restore")
-            : IsSteamPlatform
-                ? L.Get("game_saves.restoring_steam_creates_safety_snapshot")
-                : L.Get("game_saves.restoring_first_creates_a_complete_safety_6c55da");
+            : L.Get("game_saves.restoring_steam_creates_safety_snapshot");
+        // RecoveryHintText.Text = _store.IsGameRunning
+        //     ? L.Get("game_saves.close_game_before_restore")
+        //     : IsSteamPlatform
+        //         ? L.Get("game_saves.restoring_steam_creates_safety_snapshot")
+        //         : L.Get("game_saves.restoring_first_creates_a_complete_safety_6c55da");
 
         BackupMetadataText.Text = backup is null
             ? L.Get("game_saves.create_a_backup_or_import_an_archive_to_p_ac8fa1")
@@ -201,12 +212,13 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
             : string.Join(", ", slot.Save.ActiveSkulls.Select(Catalog.Humanize));
         KindText.Text = $"{slot.Save.KindLabel} · {slot.Save.FormatDetail}";
         BuildText.Text = slot.Save.Build ?? L.Get("game_saves.not_detected");
-        ContainerText.Text = IsSteamPlatform
-            ? slot.ContainerId
-            : L.Format(
-                "game_saves.container_metadata_revision",
-                slot.ContainerId,
-                slot.MetadataRevision);
+        ContainerText.Text = slot.ContainerId;
+        // ContainerText.Text = IsSteamPlatform
+        //     ? slot.ContainerId
+        //     : L.Format(
+        //         "game_saves.container_metadata_revision",
+        //         slot.ContainerId,
+        //         slot.MetadataRevision);
         UpdatedText.Text = slot.UpdatedDisplay;
         FileText.Text = slot.DataPath;
     }
@@ -306,9 +318,10 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
                 XamlRoot = XamlRoot,
                 Title = L.Get("game_saves.restore_backup_title"),
                 Content = L.Format(
-                    IsSteamPlatform
-                        ? "game_saves.restore_backup_content_steam"
-                        : "game_saves.restore_backup_content",
+                    "game_saves.restore_backup_content_steam",
+                    // IsSteamPlatform
+                    //     ? "game_saves.restore_backup_content_steam"
+                    //     : "game_saves.restore_backup_content",
                     slot.DisplayName,
                     backup.DisplayName,
                     backup.Detail),
@@ -325,9 +338,10 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
                 Refresh(result.UpdatedSlot.ContainerId);
                 Report(
                     L.Format(
-                        IsSteamPlatform
-                            ? "game_saves.restored_with_snapshot_steam"
-                            : "game_saves.restored_with_snapshot",
+                        "game_saves.restored_with_snapshot_steam",
+                        // IsSteamPlatform
+                        //     ? "game_saves.restored_with_snapshot_steam"
+                        //     : "game_saves.restored_with_snapshot",
                         backup.DisplayName,
                         result.BackupPath),
                     InfoBarSeverity.Success);
@@ -385,9 +399,10 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
             bool launched = await _store.LaunchGameAsync();
             Report(
                 launched
-                    ? L.Get(IsSteamPlatform
-                        ? "game_saves.launch_requested_steam"
-                        : "game_saves.launch_requested")
+                    ? L.Get("game_saves.launch_requested_steam")
+                    // ? L.Get(IsSteamPlatform
+                    //     ? "game_saves.launch_requested_steam"
+                    //     : "game_saves.launch_requested")
                     : L.Get("game_saves.launch_not_accepted"),
                 launched ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
         }

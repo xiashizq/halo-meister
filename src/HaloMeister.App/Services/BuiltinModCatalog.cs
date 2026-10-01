@@ -47,4 +47,7 @@ public sealed record BuiltinModDefinition(
     IReadOnlyList<string> LegacyStems,
     string TitleKey,
     string DescriptionKey,
-    IReadOnlyList<string> NoteKeys);
+    IReadOnlyList<string> NoteKeys)
+{
+    public string PosterUri => $"ms-appx:///Assets/BuiltinMods/{Id}.jpg";
+}

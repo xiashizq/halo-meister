@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
 
 namespace HaloMeister.App.Services;
@@ -117,8 +118,8 @@ public sealed class ArmorMixerService
 
     public string ConnectionSummary =>
         _memory.IsConnected
-            ? $"Connected to PID {_memory.ProcessId} · {_memory.BuildProfileId}"
-            : "Game connection is not ready.";
+            ? L.Format("shell.connected_pid", _memory.ProcessId)
+            : L.Get("shell.game_disconnected");
 
     public ArmorMixerSession Scan()
     {
@@ -383,10 +384,7 @@ public sealed class ArmorMixerService
 
     private void EnsureBridgeReady()
     {
-        ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady || status.IsStale)
-            throw new InvalidOperationException(
-                "The in-game bridge is not ready. Repair/update it, restart the game, and load an offline mission.");
+        _bridge.GetStatus().EnsureRuntimeReady();
     }
 
     private void EnsureReady()

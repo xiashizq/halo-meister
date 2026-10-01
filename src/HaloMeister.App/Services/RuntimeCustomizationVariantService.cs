@@ -162,10 +162,7 @@ public sealed class RuntimeCustomizationVariantService : IDisposable
 
     private void EnsureBridgeReady()
     {
-        ScriptingBridgeStatus status = _bridge.GetStatus();
-        if (!status.IsRuntimeReady)
-            throw new InvalidOperationException(
-                "The in-game bridge is not ready. Repair/update it, restart the game, and load an offline mission.");
+        _bridge.GetStatus().EnsureRuntimeReady();
     }
 
     private void EnsureReady()
