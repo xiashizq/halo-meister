@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Text;
 using HaloMeister.App.Localization;
 
 namespace HaloMeister.App.Services;
@@ -192,9 +193,11 @@ public sealed class FullPalettesOverlayService
                 L.Get("builtin_mod.bundle_tampered"));
         }
 
+        string? bundledVersion = VersionFromFingerprint(bundledFingerprint);
         if (shippingInstalled)
         {
             string? installedFingerprint = TryFingerprintTriplet(paks, _mod.Stem);
+            string? installedVersion = VersionFromFingerprint(installedFingerprint);
             if (installedFingerprint is not null &&
                 bundledFingerprint is not null &&
                 string.Equals(
@@ -202,51 +205,75 @@ public sealed class FullPalettesOverlayService
                     bundledFingerprint,
                     StringComparison.Ordinal))
             {
-                return new BuiltinModSyncStatus(
+                return Status(
                     BuiltinModSyncState.UpToDate,
-                    CanInstall: false,
-                    CanRemove: true,
-                    NeedsUpdatePrompt: false,
-                    L.Get("builtin_mod.status_ready"));
+                    canInstall: false,
+                    canRemove: true,
+                    needsUpdatePrompt: false,
+                    L.Format("builtin_mod.status_ready", bundledVersion),
+                    installedVersion,
+                    bundledVersion,
+                    sameVersion: true);
             }
 
-            return new BuiltinModSyncStatus(
+            return Status(
                 BuiltinModSyncState.Outdated,
-                CanInstall: true,
-                CanRemove: true,
-                NeedsUpdatePrompt: true,
-                L.Get("builtin_mod.status_outdated"));
+                canInstall: true,
+                canRemove: true,
+                needsUpdatePrompt: true,
+                L.Format(
+                    "builtin_mod.status_outdated",
+                    installedVersion ?? L.Get("builtin_mod.version_unreadable"),
+                    bundledVersion ?? L.Get("builtin_mod.version_unreadable")),
+                installedVersion,
+                bundledVersion,
+                sameVersion: false);
         }
 
         if (legacyInstalled)
         {
-            return new BuiltinModSyncStatus(
+            string? legacyVersion = VersionFromFingerprint(TryLegacyFingerprint(paks));
+            return Status(
                 BuiltinModSyncState.Outdated,
-                CanInstall: true,
-                CanRemove: true,
-                NeedsUpdatePrompt: true,
-                L.Get("builtin_mod.status_outdated"));
+                canInstall: true,
+                canRemove: true,
+                needsUpdatePrompt: true,
+                L.Format(
+                    "builtin_mod.status_outdated",
+                    legacyVersion ?? L.Get("builtin_mod.version_unreadable"),
+                    bundledVersion ?? L.Get("builtin_mod.version_unreadable")),
+                legacyVersion,
+                bundledVersion,
+                sameVersion: false);
         }
 
         if (present == 0)
         {
-            return new BuiltinModSyncStatus(
+            return Status(
                 BuiltinModSyncState.NotInstalled,
-                CanInstall: true,
-                CanRemove: anyInstalledFiles,
-                NeedsUpdatePrompt: false,
-                L.Get("builtin_mod.status_not_installed"));
+                canInstall: true,
+                canRemove: anyInstalledFiles,
+                needsUpdatePrompt: false,
+                bundledVersion is null
+                    ? L.Get("builtin_mod.status_not_installed")
+                    : L.Format("builtin_mod.status_not_installed_version", bundledVersion),
+                installedVersion: null,
+                bundledVersion,
+                sameVersion: true);
         }
 
-        return new BuiltinModSyncStatus(
+        return Status(
             BuiltinModSyncState.Incomplete,
-            CanInstall: true,
-            CanRemove: true,
-            NeedsUpdatePrompt: true,
+            canInstall: true,
+            canRemove: true,
+            needsUpdatePrompt: true,
             L.Format(
                 "builtin_mod.status_incomplete",
                 present,
-                requiredNames.Count));
+                requiredNames.Count),
+            installedVersion: null,
+            bundledVersion,
+            sameVersion: true);
     }
 
     /// <summary>
@@ -278,6 +305,59 @@ public sealed class FullPalettesOverlayService
             fingerprint,
             _mod.ExpectedFingerprint,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Short version code for a triplet fingerprint. Same files always produce
+    /// the same code; any content change produces a different one.
+    /// </summary>
+    public static string? VersionFromFingerprint(string? fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+            return null;
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint));
+        return Convert.ToHexString(hash.AsSpan(0, 4));
+    }
+
+    private string? TryLegacyFingerprint(string paks)
+    {
+        foreach (string stem in _mod.LegacyStems)
+        {
+            if (!HasCompleteTriplet(paks, stem))
+                continue;
+            return TryFingerprintTriplet(paks, stem);
+        }
+        return null;
+    }
+
+    private static BuiltinModSyncStatus Status(
+        BuiltinModSyncState state,
+        bool canInstall,
+        bool canRemove,
+        bool needsUpdatePrompt,
+        string message,
+        string? installedVersion,
+        string? bundledVersion,
+        bool sameVersion)
+    {
+        string versionText = "";
+        if (!string.IsNullOrEmpty(bundledVersion))
+        {
+            versionText = sameVersion || string.IsNullOrEmpty(installedVersion)
+                ? L.Format("builtin_mod.version_current", bundledVersion)
+                : L.Format(
+                    "builtin_mod.version_compare",
+                    installedVersion,
+                    bundledVersion);
+        }
+
+        return new BuiltinModSyncStatus(
+            state,
+            canInstall,
+            canRemove,
+            needsUpdatePrompt,
+            message,
+            versionText);
     }
 
     private static bool HasCompleteTriplet(string paks, string stem) =>
@@ -554,4 +634,5 @@ public sealed record BuiltinModSyncStatus(
     bool CanInstall,
     bool CanRemove,
     bool NeedsUpdatePrompt,
-    string Message);
+    string Message,
+    string VersionText = "");

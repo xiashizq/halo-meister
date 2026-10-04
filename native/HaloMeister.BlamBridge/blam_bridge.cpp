@@ -53,9 +53,21 @@ constexpr std::size_t kActorVariantOffset = 0x48;
 constexpr std::size_t kActorRecordSize = 0xD10;
 constexpr std::size_t kActorUnitDatumOffset = 0x1C;
 constexpr std::size_t kThreadActorDataOffset = 0x28;
+// aiObjectStateResolve walks thread-globals+0x40 and a fixed 8-slot table at
+// header+0x4C0 (stride 0x18, empty datum -1). A null return means every slot
+// is occupied; it does not mean the actor failed to spawn.
+constexpr std::size_t kThreadAiObjectStateOffset = 0x40;
+constexpr std::size_t kAiObjectStateTableOffset = 0x4C0;
+constexpr std::size_t kAiObjectStateStride = 0x18;
+constexpr std::size_t kAiObjectStateCapacity = 8;
 constexpr std::size_t kHsHookLength = 20;
 constexpr std::int16_t kAiPlayerAddFireteamSquadOpcode = 572;
 constexpr std::size_t kMaxAiPlacements = 5;
+constexpr std::size_t kMaxWaveGroups = 32;
+constexpr std::size_t kMaxWaveActors = 32;
+constexpr std::size_t kMaxWaveActorsPerFrame = 20;
+constexpr std::size_t kMaxWaveTeamPatches = 8;
+constexpr LONG kPendingWavePlace = 5;
 
 #include "generated_game_build.h"
 #include "generated_research_hooks.h"
@@ -89,6 +101,7 @@ enum class SpawnKind
     player_input,
     machinima,
     ai,
+    ai_wave,
     research_call,
     saved_film,
 };
@@ -264,6 +277,45 @@ std::array<bool, kMaxAiPlacements> g_deferred_ai_companion_done{};
 ULONGLONG g_deferred_ai_finalize_deadline = 0;
 bool g_deferred_ai_fireteam_done = false;
 std::int32_t g_deferred_variant_object_datum = -1;
+
+struct WaveActor
+{
+    std::int32_t datum{-1};
+    std::uint16_t squad_index{};
+    std::uint16_t team_value{};
+    bool follow{};
+    bool has_team{};
+    std::int32_t player_unit{-1};
+    bool companion_done{};
+};
+
+struct WaveTeamPatch
+{
+    std::uintptr_t address{};
+    std::array<std::uint8_t, 2> original{};
+};
+
+struct WaveFireteam
+{
+    std::uint16_t squad_index{};
+    std::int32_t player_unit{-1};
+    bool done{};
+};
+
+std::array<SpawnRequest, kMaxWaveGroups> g_parsed_wave_groups{};
+std::array<float, kMaxWaveGroups> g_parsed_wave_offset_x{};
+std::array<float, kMaxWaveGroups> g_parsed_wave_offset_y{};
+std::size_t g_parsed_wave_count = 0;
+std::array<SpawnRequest, kMaxWaveGroups> g_wave_groups{};
+std::size_t g_wave_group_count = 0;
+std::size_t g_wave_group_index = 0;
+std::size_t g_wave_group_actor_index = 0;
+std::array<WaveActor, kMaxWaveActors> g_wave_actors{};
+std::size_t g_wave_actor_count = 0;
+std::array<WaveTeamPatch, kMaxWaveTeamPatches> g_wave_team_patches{};
+std::size_t g_wave_team_patch_count = 0;
+std::array<WaveFireteam, kMaxWaveGroups> g_wave_fireteams{};
+std::size_t g_wave_fireteam_count = 0;
 thread_local bool g_processing_spawn = false;
 thread_local std::string g_ai_creation_diagnostic;
 thread_local const SpawnRequest* g_active_ai_override = nullptr;
@@ -359,11 +411,372 @@ void write_result(
         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 }
 
+bool parse_ai_payload(
+    const std::string& operation,
+    const std::string& payload,
+    SpawnRequest& request,
+    std::string& error)
+{
+        request.kind = SpawnKind::ai;
+        // A five-actor friendly team with a weapon override contains exactly
+        // 22 fields (including the controlled-player datum). Keep one spare
+        // slot so filling the last valid field is not mistaken for overflow.
+        std::array<std::string, 23> parts{};
+        std::size_t start = 0;
+        std::size_t part_count = 0;
+        while (part_count < parts.size())
+        {
+            std::size_t comma = payload.find(',', start);
+            parts[part_count++] = payload.substr(
+                start,
+                comma == std::string::npos ? std::string::npos : comma - start);
+            if (comma == std::string::npos)
+            {
+                break;
+            }
+            start = comma + 1;
+        }
+        if (start < payload.size() && part_count == parts.size())
+        {
+            error = "The AI spawn payload has too many fields.";
+            return false;
+        }
+        if (part_count > 0 &&
+            parts[part_count - 1].size() == 9 &&
+            parts[part_count - 1][0] == 'p')
+        {
+            std::uint32_t player_datum = 0;
+            auto player_result = std::from_chars(
+                parts[part_count - 1].data() + 1,
+                parts[part_count - 1].data() + 9,
+                player_datum,
+                16);
+            if (player_result.ec != std::errc{} ||
+                player_result.ptr != parts[part_count - 1].data() + 9 ||
+                player_datum == UINT32_MAX)
+            {
+                error = "The AI companion player datum is invalid.";
+                return false;
+            }
+            request.unit_datum = static_cast<std::int32_t>(player_datum);
+            request.ai_follow_player = true;
+            --part_count;
+        }
+        bool has_weapon_override = false;
+        if (operation == "ai")
+        {
+            request.ai_placement_count = 1;
+            if (part_count != 6 && part_count != 7)
+            {
+                error = "The AI spawn payload is incomplete.";
+                return false;
+            }
+            has_weapon_override = part_count == 7;
+        }
+        else
+        {
+            // One placement is valid (allegiance demo / single companion).
+            // Layout: squad,teamAddr,teamVal,(ref,pos,var)*N,charRef,variant[,weapon]
+            if (part_count >= 8 && (part_count - 5) % 3 == 0)
+            {
+                request.ai_placement_count = static_cast<std::uint16_t>(
+                    (part_count - 5) / 3);
+            }
+            else if (part_count >= 9 && (part_count - 6) % 3 == 0)
+            {
+                request.ai_placement_count = static_cast<std::uint16_t>(
+                    (part_count - 6) / 3);
+                has_weapon_override = true;
+            }
+            else
+            {
+                error =
+                    "The AI team payload must contain between one and five placements.";
+                return false;
+            }
+            if (request.ai_placement_count < 1 ||
+                request.ai_placement_count > kMaxAiPlacements)
+            {
+                error =
+                    "The AI team payload must contain between one and five placements.";
+                return false;
+            }
+        }
+        const std::size_t expected_parts =
+            1 + (operation == "ai_team" ? 2 : 0) +
+            request.ai_placement_count * 3 + 2 +
+            (has_weapon_override ? 1 : 0);
+        if (part_count != expected_parts)
+        {
+            error = "The AI spawn payload is incomplete.";
+            return false;
+        }
+        const std::size_t placement_part = operation == "ai_team" ? 3 : 1;
+        const std::size_t reference_part =
+            placement_part + request.ai_placement_count * 3;
+        const std::size_t variant_part = reference_part + 1;
+        const std::size_t weapon_part = variant_part + 1;
+        if (parts[0].size() != 4 ||
+            parts[reference_part].size() != 32 ||
+            parts[variant_part].size() != 8 ||
+            (has_weapon_override && parts[weapon_part].size() != 8))
+        {
+            error = "The AI spawn payload has an invalid field width.";
+            return false;
+        }
+
+        auto squad_result = std::from_chars(
+            parts[0].data(), parts[0].data() + parts[0].size(),
+            request.squad_index, 16);
+        if (squad_result.ec != std::errc{})
+        {
+            error = "The AI spawn payload contains an invalid hexadecimal number.";
+            return false;
+        }
+        if (operation == "ai_team")
+        {
+            if (parts[1].size() != 16 || parts[2].size() != 4)
+            {
+                error = "The AI team override has an invalid field width.";
+                return false;
+            }
+            std::uint64_t team_address = 0;
+            auto team_address_result = std::from_chars(
+                parts[1].data(),
+                parts[1].data() + parts[1].size(),
+                team_address,
+                16);
+            auto team_value_result = std::from_chars(
+                parts[2].data(),
+                parts[2].data() + parts[2].size(),
+                request.ai_team_value,
+                16);
+            if (team_address_result.ec != std::errc{} ||
+                team_value_result.ec != std::errc{} ||
+                request.ai_team_value > 15)
+            {
+                error = "The AI team override is invalid.";
+                return false;
+            }
+            request.ai_team_address =
+                static_cast<std::uintptr_t>(team_address);
+        }
+        for (std::size_t index = 0; index < request.ai_placement_count; ++index)
+        {
+            const std::size_t base = placement_part + index * 3;
+            if (parts[base].size() != 16 ||
+                parts[base + 1].size() != 16 ||
+                parts[base + 2].size() != 16)
+            {
+                error = "The AI placement payload has an invalid address width.";
+                return false;
+            }
+            std::uint64_t reference_address = 0;
+            std::uint64_t position_address = 0;
+            std::uint64_t variant_address = 0;
+            auto reference_result = std::from_chars(
+                parts[base].data(), parts[base].data() + parts[base].size(),
+                reference_address, 16);
+            auto position_result = std::from_chars(
+                parts[base + 1].data(),
+                parts[base + 1].data() + parts[base + 1].size(),
+                position_address, 16);
+            auto variant_result = std::from_chars(
+                parts[base + 2].data(),
+                parts[base + 2].data() + parts[base + 2].size(),
+                variant_address, 16);
+            if (reference_result.ec != std::errc{} ||
+                position_result.ec != std::errc{} ||
+                variant_result.ec != std::errc{})
+            {
+                error =
+                    "The AI spawn payload contains an invalid hexadecimal address.";
+                return false;
+            }
+            request.character_reference_addresses[index] =
+                static_cast<std::uintptr_t>(reference_address);
+            request.spawn_position_addresses[index] =
+                static_cast<std::uintptr_t>(position_address);
+            request.actor_variant_addresses[index] =
+                static_cast<std::uintptr_t>(variant_address);
+        }
+        for (std::size_t index = 0; index < request.character_reference.size(); ++index)
+        {
+            unsigned value = 0;
+            auto byte_result = std::from_chars(
+                parts[reference_part].data() + index * 2,
+                parts[reference_part].data() + index * 2 + 2,
+                value,
+                16);
+            if (byte_result.ec != std::errc{})
+            {
+                error = "The character tag reference is invalid.";
+                return false;
+            }
+            request.character_reference[index] = static_cast<std::uint8_t>(value);
+        }
+        for (std::size_t index = 0; index < request.actor_variant.size(); ++index)
+        {
+            unsigned value = 0;
+            auto byte_result = std::from_chars(
+                parts[variant_part].data() + index * 2,
+                parts[variant_part].data() + index * 2 + 2,
+                value,
+                16);
+            if (byte_result.ec != std::errc{})
+            {
+                error = "The AI spawn payload contains an invalid actor variant.";
+                return false;
+            }
+            request.actor_variant[index] = static_cast<std::uint8_t>(value);
+        }
+        if (has_weapon_override)
+        {
+            auto weapon_result = std::from_chars(
+                parts[weapon_part].data(),
+                parts[weapon_part].data() + parts[weapon_part].size(),
+                request.ai_weapon_datum,
+                16);
+            if (weapon_result.ec != std::errc{} ||
+                weapon_result.ptr !=
+                    parts[weapon_part].data() +
+                        parts[weapon_part].size() ||
+                request.ai_weapon_datum == UINT32_MAX)
+            {
+                error = "The AI weapon datum is invalid.";
+                return false;
+            }
+        }
+        constexpr std::array<std::uint8_t, 4> reversed_character_group{
+            'r', 'a', 'h', 'c',
+        };
+        if (!std::equal(
+                reversed_character_group.begin(),
+                reversed_character_group.end(),
+                request.character_reference.begin()))
+        {
+            error = "AI spawning requires a [char] tag reference.";
+            return false;
+        }
+    return true;
+}
+
+bool split_wave_group_suffix(
+    const std::string& segment,
+    std::string& base,
+    float& offset_x,
+    float& offset_y,
+    std::string& error)
+{
+    offset_x = 0.0f;
+    offset_y = 0.0f;
+    base = segment;
+    if (segment.size() < 4 ||
+        segment[segment.size() - 2] != ';' ||
+        (segment.back() != '0' && segment.back() != '1'))
+    {
+        return true;
+    }
+    const std::size_t follow_semi = segment.size() - 2;
+    if (follow_semi == 0)
+        return true;
+    const std::size_t y_semi = segment.rfind(';', follow_semi - 1);
+    if (y_semi == std::string::npos || y_semi == 0)
+        return true;
+    const std::size_t x_semi = segment.rfind(';', y_semi - 1);
+    if (x_semi == std::string::npos)
+        return true;
+    const std::string x_text = segment.substr(x_semi + 1, y_semi - x_semi - 1);
+    const std::string y_text = segment.substr(y_semi + 1, follow_semi - y_semi - 1);
+    char* end = nullptr;
+    offset_x = std::strtof(x_text.c_str(), &end);
+    if (!end || *end != '\0' || !std::isfinite(offset_x) ||
+        std::fabs(offset_x) > 64.0f)
+    {
+        error = "The AI wave formation offset is invalid.";
+        return false;
+    }
+    offset_y = std::strtof(y_text.c_str(), &end);
+    if (!end || *end != '\0' || !std::isfinite(offset_y) ||
+        std::fabs(offset_y) > 64.0f)
+    {
+        error = "The AI wave formation offset is invalid.";
+        return false;
+    }
+    base = segment.substr(0, x_semi);
+    return true;
+}
+
+bool parse_ai_wave(
+    const std::string& payload,
+    SpawnRequest& request,
+    std::string& error)
+{
+    request.kind = SpawnKind::ai_wave;
+    g_parsed_wave_count = 0;
+    std::size_t actors = 0;
+    std::size_t cursor = 0;
+    while (cursor <= payload.size())
+    {
+        if (g_parsed_wave_count >= kMaxWaveGroups)
+        {
+            error = "The AI wave has too many groups.";
+            g_parsed_wave_count = 0;
+            return false;
+        }
+        const std::size_t bar = payload.find('|', cursor);
+        const std::string segment = payload.substr(
+            cursor,
+            bar == std::string::npos ? std::string::npos : bar - cursor);
+        if (segment.empty())
+        {
+            error = "The AI wave contains an empty group.";
+            g_parsed_wave_count = 0;
+            return false;
+        }
+        std::string base;
+        float offset_x = 0.0f;
+        float offset_y = 0.0f;
+        if (!split_wave_group_suffix(segment, base, offset_x, offset_y, error))
+        {
+            g_parsed_wave_count = 0;
+            return false;
+        }
+        SpawnRequest& group = g_parsed_wave_groups[g_parsed_wave_count];
+        group = SpawnRequest{};
+        if (!parse_ai_payload("ai_team", base, group, error))
+        {
+            g_parsed_wave_count = 0;
+            return false;
+        }
+        actors += group.ai_placement_count;
+        if (actors > kMaxWaveActors)
+        {
+            error = "The AI wave is larger than 32 actors.";
+            g_parsed_wave_count = 0;
+            return false;
+        }
+        g_parsed_wave_offset_x[g_parsed_wave_count] = offset_x;
+        g_parsed_wave_offset_y[g_parsed_wave_count] = offset_y;
+        ++g_parsed_wave_count;
+        if (bar == std::string::npos)
+            break;
+        cursor = bar + 1;
+    }
+    if (g_parsed_wave_count == 0)
+    {
+        error = "The AI wave is empty.";
+        return false;
+    }
+    return true;
+}
+
 bool parse_request(
     const std::filesystem::path& path,
     SpawnRequest& request,
     std::string& error)
 {
+    g_parsed_wave_count = 0;
     std::ifstream input(path, std::ios::binary);
     std::string magic;
     std::string operation;
@@ -1021,247 +1434,13 @@ bool parse_request(
     }
     else if (operation == "ai" || operation == "ai_team")
     {
-        request.kind = SpawnKind::ai;
-        // A five-actor friendly team with a weapon override contains exactly
-        // 22 fields (including the controlled-player datum). Keep one spare
-        // slot so filling the last valid field is not mistaken for overflow.
-        std::array<std::string, 23> parts{};
-        std::size_t start = 0;
-        std::size_t part_count = 0;
-        while (part_count < parts.size())
-        {
-            std::size_t comma = payload.find(',', start);
-            parts[part_count++] = payload.substr(
-                start,
-                comma == std::string::npos ? std::string::npos : comma - start);
-            if (comma == std::string::npos)
-            {
-                break;
-            }
-            start = comma + 1;
-        }
-        if (start < payload.size() && part_count == parts.size())
-        {
-            error = "The AI spawn payload has too many fields.";
+        if (!parse_ai_payload(operation, payload, request, error))
             return false;
-        }
-        if (part_count > 0 &&
-            parts[part_count - 1].size() == 9 &&
-            parts[part_count - 1][0] == 'p')
-        {
-            std::uint32_t player_datum = 0;
-            auto player_result = std::from_chars(
-                parts[part_count - 1].data() + 1,
-                parts[part_count - 1].data() + 9,
-                player_datum,
-                16);
-            if (player_result.ec != std::errc{} ||
-                player_result.ptr != parts[part_count - 1].data() + 9 ||
-                player_datum == UINT32_MAX)
-            {
-                error = "The AI companion player datum is invalid.";
-                return false;
-            }
-            request.unit_datum = static_cast<std::int32_t>(player_datum);
-            request.ai_follow_player = true;
-            --part_count;
-        }
-        bool has_weapon_override = false;
-        if (operation == "ai")
-        {
-            request.ai_placement_count = 1;
-            if (part_count != 6 && part_count != 7)
-            {
-                error = "The AI spawn payload is incomplete.";
-                return false;
-            }
-            has_weapon_override = part_count == 7;
-        }
-        else
-        {
-            // One placement is valid (allegiance demo / single companion).
-            // Layout: squad,teamAddr,teamVal,(ref,pos,var)*N,charRef,variant[,weapon]
-            if (part_count >= 8 && (part_count - 5) % 3 == 0)
-            {
-                request.ai_placement_count = static_cast<std::uint16_t>(
-                    (part_count - 5) / 3);
-            }
-            else if (part_count >= 9 && (part_count - 6) % 3 == 0)
-            {
-                request.ai_placement_count = static_cast<std::uint16_t>(
-                    (part_count - 6) / 3);
-                has_weapon_override = true;
-            }
-            else
-            {
-                error =
-                    "The AI team payload must contain between one and five placements.";
-                return false;
-            }
-            if (request.ai_placement_count < 1 ||
-                request.ai_placement_count > kMaxAiPlacements)
-            {
-                error =
-                    "The AI team payload must contain between one and five placements.";
-                return false;
-            }
-        }
-        const std::size_t expected_parts =
-            1 + (operation == "ai_team" ? 2 : 0) +
-            request.ai_placement_count * 3 + 2 +
-            (has_weapon_override ? 1 : 0);
-        if (part_count != expected_parts)
-        {
-            error = "The AI spawn payload is incomplete.";
+    }
+    else if (operation == "ai_wave")
+    {
+        if (!parse_ai_wave(payload, request, error))
             return false;
-        }
-        const std::size_t placement_part = operation == "ai_team" ? 3 : 1;
-        const std::size_t reference_part =
-            placement_part + request.ai_placement_count * 3;
-        const std::size_t variant_part = reference_part + 1;
-        const std::size_t weapon_part = variant_part + 1;
-        if (parts[0].size() != 4 ||
-            parts[reference_part].size() != 32 ||
-            parts[variant_part].size() != 8 ||
-            (has_weapon_override && parts[weapon_part].size() != 8))
-        {
-            error = "The AI spawn payload has an invalid field width.";
-            return false;
-        }
-
-        auto squad_result = std::from_chars(
-            parts[0].data(), parts[0].data() + parts[0].size(),
-            request.squad_index, 16);
-        if (squad_result.ec != std::errc{})
-        {
-            error = "The AI spawn payload contains an invalid hexadecimal number.";
-            return false;
-        }
-        if (operation == "ai_team")
-        {
-            if (parts[1].size() != 16 || parts[2].size() != 4)
-            {
-                error = "The AI team override has an invalid field width.";
-                return false;
-            }
-            std::uint64_t team_address = 0;
-            auto team_address_result = std::from_chars(
-                parts[1].data(),
-                parts[1].data() + parts[1].size(),
-                team_address,
-                16);
-            auto team_value_result = std::from_chars(
-                parts[2].data(),
-                parts[2].data() + parts[2].size(),
-                request.ai_team_value,
-                16);
-            if (team_address_result.ec != std::errc{} ||
-                team_value_result.ec != std::errc{} ||
-                request.ai_team_value > 15)
-            {
-                error = "The AI team override is invalid.";
-                return false;
-            }
-            request.ai_team_address =
-                static_cast<std::uintptr_t>(team_address);
-        }
-        for (std::size_t index = 0; index < request.ai_placement_count; ++index)
-        {
-            const std::size_t base = placement_part + index * 3;
-            if (parts[base].size() != 16 ||
-                parts[base + 1].size() != 16 ||
-                parts[base + 2].size() != 16)
-            {
-                error = "The AI placement payload has an invalid address width.";
-                return false;
-            }
-            std::uint64_t reference_address = 0;
-            std::uint64_t position_address = 0;
-            std::uint64_t variant_address = 0;
-            auto reference_result = std::from_chars(
-                parts[base].data(), parts[base].data() + parts[base].size(),
-                reference_address, 16);
-            auto position_result = std::from_chars(
-                parts[base + 1].data(),
-                parts[base + 1].data() + parts[base + 1].size(),
-                position_address, 16);
-            auto variant_result = std::from_chars(
-                parts[base + 2].data(),
-                parts[base + 2].data() + parts[base + 2].size(),
-                variant_address, 16);
-            if (reference_result.ec != std::errc{} ||
-                position_result.ec != std::errc{} ||
-                variant_result.ec != std::errc{})
-            {
-                error =
-                    "The AI spawn payload contains an invalid hexadecimal address.";
-                return false;
-            }
-            request.character_reference_addresses[index] =
-                static_cast<std::uintptr_t>(reference_address);
-            request.spawn_position_addresses[index] =
-                static_cast<std::uintptr_t>(position_address);
-            request.actor_variant_addresses[index] =
-                static_cast<std::uintptr_t>(variant_address);
-        }
-        for (std::size_t index = 0; index < request.character_reference.size(); ++index)
-        {
-            unsigned value = 0;
-            auto byte_result = std::from_chars(
-                parts[reference_part].data() + index * 2,
-                parts[reference_part].data() + index * 2 + 2,
-                value,
-                16);
-            if (byte_result.ec != std::errc{})
-            {
-                error = "The character tag reference is invalid.";
-                return false;
-            }
-            request.character_reference[index] = static_cast<std::uint8_t>(value);
-        }
-        for (std::size_t index = 0; index < request.actor_variant.size(); ++index)
-        {
-            unsigned value = 0;
-            auto byte_result = std::from_chars(
-                parts[variant_part].data() + index * 2,
-                parts[variant_part].data() + index * 2 + 2,
-                value,
-                16);
-            if (byte_result.ec != std::errc{})
-            {
-                error = "The AI spawn payload contains an invalid actor variant.";
-                return false;
-            }
-            request.actor_variant[index] = static_cast<std::uint8_t>(value);
-        }
-        if (has_weapon_override)
-        {
-            auto weapon_result = std::from_chars(
-                parts[weapon_part].data(),
-                parts[weapon_part].data() + parts[weapon_part].size(),
-                request.ai_weapon_datum,
-                16);
-            if (weapon_result.ec != std::errc{} ||
-                weapon_result.ptr !=
-                    parts[weapon_part].data() +
-                        parts[weapon_part].size() ||
-                request.ai_weapon_datum == UINT32_MAX)
-            {
-                error = "The AI weapon datum is invalid.";
-                return false;
-            }
-        }
-        constexpr std::array<std::uint8_t, 4> reversed_character_group{
-            'r', 'a', 'h', 'c',
-        };
-        if (!std::equal(
-                reversed_character_group.begin(),
-                reversed_character_group.end(),
-                request.character_reference.begin()))
-        {
-            error = "AI spawning requires a [char] tag reference.";
-            return false;
-        }
     }
     else if (operation == "research_call")
     {
@@ -1396,6 +1575,28 @@ bool parse_request(
     {
         error = "The native spawn request contains an invalid number.";
         return false;
+    }
+    if (request.kind == SpawnKind::ai_wave)
+    {
+        for (std::size_t index = 0; index < g_parsed_wave_count; ++index)
+        {
+            SpawnRequest& group = g_parsed_wave_groups[index];
+            const float facing_x = request.ai_right_x;
+            const float facing_y = request.ai_right_y;
+            const float forward_x = -facing_y;
+            const float forward_y = facing_x;
+            group.x = request.x +
+                facing_x * g_parsed_wave_offset_x[index] +
+                forward_x * g_parsed_wave_offset_y[index];
+            group.y = request.y +
+                facing_y * g_parsed_wave_offset_x[index] +
+                forward_y * g_parsed_wave_offset_y[index];
+            group.z = request.z;
+            group.ai_right_x = facing_x;
+            group.ai_right_y = facing_y;
+            group.id = request.id;
+            group.kind = SpawnKind::ai;
+        }
     }
     return true;
 }
@@ -1544,7 +1745,7 @@ bool validate_module(
              module + kMachinimaCameraToggleRva,
              kMachinimaCameraTogglePrologue.data(),
              kMachinimaCameraTogglePrologue.size()) != 0) ||
-        (kind == SpawnKind::ai &&
+        ((kind == SpawnKind::ai || kind == SpawnKind::ai_wave) &&
          std::memcmp(
              module + kAiPlaceRva,
              kAiPlacePrologue.data(),
@@ -3076,6 +3277,12 @@ void maintain_player_team(std::uint8_t* module)
     {
         return;
     }
+    // simulation_context runs on several threads. Only the campaign thread
+    // has the live unit; other threads would fault object_get and throw.
+    if (try_resolve_live_skull_mask(module) == nullptr)
+    {
+        return;
+    }
 
     // Campaign synchronization republishes the controlled player's authored
     // team after a one-shot write. Keep the live unit field and the retail
@@ -3960,6 +4167,8 @@ bool restamp_deferred_ai_teams(
 DWORD invoke_actor_new_direct(
     const SpawnRequest* request,
     std::array<std::int32_t, kMaxAiPlacements>* created_actors,
+    std::size_t actor_begin,
+    std::size_t actor_count,
     std::uintptr_t* exception_address)
 {
     DWORD exception_code = 0;
@@ -4009,8 +4218,8 @@ DWORD invoke_actor_new_direct(
             return ERROR_NOT_FOUND;
         }
 
-        for (std::size_t index = 0;
-             index < request->ai_placement_count;
+        for (std::size_t index = actor_begin;
+             index < actor_begin + actor_count;
              ++index)
         {
             alignas(16)
@@ -4065,7 +4274,7 @@ DWORD invoke_actor_new_direct(
                 position[2]);
             g_ai_creation_diagnostic = diagnostic;
 
-            (*created_actors)[index] = g_original_actor_new(
+            (*created_actors)[index - actor_begin] = g_original_actor_new(
                 static_cast<std::int16_t>(request->squad_index),
                 location.data());
         }
@@ -4079,6 +4288,221 @@ DWORD invoke_actor_new_direct(
     {
     }
     return exception_code;
+}
+
+DWORD invoke_ai_object_state_resolve(
+    std::uint8_t* module,
+    std::int32_t unit_datum,
+    std::uint8_t** state,
+    std::uintptr_t* exception_address)
+{
+    using AiObjectStateResolve = std::uint8_t* (*)(std::int32_t);
+    auto resolve_state = reinterpret_cast<AiObjectStateResolve>(
+        module + kAiObjectStateResolveRva);
+    DWORD exception_code = 0;
+    __try
+    {
+        *state = resolve_state(unit_datum);
+    }
+    __except ((
+        exception_code =
+            GetExceptionInformation()->ExceptionRecord->ExceptionCode,
+        *exception_address = reinterpret_cast<std::uintptr_t>(
+            GetExceptionInformation()->ExceptionRecord->ExceptionAddress),
+        EXCEPTION_EXECUTE_HANDLER))
+    {
+        *state = nullptr;
+    }
+    return exception_code;
+}
+
+DWORD invoke_ai_object_set_team(
+    std::uint8_t* module,
+    std::int32_t unit_datum,
+    std::int32_t team,
+    std::uintptr_t* exception_address)
+{
+    using AiObjectSetTeam = void (*)(std::int32_t, std::int32_t);
+    auto set_team = reinterpret_cast<AiObjectSetTeam>(
+        module + kAiObjectSetTeamRva);
+    DWORD exception_code = 0;
+    __try
+    {
+        set_team(unit_datum, team);
+    }
+    __except ((
+        exception_code =
+            GetExceptionInformation()->ExceptionRecord->ExceptionCode,
+        *exception_address = reinterpret_cast<std::uintptr_t>(
+            GetExceptionInformation()->ExceptionRecord->ExceptionAddress),
+        EXCEPTION_EXECUTE_HANDLER))
+    {
+    }
+    return exception_code;
+}
+
+bool unit_object_is_live(std::uint8_t* module, std::int32_t unit_datum)
+{
+    if (unit_datum == -1)
+        return false;
+    void* object = nullptr;
+    std::uintptr_t exception_address = 0;
+    return invoke_object_get(
+               module, unit_datum, &object, &exception_address) == 0 &&
+           object != nullptr;
+}
+
+std::uint8_t* try_ai_object_state_slots(std::uint8_t* module)
+{
+    void* thread_globals = try_resolve_game_thread_globals(module);
+    if (!thread_globals)
+        return nullptr;
+    std::uint8_t* header = nullptr;
+    std::memcpy(
+        &header,
+        static_cast<std::uint8_t*>(thread_globals) + kThreadAiObjectStateOffset,
+        sizeof(header));
+    if (!header)
+        return nullptr;
+    std::uint8_t* slots = header + kAiObjectStateTableOffset;
+    if (!writable_range(
+            reinterpret_cast<std::uintptr_t>(slots),
+            kAiObjectStateStride * kAiObjectStateCapacity))
+        return nullptr;
+    return slots;
+}
+
+void write_ai_object_state_team(
+    std::uint8_t* state,
+    std::int32_t unit_datum,
+    std::int8_t team)
+{
+    std::int32_t state_object = -1;
+    std::memcpy(&state_object, state, sizeof(state_object));
+    if (state_object != unit_datum)
+    {
+        std::memcpy(state, &unit_datum, sizeof(unit_datum));
+        const std::uint32_t zero = 0;
+        const std::uint32_t default_flags = 0xFF7FFFFF;
+        const std::uint16_t zero_short = 0;
+        std::memcpy(state + 8, &zero, sizeof(zero));
+        std::memcpy(state + 0x14, &default_flags, sizeof(default_flags));
+        std::memcpy(state + 0x0C, &zero_short, sizeof(zero_short));
+    }
+    state[4] = static_cast<std::uint8_t>(team);
+}
+
+std::uint8_t* claim_ai_object_state_slot(
+    std::uint8_t* module,
+    std::int32_t unit_datum)
+{
+    std::uint8_t* resolved = nullptr;
+    std::uintptr_t exception_address = 0;
+    if (invoke_ai_object_state_resolve(
+            module, unit_datum, &resolved, &exception_address) == 0 &&
+        resolved != nullptr &&
+        writable_range(
+            reinterpret_cast<std::uintptr_t>(resolved),
+            kAiObjectStateStride))
+    {
+        std::int32_t stored = -1;
+        std::memcpy(&stored, resolved, sizeof(stored));
+        // Own slot or a free slot. Any other datum belongs to someone else.
+        if (stored == unit_datum || stored == -1)
+            return resolved;
+    }
+
+    std::uint8_t* slots = try_ai_object_state_slots(module);
+    if (!slots)
+        return nullptr;
+    std::uint8_t* stale = nullptr;
+    for (std::size_t index = 0; index < kAiObjectStateCapacity; ++index)
+    {
+        std::uint8_t* slot = slots + index * kAiObjectStateStride;
+        std::int32_t stored = -1;
+        std::memcpy(&stored, slot, sizeof(stored));
+        if (stored == unit_datum || stored == -1)
+            return slot;
+        if (stale == nullptr && !unit_object_is_live(module, stored))
+            stale = slot;
+    }
+    return stale;
+}
+
+ObjectAllegianceEntry* claim_allegiance_entry(
+    std::uint8_t* module,
+    std::int32_t unit_datum)
+{
+    ObjectAllegianceEntry* entries = resolve_object_allegiances(module);
+    ObjectAllegianceEntry* empty = nullptr;
+    ObjectAllegianceEntry* stale = nullptr;
+    for (std::size_t index = 0; index < kObjectAllegianceEntryCount; ++index)
+    {
+        ObjectAllegianceEntry* entry = entries + index;
+        if (entry->object_datum == unit_datum)
+            return entry;
+        if (entry->object_datum == -1)
+        {
+            if (empty == nullptr)
+                empty = entry;
+            continue;
+        }
+        // A free slot is enough. Do not call object_get for the remaining
+        // live entries just to remember a stale fallback.
+        if (empty != nullptr)
+            continue;
+        if (stale == nullptr && !unit_object_is_live(module, entry->object_datum))
+            stale = entry;
+    }
+    return empty != nullptr ? empty : stale;
+}
+
+bool publish_unit_campaign_team(
+    std::uint8_t* module,
+    std::int32_t unit_datum,
+    std::int8_t team,
+    std::int8_t* unit_team,
+    const char* retain_error,
+    const char** error)
+{
+    // The 8-slot AI object-state cache is a mirror. Combat disposition still
+    // follows the unit team, ai_object_set_team, and the allegiance table.
+    // Missing a cache slot must not fail a spawn that already created actors.
+    std::uint8_t* state = claim_ai_object_state_slot(module, unit_datum);
+    if (state != nullptr)
+        write_ai_object_state_team(state, unit_datum, team);
+    *unit_team = team;
+    std::uintptr_t exception_address = 0;
+    (void)invoke_ai_object_set_team(
+        module, unit_datum, team, &exception_address);
+    if (state != nullptr)
+        state[4] = static_cast<std::uint8_t>(team);
+    if (*unit_team != team)
+    {
+        *error = retain_error;
+        return false;
+    }
+
+    try
+    {
+        ObjectAllegianceEntry* target =
+            claim_allegiance_entry(module, unit_datum);
+        if (target == nullptr)
+            return true;
+        target->object_datum = unit_datum;
+        target->team = team;
+        if (target->object_datum != unit_datum || target->team != team)
+        {
+            *error = "The game did not retain the companion allegiance override.";
+            return false;
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        *error = exception.what();
+        return false;
+    }
+    return true;
 }
 
 bool configure_actor_as_player_companion(
@@ -4186,86 +4610,13 @@ bool configure_actor_as_player_companion(
         return false;
     }
 
-    using AiObjectStateResolve = std::uint8_t* (*)(std::int32_t);
-    using AiObjectSetTeam = void (*)(std::int32_t, std::int32_t);
-    auto resolve_state = reinterpret_cast<AiObjectStateResolve>(
-        module + kAiObjectStateResolveRva);
-    auto set_team = reinterpret_cast<AiObjectSetTeam>(
-        module + kAiObjectSetTeamRva);
-    std::uint8_t* state = resolve_state(unit_datum);
-    if (!state ||
-        !writable_range(
-            reinterpret_cast<std::uintptr_t>(state),
-            0x18))
-    {
-        *error = "The companion AI object state is unavailable.";
-        return false;
-    }
-
-    std::int32_t state_object = -1;
-    std::memcpy(&state_object, state, sizeof(state_object));
-    if (state_object != unit_datum)
-    {
-        std::memcpy(state, &unit_datum, sizeof(unit_datum));
-        const std::uint32_t zero = 0;
-        const std::uint32_t default_flags = 0xFF7FFFFF;
-        const std::uint16_t zero_short = 0;
-        std::memcpy(state + 8, &zero, sizeof(zero));
-        std::memcpy(state + 0x14, &default_flags, sizeof(default_flags));
-        std::memcpy(state + 0x0C, &zero_short, sizeof(zero_short));
-    }
-    state[4] = static_cast<std::uint8_t>(team);
-    *companion_team = team;
-    set_team(unit_datum, team);
-    if (*companion_team != team || state[4] != static_cast<std::uint8_t>(team))
-    {
-        *error = "The game did not retain the companion team.";
-        return false;
-    }
-
-    // Targeting consults the per-object allegiance table; unit-team alone is
-    // not enough when the actor was created from a hostile borrowed squad.
-    try
-    {
-        ObjectAllegianceEntry* entries = resolve_object_allegiances(module);
-        ObjectAllegianceEntry* matching = std::find_if(
-            entries,
-            entries + kObjectAllegianceEntryCount,
-            [&](const ObjectAllegianceEntry& entry)
-            {
-                return entry.object_datum == unit_datum;
-            });
-        ObjectAllegianceEntry* target = matching;
-        if (target == entries + kObjectAllegianceEntryCount)
-        {
-            target = std::find_if(
-                entries,
-                entries + kObjectAllegianceEntryCount,
-                [](const ObjectAllegianceEntry& entry)
-                {
-                    return entry.object_datum == -1;
-                });
-        }
-        if (target == entries + kObjectAllegianceEntryCount)
-        {
-            *error =
-                "All 16 object-specific allegiance override slots are in use.";
-            return false;
-        }
-        target->object_datum = unit_datum;
-        target->team = team;
-        if (target->object_datum != unit_datum || target->team != team)
-        {
-            *error = "The game did not retain the companion allegiance override.";
-            return false;
-        }
-    }
-    catch (const std::exception& exception)
-    {
-        *error = exception.what();
-        return false;
-    }
-    return true;
+    return publish_unit_campaign_team(
+        module,
+        unit_datum,
+        team,
+        companion_team,
+        "The game did not retain the companion team.",
+        error);
 }
 
 bool resolve_actor_unit_datum(
@@ -4367,69 +4718,13 @@ bool apply_unit_campaign_team(
         return false;
     }
 
-    using AiObjectStateResolve = std::uint8_t* (*)(std::int32_t);
-    using AiObjectSetTeam = void (*)(std::int32_t, std::int32_t);
-    auto resolve_state = reinterpret_cast<AiObjectStateResolve>(
-        module + kAiObjectStateResolveRva);
-    auto set_team = reinterpret_cast<AiObjectSetTeam>(
-        module + kAiObjectSetTeamRva);
-    std::uint8_t* state = resolve_state(unit_datum);
-    if (!state ||
-        !writable_range(reinterpret_cast<std::uintptr_t>(state), 0x18))
-    {
-        *error = "The AI object state is unavailable.";
-        return false;
-    }
-    std::int32_t state_object = -1;
-    std::memcpy(&state_object, state, sizeof(state_object));
-    if (state_object != unit_datum)
-    {
-        std::memcpy(state, &unit_datum, sizeof(unit_datum));
-        const std::uint32_t zero = 0;
-        const std::uint32_t default_flags = 0xFF7FFFFF;
-        const std::uint16_t zero_short = 0;
-        std::memcpy(state + 8, &zero, sizeof(zero));
-        std::memcpy(state + 0x14, &default_flags, sizeof(default_flags));
-        std::memcpy(state + 0x0C, &zero_short, sizeof(zero_short));
-    }
-    state[4] = static_cast<std::uint8_t>(team);
-    *unit_team = team;
-    set_team(unit_datum, team);
-
-    ObjectAllegianceEntry* entries = resolve_object_allegiances(module);
-    ObjectAllegianceEntry* matching = std::find_if(
-        entries,
-        entries + kObjectAllegianceEntryCount,
-        [&](const ObjectAllegianceEntry& entry)
-        {
-            return entry.object_datum == unit_datum;
-        });
-    ObjectAllegianceEntry* target = matching;
-    if (target == entries + kObjectAllegianceEntryCount)
-    {
-        target = std::find_if(
-            entries,
-            entries + kObjectAllegianceEntryCount,
-            [](const ObjectAllegianceEntry& entry)
-            {
-                return entry.object_datum == -1;
-            });
-    }
-    if (target == entries + kObjectAllegianceEntryCount)
-    {
-        *error = "All 16 object-specific allegiance override slots are in use.";
-        return false;
-    }
-    target->object_datum = unit_datum;
-    target->team = team;
-    if (*unit_team != team ||
-        state[4] != static_cast<std::uint8_t>(team) ||
-        target->team != team)
-    {
-        *error = "The game did not retain the requested campaign team.";
-        return false;
-    }
-    return true;
+    return publish_unit_campaign_team(
+        module,
+        unit_datum,
+        team,
+        unit_team,
+        "The game did not retain the requested campaign team.",
+        error);
 }
 
 bool clear_actor_player_combat_targets(
@@ -4951,22 +5246,37 @@ bool finalize_deferred_ai(
             &exception_address);
         if (exception_code != 0)
         {
-            char message[192]{};
-            std::snprintf(
-                message,
-                sizeof(message),
-                "Player-fireteam registration raised Windows exception "
-                "0x%08X at simulation RVA 0x%llX.",
-                static_cast<unsigned>(exception_code),
-                exception_address >= reinterpret_cast<std::uintptr_t>(module)
-                    ? static_cast<unsigned long long>(
-                          exception_address -
-                          reinterpret_cast<std::uintptr_t>(module))
-                    : 0ULL);
-            error = message;
-            return false;
+            if (GetTickCount64() < g_deferred_ai_finalize_deadline)
+            {
+                char message[192]{};
+                std::snprintf(
+                    message,
+                    sizeof(message),
+                    "Player-fireteam registration raised Windows exception "
+                    "0x%08X at simulation RVA 0x%llX.",
+                    static_cast<unsigned>(exception_code),
+                    exception_address >= reinterpret_cast<std::uintptr_t>(module)
+                        ? static_cast<unsigned long long>(
+                              exception_address -
+                              reinterpret_cast<std::uintptr_t>(module))
+                        : 0ULL);
+                error = message;
+                return false;
+            }
+            // Team is already applied. Failing the batch here told the UI that
+            // zero actors spawned and left the units in the world.
+            g_deferred_ai_fireteam_done = true;
+            if (g_deferred_result_message.find(
+                    "Fireteam follow was not registered") == std::string::npos)
+            {
+                g_deferred_result_message +=
+                    " Fireteam follow was not registered.";
+            }
         }
-        g_deferred_ai_fireteam_done = true;
+        else
+        {
+            g_deferred_ai_fireteam_done = true;
+        }
     }
     return true;
 }
@@ -5174,6 +5484,411 @@ bool restore_deferred_ai_patch(std::string& error)
     return true;
 }
 
+bool patch_wave_team(const SpawnRequest& group, std::string& error)
+{
+    if (group.ai_team_address == 0)
+        return true;
+    for (std::size_t index = 0; index < g_wave_team_patch_count; ++index)
+    {
+        if (g_wave_team_patches[index].address != group.ai_team_address)
+            continue;
+        if (!writable_range(group.ai_team_address, sizeof(group.ai_team_value)))
+        {
+            error = "The borrowed scenario squad team is not writable.";
+            return false;
+        }
+        std::memcpy(
+            reinterpret_cast<void*>(group.ai_team_address),
+            &group.ai_team_value,
+            sizeof(group.ai_team_value));
+        return true;
+    }
+    if (g_wave_team_patch_count >= kMaxWaveTeamPatches)
+    {
+        error = "The AI wave patches too many squad teams.";
+        return false;
+    }
+    if (!writable_range(group.ai_team_address, sizeof(group.ai_team_value)))
+    {
+        error = "The borrowed scenario squad team is not writable.";
+        return false;
+    }
+    WaveTeamPatch& patch = g_wave_team_patches[g_wave_team_patch_count];
+    std::memcpy(
+        patch.original.data(),
+        reinterpret_cast<const void*>(group.ai_team_address),
+        patch.original.size());
+    std::memcpy(
+        reinterpret_cast<void*>(group.ai_team_address),
+        &group.ai_team_value,
+        sizeof(group.ai_team_value));
+    patch.address = group.ai_team_address;
+    ++g_wave_team_patch_count;
+    return true;
+}
+
+bool restore_wave_team_patches(std::string& error)
+{
+    DWORD exception_code = 0;
+    __try
+    {
+        for (std::size_t index = g_wave_team_patch_count; index > 0; --index)
+        {
+            const WaveTeamPatch& patch = g_wave_team_patches[index - 1];
+            if (patch.address == 0)
+                continue;
+            std::memcpy(
+                reinterpret_cast<void*>(patch.address),
+                patch.original.data(),
+                patch.original.size());
+        }
+    }
+    __except ((
+        exception_code =
+            GetExceptionInformation()->ExceptionRecord->ExceptionCode,
+        EXCEPTION_EXECUTE_HANDLER))
+    {
+    }
+    g_wave_team_patch_count = 0;
+    if (exception_code != 0)
+    {
+        char message[160]{};
+        std::snprintf(
+            message,
+            sizeof(message),
+            "AI placement was submitted, but restoring its scenario team "
+            "raised Windows exception 0x%08X.",
+            static_cast<unsigned>(exception_code));
+        error = message;
+        return false;
+    }
+    return true;
+}
+
+void format_wave_message()
+{
+    if (g_wave_actor_count == 0 || g_wave_group_count == 0)
+    {
+        g_deferred_result_message = "Created 0 native AI actor(s).";
+        return;
+    }
+    const SpawnRequest& first = g_wave_groups[0];
+    char message[1280]{};
+    int written = std::snprintf(
+        message,
+        sizeof(message),
+        "Created %u native AI actor(s) at %.2f, %.2f, %.2f "
+        "(first actor datum 0x%08X; actor datums",
+        static_cast<unsigned>(g_wave_actor_count),
+        first.x,
+        first.y,
+        first.z,
+        static_cast<std::uint32_t>(g_wave_actors[0].datum));
+    for (std::size_t index = 0;
+         index < g_wave_actor_count && written > 0 &&
+         static_cast<std::size_t>(written) + 12 < sizeof(message);
+         ++index)
+    {
+        written += std::snprintf(
+            message + written,
+            sizeof(message) - static_cast<std::size_t>(written),
+            "%s0x%08X",
+            index == 0 ? " " : ",",
+            static_cast<std::uint32_t>(g_wave_actors[index].datum));
+    }
+    if (written > 0 && static_cast<std::size_t>(written) + 3 < sizeof(message))
+    {
+        std::snprintf(
+            message + written,
+            sizeof(message) - static_cast<std::size_t>(written),
+            ").");
+    }
+    g_deferred_result_message = message;
+}
+
+bool place_wave_frame(
+    std::uint8_t* module,
+    std::string& error,
+    bool& finished)
+{
+    finished = false;
+    int placed_this_frame = 0;
+    while (g_wave_group_index < g_wave_group_count &&
+           placed_this_frame < static_cast<int>(kMaxWaveActorsPerFrame))
+    {
+        const SpawnRequest& group = g_wave_groups[g_wave_group_index];
+        if (g_wave_group_actor_index == 0 && !patch_wave_team(group, error))
+            return false;
+        const std::size_t remaining =
+            group.ai_placement_count - g_wave_group_actor_index;
+        const std::size_t room =
+            static_cast<std::size_t>(kMaxWaveActorsPerFrame) -
+            static_cast<std::size_t>(placed_this_frame);
+        const std::size_t take = remaining < room ? remaining : room;
+        if (take == 0 || g_wave_actor_count + take > kMaxWaveActors)
+        {
+            error = "The AI wave is larger than 32 actors.";
+            return false;
+        }
+        std::array<std::int32_t, kMaxAiPlacements> created{};
+        created.fill(-1);
+        std::uintptr_t exception_address = 0;
+        const DWORD exception_code = invoke_actor_new_direct(
+            &group,
+            &created,
+            g_wave_group_actor_index,
+            take,
+            &exception_address);
+        if (exception_code == ERROR_NOT_FOUND)
+        {
+            error =
+                "The engine did not build an authored AI starting location for the "
+                "selected hostile squad.";
+            return false;
+        }
+        if (exception_code == ERROR_INVALID_STATE)
+        {
+            error =
+                "The actor was created, but the game rejected its friendly "
+                "companion state. " + g_ai_creation_diagnostic;
+            return false;
+        }
+        if (exception_code != 0)
+        {
+            char message[192]{};
+            std::snprintf(
+                message,
+                sizeof(message),
+                "Native actor_new raised Windows exception 0x%08X at simulation RVA 0x%llX.",
+                static_cast<unsigned>(exception_code),
+                exception_address >= reinterpret_cast<std::uintptr_t>(module)
+                    ? static_cast<unsigned long long>(
+                          exception_address - reinterpret_cast<std::uintptr_t>(module))
+                    : 0ULL);
+            error = message;
+            return false;
+        }
+        for (std::size_t index = 0; index < take; ++index)
+        {
+            if (created[index] == -1)
+            {
+                error =
+                    "Native actor_new rejected the selected character or starting "
+                    "location. " + g_ai_creation_diagnostic;
+                return false;
+            }
+            WaveActor& actor = g_wave_actors[g_wave_actor_count++];
+            actor.datum = created[index];
+            actor.squad_index = group.squad_index;
+            actor.team_value = group.ai_team_value;
+            actor.follow = group.ai_follow_player;
+            actor.player_unit = group.unit_datum;
+            actor.companion_done = false;
+            actor.has_team = group.ai_team_address != 0;
+        }
+        g_wave_group_actor_index += take;
+        placed_this_frame += static_cast<int>(take);
+        if (g_wave_group_actor_index >= group.ai_placement_count)
+        {
+            ++g_wave_group_index;
+            g_wave_group_actor_index = 0;
+        }
+    }
+    finished = g_wave_group_index >= g_wave_group_count;
+    if (finished)
+        format_wave_message();
+    return true;
+}
+
+bool remember_wave_fireteam(const WaveActor& actor)
+{
+    if (!actor.follow)
+        return true;
+    for (std::size_t index = 0; index < g_wave_fireteam_count; ++index)
+    {
+        if (g_wave_fireteams[index].squad_index == actor.squad_index)
+            return true;
+    }
+    if (g_wave_fireteam_count >= g_wave_fireteams.size())
+        return true;
+    WaveFireteam& fireteam = g_wave_fireteams[g_wave_fireteam_count++];
+    fireteam.squad_index = actor.squad_index;
+    fireteam.player_unit = actor.player_unit;
+    fireteam.done = false;
+    return true;
+}
+
+bool apply_wave_actor_team(
+    std::uint8_t* module,
+    const WaveActor& actor,
+    std::string& error)
+{
+    const char* actor_error = "Could not re-stamp the actor campaign team.";
+    if (actor.follow)
+    {
+        if (!configure_actor_as_player_companion(
+                module,
+                actor.datum,
+                actor.player_unit,
+                &actor_error))
+        {
+            error = actor_error;
+            return false;
+        }
+        return true;
+    }
+    if (!actor.has_team)
+        return true;
+    std::int32_t unit_datum = -1;
+    if (!resolve_actor_unit_datum(
+            module,
+            actor.datum,
+            &unit_datum,
+            &actor_error))
+    {
+        error = actor_error;
+        return false;
+    }
+    if (!apply_unit_campaign_team(
+            module,
+            unit_datum,
+            static_cast<std::int8_t>(actor.team_value),
+            &actor_error))
+    {
+        error = actor_error;
+        return false;
+    }
+    return true;
+}
+
+bool finalize_deferred_wave(std::uint8_t* module, std::string& error)
+{
+    for (std::size_t index = 0; index < g_wave_actor_count; ++index)
+    {
+        WaveActor& actor = g_wave_actors[index];
+        if (actor.companion_done)
+        {
+            remember_wave_fireteam(actor);
+            continue;
+        }
+        std::int32_t unit_datum = -1;
+        const char* actor_error =
+            "The created actor unit is not published yet.";
+        if (!resolve_actor_unit_datum(
+                module,
+                actor.datum,
+                &unit_datum,
+                &actor_error))
+        {
+            error = actor_error;
+            return false;
+        }
+        if (!apply_wave_actor_team(module, actor, error))
+            return false;
+        actor.companion_done = true;
+        remember_wave_fireteam(actor);
+    }
+
+    bool fireteam_pending = false;
+    for (std::size_t index = 0; index < g_wave_fireteam_count; ++index)
+    {
+        if (!g_wave_fireteams[index].done)
+            fireteam_pending = true;
+    }
+    if (!fireteam_pending)
+        return true;
+
+    install_hs_fireteam_hooks(module);
+    if (std::memcmp(
+            module + kAiPlayerAddFireteamSquadRva,
+            kAiPlayerAddFireteamSquadPrologue.data(),
+            kAiPlayerAddFireteamSquadPrologue.size()) != 0)
+    {
+        error =
+            "The player-fireteam evaluator does not match this game build.";
+        return false;
+    }
+    for (std::size_t index = 0; index < g_wave_fireteam_count; ++index)
+    {
+        WaveFireteam& fireteam = g_wave_fireteams[index];
+        if (fireteam.done)
+            continue;
+        std::uintptr_t exception_address = 0;
+        const DWORD exception_code = invoke_add_player_fireteam_squad(
+            module,
+            fireteam.player_unit,
+            fireteam.squad_index,
+            &exception_address);
+        if (exception_code != 0)
+        {
+            if (GetTickCount64() < g_deferred_ai_finalize_deadline)
+            {
+                char message[192]{};
+                std::snprintf(
+                    message,
+                    sizeof(message),
+                    "Player-fireteam registration raised Windows exception "
+                    "0x%08X at simulation RVA 0x%llX.",
+                    static_cast<unsigned>(exception_code),
+                    exception_address >= reinterpret_cast<std::uintptr_t>(module)
+                        ? static_cast<unsigned long long>(
+                              exception_address -
+                              reinterpret_cast<std::uintptr_t>(module))
+                        : 0ULL);
+                error = message;
+                return false;
+            }
+            fireteam.done = true;
+            if (g_deferred_result_message.find(
+                    "Fireteam follow was not registered") == std::string::npos)
+            {
+                g_deferred_result_message +=
+                    " Fireteam follow was not registered.";
+            }
+            continue;
+        }
+        fireteam.done = true;
+    }
+    return true;
+}
+
+bool restamp_deferred_wave(std::uint8_t* module, std::string& error)
+{
+    for (std::size_t index = 0; index < g_wave_actor_count; ++index)
+    {
+        if (!apply_wave_actor_team(module, g_wave_actors[index], error))
+            return false;
+    }
+    return true;
+}
+
+void drive_wave_placement(std::uint8_t* module, bool& deferred_result)
+{
+    std::string error;
+    bool finished = false;
+    if (!place_wave_frame(module, error, finished))
+    {
+        std::string restore_error;
+        (void)restore_wave_team_patches(restore_error);
+        write_result(
+            g_pending_result_path,
+            g_pending_request.id,
+            "error",
+            error);
+        deferred_result = false;
+        return;
+    }
+    if (!finished)
+    {
+        InterlockedExchange(&g_pending_state, kPendingWavePlace);
+        deferred_result = true;
+        return;
+    }
+    g_deferred_result_due = GetTickCount64() + 32;
+    InterlockedExchange(&g_pending_state, 3);
+    deferred_result = true;
+}
+
 std::string spawn_ai(const SpawnRequest& request)
 {
     auto* module = reinterpret_cast<std::uint8_t*>(
@@ -5218,6 +5933,8 @@ std::string spawn_ai(const SpawnRequest& request)
     DWORD exception_code = invoke_actor_new_direct(
         &request,
         &created_actors,
+        0,
+        request.ai_placement_count,
         &exception_address);
     auto restore_team_on_failure = [&]()
     {
@@ -5873,6 +6590,19 @@ void queue_spawn(
         throw std::runtime_error(
             "Another native Blam creation request is still pending.");
     }
+    if (request.kind == SpawnKind::ai_wave)
+    {
+        g_wave_group_count = g_parsed_wave_count;
+        g_wave_groups = g_parsed_wave_groups;
+        g_wave_group_index = 0;
+        g_wave_group_actor_index = 0;
+        g_wave_actor_count = 0;
+        g_wave_team_patch_count = 0;
+        g_wave_fireteam_count = 0;
+        g_deferred_result_message.clear();
+        g_deferred_ai_finalize_deadline = GetTickCount64() + 5000;
+        g_parsed_wave_count = 0;
+    }
     g_pending_request = request;
     g_pending_result_path = result_path;
     g_pending_request_due = GetTickCount64() + 12000;
@@ -5925,6 +6655,19 @@ void hooked_command_pump(void* context)
 void* hooked_simulation_context()
 {
     void* context = g_original_simulation_context();
+    if (context == nullptr)
+    {
+        return nullptr;
+    }
+    // This hook runs on every simulation_context query, including worker
+    // threads. When nothing is queued, skip the module lookup and TLS walks.
+    if (!g_processing_spawn &&
+        !g_player_team_snapshot.valid &&
+        InterlockedCompareExchange(&g_cheat_hook_state, 0, 0) == 0 &&
+        InterlockedCompareExchange(&g_pending_state, 0, 0) == 0)
+    {
+        return context;
+    }
     auto* module = reinterpret_cast<std::uint8_t*>(
         GetModuleHandleW(kSimulationModule));
     if (context != nullptr && module != nullptr &&
@@ -5943,6 +6686,52 @@ void* hooked_simulation_context()
 
     if (context == nullptr || g_processing_spawn)
     {
+        return context;
+    }
+    if (InterlockedCompareExchange(&g_pending_state, 0, 0) == kPendingWavePlace)
+    {
+        if (module == nullptr || try_resolve_live_skull_mask(module) == nullptr)
+        {
+            if (GetTickCount64() >= g_pending_request_due &&
+                InterlockedCompareExchange(
+                    &g_pending_state, 2, kPendingWavePlace) == kPendingWavePlace)
+            {
+                std::string restore_error;
+                (void)restore_wave_team_patches(restore_error);
+                write_result(
+                    g_pending_result_path,
+                    g_pending_request.id,
+                    "error",
+                    "Timed out while placing the AI wave.");
+                InterlockedExchange(&g_pending_state, 0);
+            }
+            return context;
+        }
+        if (InterlockedCompareExchange(
+                &g_pending_state, 2, kPendingWavePlace) != kPendingWavePlace)
+        {
+            return context;
+        }
+        g_processing_spawn = true;
+        bool deferred_result = false;
+        try
+        {
+            drive_wave_placement(module, deferred_result);
+        }
+        catch (const std::exception& exception)
+        {
+            std::string restore_error;
+            (void)restore_wave_team_patches(restore_error);
+            write_result(
+                g_pending_result_path,
+                g_pending_request.id,
+                "error",
+                exception.what());
+            deferred_result = false;
+        }
+        g_processing_spawn = false;
+        if (!deferred_result)
+            InterlockedExchange(&g_pending_state, 0);
         return context;
     }
     if (InterlockedCompareExchange(&g_pending_state, 0, 0) == 1 &&
@@ -5969,9 +6758,40 @@ void* hooked_simulation_context()
 
     if (InterlockedCompareExchange(&g_pending_state, 0, 0) == 3)
     {
-        if (GetTickCount64() >= g_deferred_result_due &&
-            InterlockedCompareExchange(&g_pending_state, 4, 3) == 3)
+        if (GetTickCount64() >= g_deferred_result_due)
         {
+            const bool deferred_ai_finalize =
+                g_pending_request.kind != SpawnKind::biped_variant_body &&
+                g_pending_request.kind != SpawnKind::colors;
+            // aiObjectStateResolve reads this thread's Blam TLS. A worker that
+            // won the one-shot used to spend the whole deadline reporting
+            // "companion AI object state is unavailable".
+            if (deferred_ai_finalize &&
+                (module == nullptr ||
+                 try_resolve_live_skull_mask(module) == nullptr))
+            {
+                // Do not let a worker run companion setup, but do not leave
+                // the one-shot request pinned if the campaign thread never
+                // returns. Restore the borrowed squad fields either way.
+                if (GetTickCount64() >= g_deferred_ai_finalize_deadline &&
+                    InterlockedCompareExchange(&g_pending_state, 4, 3) == 3)
+                {
+                    std::string restore_error;
+                    (void)restore_deferred_ai_patch(restore_error);
+                    if (g_pending_request.kind == SpawnKind::ai_wave)
+                        (void)restore_wave_team_patches(restore_error);
+                    write_result(
+                        g_pending_result_path,
+                        g_pending_request.id,
+                        "error",
+                        "Timed out waiting for the campaign thread before "
+                        "companion setup.");
+                    InterlockedExchange(&g_pending_state, 0);
+                }
+                return context;
+            }
+            if (InterlockedCompareExchange(&g_pending_state, 4, 3) == 3)
+            {
             if (g_pending_request.kind == SpawnKind::biped_variant_body)
             {
                 try
@@ -6030,13 +6850,17 @@ void* hooked_simulation_context()
                 std::string finalization_error;
                 try
                 {
-                    if (!finalize_deferred_ai(
-                            module,
-                            g_pending_request,
-                            finalization_error) &&
+                    const bool finalized =
+                        g_pending_request.kind == SpawnKind::ai_wave
+                            ? finalize_deferred_wave(module, finalization_error)
+                            : finalize_deferred_ai(
+                                  module,
+                                  g_pending_request,
+                                  finalization_error);
+                    if (!finalized &&
                         GetTickCount64() < g_deferred_ai_finalize_deadline)
                     {
-                        g_deferred_result_due = GetTickCount64() + 250;
+                        g_deferred_result_due = GetTickCount64() + 32;
                         InterlockedExchange(&g_pending_state, 3);
                         return context;
                     }
@@ -6048,8 +6872,10 @@ void* hooked_simulation_context()
                 // Always restore borrowed scenario fields (including squad
                 // team held for actor_new) after finalize succeeds or fails.
                 std::string restore_error;
-                const bool restored =
-                    restore_deferred_ai_patch(restore_error);
+                const bool wave = g_pending_request.kind == SpawnKind::ai_wave;
+                const bool restored = wave
+                    ? restore_wave_team_patches(restore_error)
+                    : restore_deferred_ai_patch(restore_error);
                 // Restoring the scaffold squad team lets active encounters
                 // re-sync live actors to the original hostile team. That is
                 // why friendlies worked in quiet zones but turned enemy in
@@ -6058,10 +6884,12 @@ void* hooked_simulation_context()
                 const bool restamped =
                     finalization_error.empty() &&
                     restored &&
-                    restamp_deferred_ai_teams(
-                        module,
-                        g_pending_request,
-                        restamp_error);
+                    (wave
+                         ? restamp_deferred_wave(module, restamp_error)
+                         : restamp_deferred_ai_teams(
+                               module,
+                               g_pending_request,
+                               restamp_error));
                 if (!finalization_error.empty())
                 {
                     write_result(
@@ -6099,6 +6927,7 @@ void* hooked_simulation_context()
                 }
             }
             InterlockedExchange(&g_pending_state, 0);
+            }
         }
         return context;
     }
@@ -6108,7 +6937,9 @@ void* hooked_simulation_context()
             g_pending_request.kind == SpawnKind::skull_read ||
             g_pending_request.kind == SpawnKind::skull_write ||
             g_pending_request.kind == SpawnKind::player_noclip;
-        bool needs_ai_tls = g_pending_request.kind == SpawnKind::ai;
+        bool needs_ai_tls =
+            g_pending_request.kind == SpawnKind::ai ||
+            g_pending_request.kind == SpawnKind::ai_wave;
         bool needs_research_tls =
             g_pending_request.kind == SpawnKind::research_call;
         bool needs_boundary_tls =
@@ -6142,9 +6973,16 @@ void* hooked_simulation_context()
         if (g_pending_request.kind == SpawnKind::ai)
         {
             g_deferred_result_message = spawn_ai(g_pending_request);
-            g_deferred_result_due = GetTickCount64() + 1500;
+            // actor_new has already published the unit. Companion setup no
+            // longer fails when the 8-slot AI cache is still empty, so the
+            // old 1500 ms wait only delayed a successful spawn.
+            g_deferred_result_due = GetTickCount64() + 32;
             InterlockedExchange(&g_pending_state, 3);
             deferred_result = true;
+        }
+        else if (g_pending_request.kind == SpawnKind::ai_wave)
+        {
+            drive_wave_placement(module, deferred_result);
         }
         else if (g_pending_request.kind == SpawnKind::research_call)
         {

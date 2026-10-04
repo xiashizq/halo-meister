@@ -9,6 +9,20 @@ public sealed record AllegianceDemoSpawnResult(
     int? ActorDatum,
     SpawnScaffoldDiagnosis? ScaffoldDiagnosis);
 
+public sealed record AllegianceRosterEntry(
+    EnemySpawnChoice Character,
+    SpawnVariantChoice Variant,
+    int Team,
+    int Quantity,
+    AiWeaponChoice? Weapon,
+    WeaponModelVariant? WeaponVariant);
+
+public sealed record AllegianceRosterSpawnResult(
+    ScriptExecutionResult SpawnResult,
+    int Created,
+    int? LastActor,
+    bool AnyHostileFallback);
+
 public sealed record ObjectTeamResult(
     int UnitDatum,
     int ActorDatum,
@@ -201,6 +215,114 @@ public sealed class AllegianceDemoService
         return new AllegianceDemoSpawnResult(result, actor, diagnosis);
     }
 
+    /// <summary>
+    /// Spawns the whole roster in as few native waves as possible, then wakes
+    /// each squad once.
+    /// </summary>
+    public async Task<AllegianceRosterSpawnResult> SpawnRosterAsync(
+        IReadOnlyList<AllegianceRosterEntry> roster,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureBridgeReady();
+        if (roster.Count == 0)
+            throw new InvalidOperationException("Add at least one squad member first.");
+
+        var groups = new List<AiWaveGroup>();
+        int slot = 0;
+        foreach (AllegianceRosterEntry entry in roster)
+        {
+            if (entry.Team is not (FriendlyTeam or HumanTeam or HostileTeam))
+                throw new ArgumentOutOfRangeException(nameof(roster));
+            if (entry.Quantity is < 1 or > 50)
+                throw new ArgumentOutOfRangeException(nameof(roster));
+            int remaining = entry.Quantity;
+            while (remaining > 0)
+            {
+                int batchCount = Math.Min(5, remaining);
+                (float right, float forward) = BotFormationOffset(slot++);
+                groups.Add(new AiWaveGroup(
+                    entry.Character,
+                    entry.Variant,
+                    batchCount,
+                    right,
+                    forward,
+                    entry.Weapon,
+                    entry.WeaponVariant,
+                    FollowPlayer: entry.Team == FriendlyTeam,
+                    CampaignTeam: (ushort)entry.Team));
+                remaining -= batchCount;
+            }
+        }
+
+        int created = 0;
+        var actors = new List<int>();
+        var diagnoses = new List<SpawnScaffoldDiagnosis>();
+        bool anyHostileFallback = false;
+        ScriptExecutionResult? last = null;
+        const int waveCap = 32;
+        for (int index = 0; index < groups.Count;)
+        {
+            int takenActors = 0;
+            int take = 0;
+            while (index + take < groups.Count &&
+                   takenActors + groups[index + take].Count <= waveCap)
+            {
+                takenActors += groups[index + take].Count;
+                take++;
+            }
+            AiWaveGroup[] slice = groups.Skip(index).Take(take).ToArray();
+            AiWaveSpawnResult wave = await _spawner.SpawnWaveAsync(
+                slice,
+                cancellationToken);
+            last = wave.Result;
+            if (!IsSpawnSuccess(wave.Result.Outcome))
+            {
+                return new AllegianceRosterSpawnResult(
+                    wave.Result,
+                    created,
+                    actors.Count > 0 ? actors[^1] : null,
+                    anyHostileFallback);
+            }
+            actors.AddRange(ParseActorDatums(wave.Result.Message));
+            diagnoses.AddRange(wave.Diagnoses);
+            anyHostileFallback |= wave.Diagnoses.Any(
+                diagnosis => diagnosis.UsedHostileFallback);
+            created += takenActors;
+            index += take;
+        }
+
+        ScriptExecutionResult result = last
+            ?? throw new InvalidOperationException("The roster did not spawn.");
+        var wakeTargets = new List<(string SquadName, bool Friendly)>();
+        for (int index = 0; index < groups.Count && index < diagnoses.Count; index++)
+        {
+            string name = string.IsNullOrWhiteSpace(diagnoses[index].SquadName)
+                ? groups[index].FollowPlayer
+                    ? EnemySpawnerService.DedicatedAllySquadName
+                    : EnemySpawnerService.DedicatedHostileSquadName
+                : diagnoses[index].SquadName;
+            wakeTargets.Add((name, groups[index].FollowPlayer));
+        }
+        result = await WakeSquadsAsync(result, wakeTargets, cancellationToken);
+
+        int cursor = 0;
+        foreach (AiWaveGroup group in groups)
+        {
+            if (cursor >= actors.Count)
+                break;
+            int take = Math.Min(group.Count, actors.Count - cursor);
+            TrackSpawnedBots(
+                actors.GetRange(cursor, take),
+                friendly: group.CampaignTeam is FriendlyTeam or HumanTeam);
+            cursor += take;
+        }
+        return new AllegianceRosterSpawnResult(
+            result,
+            created,
+            actors.Count > 0 ? actors[^1] : null,
+            anyHostileFallback);
+    }
+
     public void ClearCombatMaintain()
     {
         lock (_combatLock)
@@ -314,79 +436,80 @@ public sealed class AllegianceDemoService
             ? diagnosis!.SquadName
             : fallback;
 
-        var wakeTags = new List<string>();
-        if (preserveFireteam)
+        var lines = new List<string>();
+        var trailing = new List<string>();
+        AppendWakeLines(lines, trailing, squadName, preserveFireteam);
+        lines.AddRange(trailing);
+        return await FinishWakeAsync(spawnResult, lines, squadName, cancellationToken);
+    }
+
+    private async Task<ScriptExecutionResult> WakeSquadsAsync(
+        ScriptExecutionResult spawnResult,
+        IReadOnlyList<(string SquadName, bool Friendly)> targets,
+        CancellationToken cancellationToken)
+    {
+        if (!IsSpawnSuccess(spawnResult.Outcome) || targets.Count == 0)
+            return spawnResult;
+
+        var lines = new List<string>();
+        var trailing = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach ((string squadName, bool friendly) in targets)
         {
-            if (await TryRunHaloScriptAsync(
-                    [
-                        $"ai_suppress_combat {squadName} false",
-                        $"ai_force_active {squadName} true",
-                        $"ai_set_weapon_up {squadName} true",
-                    ],
-                    cancellationToken))
-            {
-                wakeTags.Add("armed");
-            }
+            if (!seen.Add(squadName))
+                continue;
+            AppendWakeLines(lines, trailing, squadName, friendly);
+        }
+        lines.AddRange(trailing);
+        string label = string.Join(
+            "+",
+            seen);
+        return await FinishWakeAsync(spawnResult, lines, label, cancellationToken);
+    }
 
-            // Enum spelling varies by build; try both forms.
-            if (await TryRunHaloScriptAsync(
-                    [$"ai_set_combat_status {squadName} dangerous_enemy"],
-                    cancellationToken) ||
-                await TryRunHaloScriptAsync(
-                    [$"ai_set_combat_status {squadName} ai_combat_status_dangerous_enemy"],
-                    cancellationToken))
-            {
-                wakeTags.Add("status");
-            }
-
-            if (await TryRunHaloScriptAsync(
-                    [
-                        $"ai_prefer_target_team {squadName} covenant",
-                        $"ai_prefer_target_team {squadName} brute",
-                        $"ai_prefer_target_team {squadName} flood",
-                    ],
-                    cancellationToken))
-            {
-                wakeTags.Add("hunt");
-            }
-
-            // Optional: if dedicated hostiles exist in the mission, grant magic LOS.
-            string hostileSquad = EnemySpawnerService.DedicatedHostileSquadName;
-            if (await TryRunHaloScriptAsync(
-                    [$"ai_magically_see {squadName} {hostileSquad}"],
-                    cancellationToken))
-            {
-                wakeTags.Add("see");
-            }
+    private static void AppendWakeLines(
+        List<string> lines,
+        List<string> trailing,
+        string squadName,
+        bool friendly)
+    {
+        string hostileSquad = EnemySpawnerService.DedicatedHostileSquadName;
+        if (friendly)
+        {
+            lines.Add($"ai_suppress_combat {squadName} false");
+            lines.Add($"ai_force_active {squadName} true");
+            lines.Add($"ai_set_weapon_up {squadName} true");
+            lines.Add($"ai_prefer_target_team {squadName} covenant");
+            lines.Add($"ai_prefer_target_team {squadName} brute");
+            lines.Add($"ai_prefer_target_team {squadName} flood");
+            lines.Add($"ai_magically_see {squadName} {hostileSquad}");
+            trailing.Add($"ai_set_combat_status {squadName} dangerous_enemy");
+            trailing.Add(
+                $"ai_set_combat_status {squadName} ai_combat_status_dangerous_enemy");
         }
         else
         {
-            if (await TryRunHaloScriptAsync(
-                    [
-                        $"ai_suppress_combat {squadName} false",
-                        $"ai_force_active {squadName} true",
-                        $"ai_renew {squadName}",
-                        $"ai_magically_see_object {squadName} (player_get 0)",
-                    ],
-                    cancellationToken))
-            {
-                wakeTags.Add("see");
-            }
-
-            if (await TryRunHaloScriptAsync(
-                    [$"ai_prefer_target (players) true"],
-                    cancellationToken))
-            {
-                wakeTags.Add("hunt");
-            }
+            lines.Add($"ai_suppress_combat {squadName} false");
+            lines.Add($"ai_force_active {squadName} true");
+            lines.Add($"ai_renew {squadName}");
+            lines.Add($"ai_magically_see_object {squadName} (player_get 0)");
+            lines.Add("ai_prefer_target (players) true");
         }
+    }
 
-        if (wakeTags.Count == 0)
+    private async Task<ScriptExecutionResult> FinishWakeAsync(
+        ScriptExecutionResult spawnResult,
+        IReadOnlyList<string> lines,
+        string label,
+        CancellationToken cancellationToken)
+    {
+        if (lines.Count == 0)
             return spawnResult;
-
+        if (!await TryRunHaloScriptAsync(lines, cancellationToken))
+            return spawnResult;
         return spawnResult with
         {
-            Message = $"{spawnResult.Message} wake={squadName}:{string.Join('+', wakeTags)}",
+            Message = $"{spawnResult.Message} wake={label}:combat",
         };
     }
 
@@ -401,7 +524,9 @@ public sealed class AllegianceDemoService
                 string.Join('\n', lines),
                 TimeSpan.FromSeconds(8),
                 cancellationToken);
-            return result.Outcome == ScriptOutcome.Confirmed;
+            // HaloScript is handed to the console and comes back "submitted".
+            // The console API does not return evaluation output.
+            return result.Outcome is ScriptOutcome.Confirmed or ScriptOutcome.Submitted;
         }
         catch
         {
@@ -700,7 +825,7 @@ public sealed class AllegianceDemoService
     {
         ScriptingBridgeStatus status = BridgeStatus;
         status.EnsureRuntimeReady();
-        if (status.RunningVersion is < 107)
+        if (!status.RunningVersion.SupportsLegacyFeature(110))
         {
             throw new InvalidOperationException(
                 L.Get("allegiance_demo.requires_bridge_v102"));
@@ -711,7 +836,7 @@ public sealed class AllegianceDemoService
     {
         ScriptingBridgeStatus status = BridgeStatus;
         status.EnsureRuntimeReady();
-        if (status.RunningVersion is < 106)
+        if (!status.RunningVersion.SupportsLegacyFeature(106))
         {
             throw new InvalidOperationException(
                 L.Get("allegiance_demo.requires_bridge_v106"));

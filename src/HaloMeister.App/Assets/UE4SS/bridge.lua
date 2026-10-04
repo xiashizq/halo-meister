@@ -1,5 +1,5 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 107
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 0.2.5
 do
     local hm_ok, hm_error = pcall(function()
         -- UE4SS can load a mod before its shared helper module becomes available.
@@ -11,10 +11,10 @@ do
             error("LOCALAPPDATA is unavailable")
         end
 
-        -- Keep in step with the VERSION marker above; Halo Meister compares the
-        -- version reported here against the copy it ships so it can tell you when
-        -- the game is still running a stale bridge.
-        local bridge_version = 107
+        -- Keep in step with Directory.Build.props <Version> and the VERSION marker
+        -- above. Halo Meister compares this SemVer with the running app so it can
+        -- tell you when the game is still running a stale bridge.
+        local bridge_version = "0.2.5"
         -- User scripts execute in a dedicated environment. Expose the UE4SS
         -- helper module there while retaining normal access to global UE4SS
         -- APIs and preserving the historical global assignment behavior.
@@ -1040,8 +1040,55 @@ do
                     and (not has_weapon
                         or is_hex_width(fields[variant_index + 1], 8))
             end
+            local function split_wave_group(group)
+                local base, offset_x, offset_y, friendly =
+                    group:match("^(.*);([^;]+);([^;]+);([01])$")
+                if not base then
+                    return group, 0, 0, false
+                end
+                return base, tonumber(offset_x), tonumber(offset_y), friendly == "1"
+            end
+            local function ai_team_actor_count(base)
+                local fields = split_fields(base)
+                if (#fields - 5) % 3 == 0 then
+                    return (#fields - 5) / 3
+                elseif (#fields - 6) % 3 == 0 then
+                    return (#fields - 6) / 3
+                end
+                return nil
+            end
+            local function validate_ai_wave(value)
+                if type(value) ~= "string" or value == "" then
+                    return false
+                end
+                local groups = 0
+                local actors = 0
+                for group in (value .. "|"):gmatch("(.-)|") do
+                    if group == "" then return false end
+                    local base, offset_x, offset_y = split_wave_group(group)
+                    if not offset_x or not offset_y
+                        or offset_x ~= offset_x or offset_y ~= offset_y
+                        or math.abs(offset_x) == math.huge
+                        or math.abs(offset_y) == math.huge
+                        or math.abs(offset_x) > 64
+                        or math.abs(offset_y) > 64
+                        or not validate_ai_team(base) then
+                        return false
+                    end
+                    local count = ai_team_actor_count(base)
+                    if not count then return false end
+                    groups = groups + 1
+                    actors = actors + count
+                    if groups > 32 or actors > 32 then
+                        return false
+                    end
+                end
+                return groups >= 1
+            end
             local valid_ai_team = operation == "ai_team"
                 and validate_ai_team(payload)
+            local valid_ai_wave = operation == "ai_wave"
+                and validate_ai_wave(payload)
             if not valid_object and not valid_weapon and not valid_variant
                 and not valid_colors
                 and not valid_weapon_variant
@@ -1060,7 +1107,7 @@ do
                 and not valid_object_teleport
                 and not valid_player_input and not valid_native_machinima
                 and not valid_research_call
-                and not valid_ai and not valid_ai_team then
+                and not valid_ai and not valid_ai_team and not valid_ai_wave then
                 write_result(
                     request_id,
                     "error",
@@ -1109,11 +1156,13 @@ do
                         -- beside the player (left/right), not metres ahead.
                         local distance = (operation == "biped"
                             or operation == "ai"
-                            or operation == "ai_team") and 0.0 or 150.0
+                            or operation == "ai_team"
+                            or operation == "ai_wave") and 0.0 or 150.0
                         x = location.X + forward.X * distance
                         y = location.Y + forward.Y * distance
                         z = location.Z + forward.Z * distance
-                        if operation == "ai" or operation == "ai_team" then
+                        if operation == "ai" or operation == "ai_team"
+                            or operation == "ai_wave" then
                             local right = pawn.GetActorRightVector
                                 and pawn:GetActorRightVector()
                                 or nil
@@ -1142,7 +1191,14 @@ do
                         or operation == "player_team"
                         or operation == "object_team"
                         or ((operation == "ai" or operation == "ai_team")
-                            and friendly_companion) then
+                            and friendly_companion)
+                        or (operation == "ai_wave" and (function()
+                            for group in (payload .. "|"):gmatch("(.-)|") do
+                                local _, _, _, follow = split_wave_group(group)
+                                if follow then return true end
+                            end
+                            return false
+                        end)()) then
                         local unit_component = find_controlled_unit_component()
                         if not unit_component then
                             error("Could not find the controlled player's Blam unit.")
@@ -1259,6 +1315,20 @@ do
                         elseif operation == "ai" or operation == "ai_team" then
                             payload = payload
                                 .. ",p" .. string.format("%08x", unit_datum)
+                        elseif operation == "ai_wave" then
+                            local rebuilt = {}
+                            for group in (payload .. "|"):gmatch("(.-)|") do
+                                local base, offset_x, offset_y, follow =
+                                    split_wave_group(group)
+                                if follow then
+                                    base = base
+                                        .. ",p" .. string.format("%08x", unit_datum)
+                                end
+                                rebuilt[#rebuilt + 1] = string.format(
+                                    "%s;%.9g;%.9g;%d",
+                                    base, offset_x, offset_y, follow and 1 or 0)
+                            end
+                            payload = table.concat(rebuilt, "|")
                         elseif operation == "object_team" then
                             -- target,team[,playerUnit] — player clears combat aim.
                             payload = payload
@@ -1279,16 +1349,19 @@ do
                         -- payload already holds last|aXXXXXXXX|uXXXXXXXX
                         x, y, z = 0.0, 0.0, 0.0
                     end
-                    if operation == "ai" or operation == "ai_team" then
+                    if operation == "ai" or operation == "ai_team"
+                        or operation == "ai_wave" then
                         -- Campaign Evolved's UE scene uses centimetres while the
                         -- simulation uses 10-foot world units, with the Y axis
-                        -- mirrored. Offset along the player's right so native AI
-                        -- is created beside the controlled player.
+                        -- mirrored. A single batch is shifted here. A wave keeps
+                        -- each group's offset in the payload and shifts it natively.
                         x = x / 304.8
                         y = -y / 304.8
                         z = z / 304.8
-                        x = x + ai_right_x * formation_offset_x
-                        y = y + ai_right_y * formation_offset_x
+                        if operation ~= "ai_wave" then
+                            x = x + ai_right_x * formation_offset_x
+                            y = y + ai_right_y * formation_offset_x
+                        end
                     elseif operation == "weapon"
                         or operation == "biped"
                         or operation == "biped_body"
@@ -1301,7 +1374,8 @@ do
                         y = y / 100.0
                         z = z / 100.0
                     end
-                    local coord_lines = (operation == "ai" or operation == "ai_team")
+                    local coord_lines = (operation == "ai" or operation == "ai_team"
+                        or operation == "ai_wave")
                         and string.format(
                             "%.9g\n%.9g\n%.9g\n%.9g\n%.9g\n",
                             x, y, z, ai_right_x, ai_right_y)
@@ -1508,6 +1582,8 @@ do
                 execute_blam_spawn(request.id, "ai", request.code)
             elseif request.kind == "blam_ai_team_spawn" then
                 execute_blam_spawn(request.id, "ai_team", request.code)
+            elseif request.kind == "blam_ai_wave_spawn" then
+                execute_blam_spawn(request.id, "ai_wave", request.code)
             elseif request.kind == "blam_weapon_load" then
                 execute_blam_spawn(request.id, "weapon", request.code)
             elseif request.kind == "blam_object_variant" then
@@ -1652,7 +1728,7 @@ do
         end
 
         print(string.format(
-            "[HaloMeister] Scripting bridge HMREQ1 v%d loaded\n",
+            "[HaloMeister] Scripting bridge HMREQ1 v%s loaded\n",
             bridge_version
         ))
         poll()

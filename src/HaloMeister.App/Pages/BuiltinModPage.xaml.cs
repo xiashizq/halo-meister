@@ -135,11 +135,16 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
                 ModList.ItemsSource = _items;
             }
 
+            PublishedVersionReport? published = await PublishedVersionService.Current.CheckAsync();
             BuiltinModCatalogStatus? prompt = catalog.FirstOrDefault(entry =>
                 entry.Sync.NeedsUpdatePrompt);
-            if (prompt is not null)
+            if (published is { HasUpdate: true } || prompt is not null)
             {
-                ShowStatus(prompt.Sync.Message, InfoBarSeverity.Warning);
+                string message = string.Join(
+                    Environment.NewLine,
+                    new[] { published?.HasUpdate == true ? published.Message : null, prompt?.Sync.Message }
+                        .Where(line => !string.IsNullOrWhiteSpace(line)));
+                ShowStatus(message, InfoBarSeverity.Warning);
             }
             else if (catalog.Any(entry =>
                 entry.Sync.State == BuiltinModSyncState.BundleTampered))
@@ -239,6 +244,10 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
                 ? Visibility.Collapsed
                 : Visibility.Visible,
             Status: entry.Sync.Message,
+            Version: entry.Sync.VersionText,
+            VersionVisibility: string.IsNullOrWhiteSpace(entry.Sync.VersionText)
+                ? Visibility.Collapsed
+                : Visibility.Visible,
             Stem: entry.Definition.Stem,
             InstallLabel: update
                 ? L.Get("builtin_mod.update")
@@ -313,6 +322,8 @@ public sealed record BuiltinModListItem(
     string Notes,
     Visibility NotesVisibility,
     string Status,
+    string Version,
+    Visibility VersionVisibility,
     string Stem,
     string InstallLabel,
     bool CanInstall,

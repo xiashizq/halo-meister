@@ -14,6 +14,7 @@ public enum ScriptLanguage
     BlamBipedVariantSpawn,
     BlamAiSpawn,
     BlamAiTeamSpawn,
+    BlamAiWaveSpawn,
     BlamWeaponLoad,
     BlamObjectVariant,
     BlamObjectColors,
@@ -73,11 +74,11 @@ public sealed record ScriptExecutionResult(
 public sealed record ScriptingBridgeStatus(
     string? InstalledMainPath,
     bool IsInstalled,
-    int? InstalledVersion,
+    BridgeVersion? InstalledVersion,
     bool IsGameProcessRunning,
     bool IsRuntimeReady,
     DateTimeOffset? LastHeartbeat,
-    int? RunningVersion,
+    BridgeVersion? RunningVersion,
     bool IsStale,
     string Summary)
 {
@@ -113,17 +114,19 @@ public sealed class ScriptingBridgeService
     private static readonly TimeSpan InstallProbeCacheLifetime = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ProcessProbeCacheLifetime = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan StartupDiagnosticCacheLifetime = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan StatusResultCacheLifetime = TimeSpan.FromMilliseconds(200);
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly object CapabilityProfileGate = new();
     private static CapabilityProfileCache? _capabilityProfileCache;
     private readonly SemaphoreSlim _executionGate = new(1, 1);
     private readonly object _statusCacheGate = new();
-    private (DateTimeOffset? Heartbeat, int? Version) _lastStatus;
+    private (DateTimeOffset? Heartbeat, BridgeVersion? Version) _lastStatus;
     private InstallProbeCache? _installProbeCache;
     private (bool Running, long ExpiresTick) _processProbeCache;
     private (string? Text, long ExpiresTick) _startupDiagnosticCache;
-    private int? _packagedVersion;
-    private bool _packagedVersionRead;
+    private ScriptingBridgeStatus? _statusResultCache;
+    private long _statusResultExpiresTick;
+    private int _statusResultGeneration;
 
     private ScriptingBridgeService()
     {
@@ -154,34 +157,49 @@ public sealed class ScriptingBridgeService
     public string NativeBridgeAssetPath { get; }
 
     /// <summary>
-    /// The version of the bridge this build of Halo Meister ships, if readable. The asset
-    /// cannot change while the app runs, so read it once instead of on every status poll.
+    /// The bridge SemVer this build of Halo Meister ships. It is the application
+    /// version, so it cannot change while the app runs.
     /// </summary>
-    public int? PackagedVersion
-    {
-        get
-        {
-            if (!_packagedVersionRead)
-            {
-                _packagedVersion = ReadBridgeVersion(BridgeAssetPath);
-                _packagedVersionRead = true;
-            }
-            return _packagedVersion;
-        }
-    }
+    public BridgeVersion PackagedVersion => BridgeVersion.Application;
 
     public ScriptingBridgeStatus GetStatus()
     {
-        (string? mainPath, bool installed, int? installedVersion) = ResolveInstallProbe();
+        int generation;
+        long now = Environment.TickCount64;
+        lock (_statusCacheGate)
+        {
+            if (_statusResultCache is { } cached && _statusResultExpiresTick > now)
+                return cached;
+            generation = _statusResultGeneration;
+        }
+
+        ScriptingBridgeStatus status = ReadStatus();
+        long expires = Environment.TickCount64 + (long)StatusResultCacheLifetime.TotalMilliseconds;
+        lock (_statusCacheGate)
+        {
+            if (generation == _statusResultGeneration)
+            {
+                _statusResultCache = status;
+                _statusResultExpiresTick = expires;
+            }
+        }
+        return status;
+    }
+
+    private ScriptingBridgeStatus ReadStatus()
+    {
+        (string? mainPath, bool installed, BridgeVersion? installedVersion) = ResolveInstallProbe();
         bool gameRunning = IsGameProcessRunningCached();
-        (DateTimeOffset? heartbeat, int? runningVersion) = ReadStatusFile();
+        (DateTimeOffset? heartbeat, BridgeVersion? runningVersion) = ReadStatusFile();
         bool ready = heartbeat is { } time && DateTimeOffset.UtcNow - time <= HeartbeatLifetime;
 
-        int? packaged = PackagedVersion;
-        bool installedStale = installed && packaged is { } expected &&
-                             (installedVersion is null || installedVersion < expected);
-        bool runningStale = ready && packaged is { } runtimeExpected &&
-                     (runningVersion is null || runningVersion < runtimeExpected);
+        BridgeVersion packaged = PackagedVersion;
+        bool installedStale = installed &&
+            (installedVersion is not BridgeVersion installedRevision ||
+             installedRevision < packaged);
+        bool runningStale = ready &&
+            (runningVersion is not BridgeVersion runningRevision ||
+             runningRevision < packaged);
         // A bridge older than the one we ship reports outcomes we no longer trust, so it
         // has to be called out rather than shown as plain "Ready".
         bool stale = installedStale || runningStale;
@@ -193,11 +211,11 @@ public sealed class ScriptingBridgeService
         {
             (_, _, true, true, _) => L.Format(
                 "bridge.summary_stale",
-                runningVersion?.ToString() ?? "1",
+                runningVersion?.ToString() ?? L.Get("common.unknown"),
                 packaged),
             (true, true, _, _, true) => L.Format(
                 "bridge.summary_installed_stale",
-                installedVersion?.ToString() ?? "unknown",
+                installedVersion?.ToString() ?? L.Get("common.unknown"),
                 packaged),
             (true, _, true, false, false) => L.Format(
                 "bridge.summary_ready",
@@ -227,6 +245,9 @@ public sealed class ScriptingBridgeService
             _installProbeCache = null;
             _processProbeCache = default;
             _startupDiagnosticCache = default;
+            _statusResultCache = null;
+            _statusResultExpiresTick = 0;
+            _statusResultGeneration++;
         }
     }
 
@@ -291,6 +312,7 @@ public sealed class ScriptingBridgeService
                 ScriptLanguage.BlamBipedVariantSpawn => "blam_biped_variant_spawn",
                 ScriptLanguage.BlamAiSpawn => "blam_ai_spawn",
                 ScriptLanguage.BlamAiTeamSpawn => "blam_ai_team_spawn",
+                ScriptLanguage.BlamAiWaveSpawn => "blam_ai_wave_spawn",
                 ScriptLanguage.BlamWeaponLoad => "blam_weapon_load",
                 ScriptLanguage.BlamObjectVariant => "blam_object_variant",
                 ScriptLanguage.BlamObjectColors => "blam_object_colors",
@@ -335,6 +357,7 @@ public sealed class ScriptingBridgeService
 
             DateTimeOffset started = DateTimeOffset.UtcNow;
             TimeSpan waitFor = timeout ?? DefaultTimeout;
+            int delayMs = 8;
             try
             {
                 while (DateTimeOffset.UtcNow - started < waitFor)
@@ -346,7 +369,8 @@ public sealed class ScriptingBridgeService
                         DeleteIfExists(ResultPath);
                         return result;
                     }
-                    await Task.Delay(125, cancellationToken);
+                    await Task.Delay(delayMs, cancellationToken);
+                    delayMs = delayMs < 16 ? delayMs * 2 : 125;
                 }
             }
             catch
@@ -443,13 +467,14 @@ public sealed class ScriptingBridgeService
         if (!bridge.Contains(MarkerStart, StringComparison.Ordinal) ||
             !bridge.Contains(MarkerEnd, StringComparison.Ordinal))
             throw new InvalidDataException("The packaged bridge asset has invalid installation markers.");
-        int? bridgeVersion = ReadBridgeVersion(bridgeAssetPath);
-        if (bridgeVersion is null ||
+        BridgeVersion? bridgeVersion = ReadBridgeVersion(bridgeAssetPath);
+        BridgeVersion appVersion = BridgeVersion.Application;
+        if (bridgeVersion != appVersion ||
             !bridge.Contains(
-                $"local bridge_version = {bridgeVersion.Value}",
+                $"local bridge_version = \"{appVersion}\"",
                 StringComparison.Ordinal))
             throw new InvalidDataException(
-                "The packaged bridge marker and reported heartbeat version do not match.");
+                $"The packaged bridge must report {appVersion}, matching this Halo Meister version.");
 
         // Stage the versioned native module first. If this fails, leave main.lua
         // untouched so the installed Lua never points at a missing DLL. Old
@@ -585,7 +610,7 @@ public sealed class ScriptingBridgeService
     /// ages out against <see cref="HeartbeatLifetime"/>.
     /// </para>
     /// </summary>
-    private (string? MainPath, bool Installed, int? Version) ResolveInstallProbe()
+    private (string? MainPath, bool Installed, BridgeVersion? Version) ResolveInstallProbe()
     {
         lock (_statusCacheGate)
         {
@@ -599,7 +624,7 @@ public sealed class ScriptingBridgeService
 
         string? mainPath = FindInstalledMainPath();
         bool installed = false;
-        int? version = null;
+        BridgeVersion? version = null;
         DateTime mainWriteUtc = default;
         if (mainPath is not null)
         {
@@ -637,11 +662,11 @@ public sealed class ScriptingBridgeService
     /// <summary>
     /// Single pass over main.lua for both presence markers and version.
     /// </summary>
-    private static (bool Installed, int? Version) ReadInstallMarkers(string mainPath)
+    private static (bool Installed, BridgeVersion? Version) ReadInstallMarkers(string mainPath)
     {
         bool hasStart = false;
         bool hasEnd = false;
-        int? version = null;
+        BridgeVersion? version = null;
         try
         {
             foreach (string line in File.ReadLines(mainPath))
@@ -656,7 +681,7 @@ public sealed class ScriptingBridgeService
                     if (marker >= 0)
                     {
                         string value = line[(marker + MarkerVersion.Length)..].Trim();
-                        if (int.TryParse(value, out int parsed))
+                        if (BridgeVersion.TryParse(value, out BridgeVersion parsed))
                             version = parsed;
                     }
                 }
@@ -673,7 +698,7 @@ public sealed class ScriptingBridgeService
         return (hasStart && hasEnd, version);
     }
 
-    private (DateTimeOffset? Heartbeat, int? Version) ReadStatusFile()
+    private (DateTimeOffset? Heartbeat, BridgeVersion? Version) ReadStatusFile()
     {
         // The Lua bridge rewrites status.hm via delete+rename. Prefer the last good
         // read over blocking the UI with Thread.Sleep retries — heartbeat still ages
@@ -697,7 +722,8 @@ public sealed class ScriptingBridgeService
                     return _lastStatus;
                 }
 
-                int? version = lines.Count >= 4 && int.TryParse(lines[3].Trim(), out int parsed)
+                BridgeVersion? version = lines.Count >= 4 &&
+                    BridgeVersion.TryParse(lines[3].Trim(), out BridgeVersion parsed)
                     ? parsed
                     : null;
                 _lastStatus = (DateTimeOffset.FromUnixTimeSeconds(unixTime), version);
@@ -815,7 +841,7 @@ public sealed class ScriptingBridgeService
     private sealed record InstallProbeCache(
         string? MainPath,
         bool Installed,
-        int? Version,
+        BridgeVersion? Version,
         DateTime MainWriteUtc,
         DateTimeOffset ExpiresUtc);
 
@@ -846,7 +872,7 @@ public sealed class ScriptingBridgeService
         }
     }
 
-    private static int? ReadBridgeVersion(string path)
+    private static BridgeVersion? ReadBridgeVersion(string path)
     {
         try
         {
@@ -856,7 +882,9 @@ public sealed class ScriptingBridgeService
                 if (marker < 0)
                     continue;
                 string value = line[(marker + MarkerVersion.Length)..].Trim();
-                return int.TryParse(value, out int version) ? version : null;
+                return BridgeVersion.TryParse(value, out BridgeVersion version)
+                    ? version
+                    : null;
             }
         }
         catch
@@ -890,6 +918,7 @@ public sealed class ScriptingBridgeService
                     ScriptLanguage.BlamBipedVariantSpawn or
                     ScriptLanguage.BlamAiSpawn or
                     ScriptLanguage.BlamAiTeamSpawn or
+                    ScriptLanguage.BlamAiWaveSpawn or
                     ScriptLanguage.BlamWeaponLoad or
                     ScriptLanguage.BlamObjectVariant or
                     ScriptLanguage.BlamObjectColors or
@@ -927,7 +956,8 @@ public sealed class ScriptingBridgeService
                 // callers can track datums / recall.
                 "submitted" when language is
                     ScriptLanguage.BlamAiSpawn or
-                    ScriptLanguage.BlamAiTeamSpawn =>
+                    ScriptLanguage.BlamAiTeamSpawn or
+                    ScriptLanguage.BlamAiWaveSpawn =>
                     ScriptOutcome.Confirmed,
                 "ok" => ScriptOutcome.Submitted,
                 "submitted" => ScriptOutcome.Submitted,
@@ -1400,6 +1430,7 @@ public sealed class ScriptingBridgeService
             ScriptLanguage.BlamBipedVariantSpawn => "Blam variant biped spawn",
             ScriptLanguage.BlamAiSpawn => "Blam AI spawn",
             ScriptLanguage.BlamAiTeamSpawn => "Blam AI team spawn",
+            ScriptLanguage.BlamAiWaveSpawn => "Blam AI wave spawn",
             ScriptLanguage.BlamWeaponLoad => "Blam weapon load",
             ScriptLanguage.BlamObjectVariant => "live player model variant",
             ScriptLanguage.BlamWeaponVariant => "live weapon model variant",

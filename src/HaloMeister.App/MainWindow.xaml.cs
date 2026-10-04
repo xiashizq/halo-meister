@@ -74,10 +74,12 @@ public sealed partial class MainWindow : Window
         _game.ConnectionChanged += OnGameConnectionChanged;
         LocalizationService.Current.LanguageChanged += OnAppLanguageChanged;
         Closed += OnClosed;
+        Status.Closed += (_, _) => Status.Visibility = Visibility.Collapsed;
         _statusDismissTimer.Tick += (_, _) =>
         {
             _statusDismissTimer.Stop();
             Status.IsOpen = false;
+            Status.Visibility = Visibility.Collapsed;
         };
         _patchSerializeTimer.Tick += OnPatchSerializeTick;
         _liveToolsCardTimer.Tick += OnLiveToolsCardTimerTick;
@@ -90,6 +92,7 @@ public sealed partial class MainWindow : Window
         UpdateGameConnectionChrome();
         UpdateCloudActions();
         DispatcherQueue.TryEnqueue(() => _ = RunLiveToolsMaintenanceAsync(automatic: true, forcePickFolder: false));
+        DispatcherQueue.TryEnqueue(() => _ = CheckPublishedVersionsAsync());
     }
 
     public event EventHandler? LiveToolsMaintenanceChanged;
@@ -205,6 +208,7 @@ public sealed partial class MainWindow : Window
         // AiBattleNavItem.Content = L.Get("shell.ai_battle");
         PlayerAppearanceNavItem.Content = L.Get("shell.player_appearance");
         CameraWorldNavItem.Content = L.Get("shell.camera_world");
+        CinematicsNavItem.Content = L.Get("shell.cinematics");
         ChangeBipedNavItem.Content = L.Get("shell.change_character");
         AdvancedNavItem.Content = L.Get("shell.advanced");
         // RuntimeTagsNavItem.Content = L.Get("shell.realtime_tags");
@@ -518,10 +522,10 @@ public sealed partial class MainWindow : Window
             ?? _loaderInstaller.FindInstalledBinaryDirectory();
         ScriptingBridgeStatus status = _bridge.GetStatus();
         bool loaderInstalled = directory is not null && _loaderInstaller.IsInstalled(directory);
-        int? packaged = _bridge.PackagedVersion;
+        BridgeVersion packaged = _bridge.PackagedVersion;
         bool bridgeStale = status.IsInstalled &&
-            packaged is int expected &&
-            (status.InstalledVersion is null || status.InstalledVersion < expected);
+            (status.InstalledVersion is not BridgeVersion installed ||
+             installed < packaged);
         return new LiveToolsPlan(directory, loaderInstalled, status.IsInstalled, bridgeStale);
     }
 
@@ -591,12 +595,30 @@ public sealed partial class MainWindow : Window
             _ = RunLiveToolsMaintenanceAsync(automatic: true, forcePickFolder: false);
     }
 
+    private async Task CheckPublishedVersionsAsync()
+    {
+        try
+        {
+            PublishedVersionReport? report = await PublishedVersionService.Current.CheckAsync();
+            if (report is not { HasUpdate: true } || _windowClosed)
+                return;
+            Report(report.Message, InfoBarSeverity.Warning, L.Get("version.manifest_title"));
+        }
+        catch (Exception ex)
+        {
+            App.LogCrash("PublishedVersion", ex);
+        }
+    }
+
     private void OnRootGridLoaded(object sender, RoutedEventArgs e)
     {
         try
         {
-            LiveToolsStatusCard.Shadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
+            var shadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
+            LiveToolsStatusCard.Shadow = shadow;
             LiveToolsStatusCard.Translation = new Vector3(0, 0, 32);
+            Status.Shadow = shadow;
+            Status.Translation = new Vector3(0, 0, 32);
         }
         catch (Exception ex)
         {
@@ -906,6 +928,7 @@ public sealed partial class MainWindow : Window
         };
         Status.Message = message;
         Status.Severity = severity;
+        Status.Visibility = Visibility.Visible;
         Status.IsOpen = true;
         if (severity == InfoBarSeverity.Success)
             _statusDismissTimer.Start();
@@ -931,6 +954,7 @@ public sealed partial class MainWindow : Window
         "change-biped" => typeof(ChangeBipedPage),
         "runtime-tags" => typeof(RuntimeTagsPage),
         "scripting" => typeof(ScriptingPage),
+        "cinematics" => typeof(CinematicsPage),
         _ => typeof(MissionsPage),
     };
 
@@ -1101,6 +1125,7 @@ public sealed partial class MainWindow : Window
             // "live-ai-battle" => AiBattleNavItem,
             "live-player" => PlayerAppearanceNavItem,
             "live-world" => CameraWorldNavItem,
+            "cinematics" => CinematicsNavItem,
             "change-biped" => ChangeBipedNavItem,
             // "runtime-tags" => RuntimeTagsNavItem,
             "scripting" => ScriptingNavItem,

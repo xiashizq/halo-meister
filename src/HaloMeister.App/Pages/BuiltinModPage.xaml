@@ -86,6 +86,12 @@
                                             FontSize="11"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Text="{Binding Stem}" />
+                                        <TextBlock
+                                            FontFamily="Consolas"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding Version}"
+                                            Visibility="{Binding VersionVisibility}" />
                                     </StackPanel>
                                     <TextBlock
                                         Style="{StaticResource LivePageDescriptionStyle}"

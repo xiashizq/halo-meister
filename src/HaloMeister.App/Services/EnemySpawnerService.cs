@@ -132,6 +132,21 @@ public sealed record AiWeaponChoice(RuntimeTagEntry WeaponTag)
         RuntimeTagMemoryService.BuildRuntimeDatum(WeaponTag);
 }
 
+public sealed record AiWaveGroup(
+    EnemySpawnChoice Character,
+    SpawnVariantChoice Variant,
+    int Count,
+    float FormationOffsetX,
+    float FormationOffsetY,
+    AiWeaponChoice? Weapon,
+    WeaponModelVariant? WeaponVariant,
+    bool FollowPlayer,
+    ushort CampaignTeam);
+
+public sealed record AiWaveSpawnResult(
+    ScriptExecutionResult Result,
+    IReadOnlyList<SpawnScaffoldDiagnosis> Diagnoses);
+
 public sealed record SpawnerCatalog(
     IReadOnlyList<EnemySpawnChoice> Characters,
     IReadOnlyList<ArmorSpawnChoice> Armor,
@@ -144,6 +159,7 @@ public sealed class EnemySpawnerService : IDisposable
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
     private IReadOnlyList<RuntimeTagEntry> _tags = [];
     private int _warmedProcessId;
+    private ScaffoldIndex? _scaffoldIndex;
 
     public int ProcessId => _memory.ProcessId;
     public ScriptingBridgeStatus BridgeStatus => _bridge.GetStatus();
@@ -300,6 +316,135 @@ public sealed class EnemySpawnerService : IDisposable
             if (plan.Diagnosis.FireteamFollow)
             {
                 try { ClearDedicatedAllyFireteamAbsorber(plan.Template); }
+                catch { /* best-effort */ }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Places every group in one native wave. The campaign thread runs the
+    /// groups back to back, at most 20 actors per frame, then finalizes once.
+    /// </summary>
+    public async Task<AiWaveSpawnResult> SpawnWaveAsync(
+        IReadOnlyList<AiWaveGroup> groups,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_memory.IsConnected)
+            throw new InvalidOperationException("Connect to the running mission first.");
+        if (groups.Count == 0)
+            throw new ArgumentException("A wave needs at least one group.", nameof(groups));
+        int actors = 0;
+        foreach (AiWaveGroup group in groups)
+        {
+            if (group.Count is < 1 or > 5)
+                throw new ArgumentOutOfRangeException(nameof(groups));
+            if (group.CampaignTeam > 13)
+                throw new ArgumentOutOfRangeException(nameof(groups));
+            actors += group.Count;
+        }
+        if (actors is < 1 or > 32)
+            throw new ArgumentOutOfRangeException(nameof(groups));
+
+        await WarmUpAsync(cancellationToken);
+        WorldPoint playerPosition =
+            await ReadPlayerPositionAsync(cancellationToken);
+        SpawnPlan[] plans = await Task.Run(
+            () => groups.Select(group => BuildPlan(
+                group.Character,
+                group.Variant,
+                playerPosition,
+                group.Count,
+                group.FormationOffsetX,
+                group.FormationOffsetY,
+                group.Weapon,
+                group.FollowPlayer,
+                group.CampaignTeam)).ToArray(),
+            cancellationToken);
+        foreach (SpawnPlan plan in plans)
+        {
+            AppendScaffoldDiagnosisLog(plan.Diagnosis);
+        }
+        LastScaffoldDiagnosis = plans[^1].Diagnosis;
+
+        var weaponPatches = new List<MemoryPatch>();
+        var unsuppressPatches = new List<MemoryPatch>();
+        var patchedAddresses = new HashSet<long>();
+        SpawnTemplate? fireteamTemplate = null;
+        for (int index = 0; index < groups.Count; index++)
+        {
+            AiWaveGroup group = groups[index];
+            SpawnPlan plan = plans[index];
+            try
+            {
+                foreach (MemoryPatch patch in BeginUnsuppressScaffoldCombat(plan.Template))
+                {
+                    if (patchedAddresses.Add(patch.Address))
+                        unsuppressPatches.Add(patch);
+                }
+            }
+            catch
+            {
+                // Best-effort only: never abort the spawn if the patch fails.
+            }
+            if (plan.Diagnosis.FireteamFollow)
+            {
+                ClearDedicatedAllyFireteamAbsorber(plan.Template);
+                fireteamTemplate ??= plan.Template;
+            }
+            if (group.Weapon is null ||
+                group.WeaponVariant is not { StringId: not 0 })
+                continue;
+            try
+            {
+                MemoryPatch? patch = BeginWeaponDefaultVariant(
+                    group.Weapon,
+                    group.WeaponVariant);
+                if (patch is not null && patchedAddresses.Add(patch.Address))
+                    weaponPatches.Add(patch);
+            }
+            catch
+            {
+                // The authored weapon variant is optional.
+            }
+        }
+
+        try
+        {
+            if (fireteamTemplate is not null)
+                await TryLockFireteamAbsorbAsync(cancellationToken);
+            string payload = string.Join('|', plans.Select(plan => plan.Payload));
+            ScriptExecutionResult result = await _bridge.ExecuteAsync(
+                ScriptLanguage.BlamAiWaveSpawn,
+                payload,
+                TimeSpan.FromSeconds(20),
+                cancellationToken);
+            string summary = string.Join(
+                " | ",
+                plans.Select(plan => plan.Diagnosis.Summary)
+                    .Where(text => !string.IsNullOrWhiteSpace(text)));
+            string message = string.IsNullOrWhiteSpace(summary)
+                ? result.Message
+                : $"{result.Message} {summary}";
+            if (unsuppressPatches.Count > 0)
+                message = $"{message} task=unsuppressed";
+            if (result.Outcome == ScriptOutcome.Failed)
+            {
+                AppendScaffoldDiagnosisLogLine(
+                    $"FAIL wave {result.Message}");
+            }
+            return new AiWaveSpawnResult(
+                result with { Message = message },
+                plans.Select(plan => plan.Diagnosis).ToArray());
+        }
+        finally
+        {
+            try { RestorePatches(weaponPatches); }
+            catch { /* best-effort */ }
+            try { RestorePatches(unsuppressPatches); }
+            catch { /* best-effort */ }
+            if (fireteamTemplate is not null)
+            {
+                try { ClearDedicatedAllyFireteamAbsorber(fireteamTemplate); }
                 catch { /* best-effort */ }
             }
         }
@@ -1438,24 +1583,25 @@ public sealed class EnemySpawnerService : IDisposable
         return new WorldPoint(x, y, z);
     }
 
-    private SpawnPlan BuildPlan(
-        EnemySpawnChoice choice,
-        SpawnVariantChoice variant,
-        WorldPoint playerPosition,
-        int placementCount = 1,
-        float formationOffsetX = 0,
-        float formationOffsetY = 0,
-        AiWeaponChoice? weapon = null,
-        bool followPlayer = false,
-        ushort? campaignTeam = null)
+    /// <summary>
+    /// Squad and spawn-point facts that do not depend on the player or the
+    /// spawn request. Reused until the process or scenario changes; distance
+    /// and priority are recomputed on each <see cref="BuildPlan"/>.
+    /// </summary>
+    private ScaffoldIndex GetScaffoldIndex()
     {
-        if (placementCount is < 1 or > 5)
-            throw new ArgumentOutOfRangeException(nameof(placementCount));
         RuntimeTagEntry scenario = _tags.FirstOrDefault(tag =>
             string.Equals(tag.Group, "scnr", StringComparison.OrdinalIgnoreCase) &&
             tag.DataAddress > 0)
             ?? throw new InvalidOperationException(
                 "No loaded [scnr] tag with readable data was found. Load a campaign mission first.");
+        int processId = _memory.ProcessId;
+        if (_scaffoldIndex is { } cached &&
+            cached.ProcessId == processId &&
+            cached.ScenarioDataAddress == scenario.DataAddress &&
+            string.Equals(cached.ScenarioName, scenario.Name, StringComparison.Ordinal))
+            return cached;
+
         IReadOnlyList<RuntimeTagFieldValue> root = ReadRoot(scenario);
         RuntimeTagFieldValue palette = root.FirstOrDefault(field =>
             field.ChildBlockDefinition == "character_palette_block")
@@ -1474,8 +1620,7 @@ public sealed class EnemySpawnerService : IDisposable
         int inspectedSpawnPoints = 0;
         int indexedSpawnPoints = 0;
         int cellBasedSpawnPoints = 0;
-        SpawnTemplate? nearest = null;
-        int nearestPriority = int.MaxValue;
+        var points = new List<CachedSpawnPoint>();
         for (int squadIndex = 0; squadIndex < Math.Min(squads.ChildCount, 2048); squadIndex++)
         {
             IReadOnlyList<RuntimeTagFieldValue> squad = ReadBlock(
@@ -1497,11 +1642,10 @@ public sealed class EnemySpawnerService : IDisposable
             // "default" (0) is a common Covenant authored fallback; team 7 is
             // covenant_player and must not be preferred for UNSC-friendly demos.
             bool isFriendlyTeam = teamIndex is 1 or 2;
-            bool isHostile = !isFriendlyTeam;
-            if (isHostile)
-                hostileSquads++;
-            else
+            if (isFriendlyTeam)
                 allySquads++;
+            else
+                hostileSquads++;
             string squadName = ReadSquadName(squad);
             RuntimeTagFieldValue? objectiveField = squad.FirstOrDefault(field =>
                 field.Type == "short_block_index" &&
@@ -1517,8 +1661,7 @@ public sealed class EnemySpawnerService : IDisposable
             short objectiveIndex = ReadOptionalShort(squad, "initial objective") ?? -1;
             short taskIndex = ReadOptionalShort(squad, "initial task") ?? -1;
             bool hasCombatObjective = objectiveIndex >= 0;
-            bool followsPlayer =
-                followPlayer &&
+            bool authoredFollowsPlayer =
                 isFriendlyTeam &&
                 objectives is not null &&
                 SquadFollowsPlayer(scenario, squad, objectives);
@@ -1607,89 +1750,151 @@ public sealed class EnemySpawnerService : IDisposable
                         StringComparison.OrdinalIgnoreCase))
                     continue;
                 WorldPoint templatePosition = ReadPoint(position.Address);
-                double distanceSquared =
-                    Math.Pow(templatePosition.X - playerPosition.X, 2) +
-                    Math.Pow(templatePosition.Y - playerPosition.Y, 2) +
-                    Math.Pow(templatePosition.Z - playerPosition.Z, 2);
-                bool exactCharacter =
-                    sourceCharacter.Index == choice.CharacterTag.Index;
-                bool sameCharacterFamily = string.Equals(
-                    CharacterFamily(sourceCharacter.Name),
-                    CharacterFamily(choice.CharacterTag.Name),
-                    StringComparison.OrdinalIgnoreCase);
-                // Prefer a scaffold that already matches the intended birth
-                // allegiance. Old logic ranked unmatched hostile (2) above
-                // unmatched friendly (3), so allegiance demos kept borrowing
-                // Covenant squads even when spawning as Player.
-                bool preferFriendlyScaffold =
-                    followPlayer ||
-                    campaignTeam is 1 or 2;
-                bool preferHostileScaffold =
-                    campaignTeam is ushort explicitTeam &&
-                    explicitTeam is not (1 or 2);
-                int priority = exactCharacter ? 0 : sameCharacterFamily ? 1 : 2;
-                if (preferFriendlyScaffold)
-                {
-                    if (!isFriendlyTeam)
-                        priority += 20;
-                    // Allies need combat hooks for attack desire. Still avoid
-                    // borrowing a fighting Covenant wave when spawning friendlies.
-                    if (hasCombatObjective)
-                        priority += isFriendlyTeam ? -5 : 12;
-                    else if (isFriendlyTeam)
-                        priority += 4;
-                    if (IsDedicatedName(squadName, DedicatedAllySquadName))
-                        priority -= 50;
-                    if (IsDedicatedName(squadName, DedicatedHostileSquadName))
-                        priority += 40;
-                }
-                else if (preferHostileScaffold)
-                {
-                    if (isFriendlyTeam)
-                        priority += 20;
-                    // Hostiles need combat hooks for attack desire; idle
-                    // scaffolds spawn as standing props.
-                    if (hasCombatObjective)
-                        priority -= 8;
-                    else
-                        priority += 6;
-                    if (IsDedicatedName(squadName, DedicatedHostileSquadName))
-                        priority -= 50;
-                    if (IsDedicatedName(squadName, DedicatedAllySquadName))
-                        priority += 40;
-                }
-                else if (!isHostile)
-                {
-                    priority += 1;
-                }
-                // Task "suppress combat" freezes shooting desire — never prefer it.
-                if (suppressesCombat)
-                    priority += 30;
-                // Native fireteam already handles follow. Preferring authored
-                // follow tasks often selects suppress-combat companion orders.
-                if (followsPlayer)
-                    priority += preferFriendlyScaffold ? 8 : -10;
-                if (nearest is null ||
-                    priority < nearestPriority ||
-                    (priority == nearestPriority &&
-                     distanceSquared < nearest.DistanceSquared))
-                {
-                    nearestPriority = priority;
-                    nearest = new SpawnTemplate(
-                        squadIndex,
-                        teamIndex,
-                        squadName,
-                        objectiveIndex,
-                        team.Address,
-                        reference.Address,
-                        position.Address,
-                        actorVariant.Address,
-                        objectiveField is { Size: >= 2 } ? objectiveField.Address : 0,
-                        taskField is { Size: >= 2 } ? taskField.Address : 0,
-                        taskFlagsAddress,
-                        squadFlagsField?.Address ?? 0,
-                        distanceSquared);
-                }
+                points.Add(new CachedSpawnPoint(
+                    squadIndex,
+                    teamIndex,
+                    squadName,
+                    objectiveIndex,
+                    isFriendlyTeam,
+                    hasCombatObjective,
+                    suppressesCombat,
+                    authoredFollowsPlayer,
+                    sourceCharacter.Index,
+                    sourceCharacter.Name,
+                    team.Address,
+                    reference.Address,
+                    position.Address,
+                    actorVariant.Address,
+                    objectiveField is { Size: >= 2 } ? objectiveField.Address : 0,
+                    taskField is { Size: >= 2 } ? taskField.Address : 0,
+                    taskFlagsAddress,
+                    squadFlagsField?.Address ?? 0,
+                    templatePosition.X,
+                    templatePosition.Y,
+                    templatePosition.Z));
+            }
+        }
+
+        var built = new ScaffoldIndex(
+            processId,
+            scenario.DataAddress,
+            scenario.Name,
+            squads.ChildCount,
+            hostileSquads,
+            allySquads,
+            squadsWithSpawnPoints,
+            inspectedSpawnPoints,
+            indexedSpawnPoints,
+            cellBasedSpawnPoints,
+            points);
+        _scaffoldIndex = built;
+        return built;
+    }
+
+    private SpawnPlan BuildPlan(
+        EnemySpawnChoice choice,
+        SpawnVariantChoice variant,
+        WorldPoint playerPosition,
+        int placementCount = 1,
+        float formationOffsetX = 0,
+        float formationOffsetY = 0,
+        AiWeaponChoice? weapon = null,
+        bool followPlayer = false,
+        ushort? campaignTeam = null)
+    {
+        if (placementCount is < 1 or > 5)
+            throw new ArgumentOutOfRangeException(nameof(placementCount));
+        ScaffoldIndex index = GetScaffoldIndex();
+        SpawnTemplate? nearest = null;
+        int nearestPriority = int.MaxValue;
+        foreach (CachedSpawnPoint point in index.Points)
+        {
+            double distanceSquared =
+                Math.Pow(point.X - playerPosition.X, 2) +
+                Math.Pow(point.Y - playerPosition.Y, 2) +
+                Math.Pow(point.Z - playerPosition.Z, 2);
+            bool exactCharacter =
+                point.CharacterIndex == choice.CharacterTag.Index;
+            bool sameCharacterFamily = string.Equals(
+                CharacterFamily(point.CharacterName),
+                CharacterFamily(choice.CharacterTag.Name),
+                StringComparison.OrdinalIgnoreCase);
+            // Prefer a scaffold that already matches the intended birth
+            // allegiance. Old logic ranked unmatched hostile (2) above
+            // unmatched friendly (3), so allegiance demos kept borrowing
+            // Covenant squads even when spawning as Player.
+            bool preferFriendlyScaffold =
+                followPlayer ||
+                campaignTeam is 1 or 2;
+            bool preferHostileScaffold =
+                campaignTeam is ushort explicitTeam &&
+                explicitTeam is not (1 or 2);
+            int priority = exactCharacter ? 0 : sameCharacterFamily ? 1 : 2;
+            if (preferFriendlyScaffold)
+            {
+                if (!point.IsFriendlyTeam)
+                    priority += 20;
+                // Allies need combat hooks for attack desire. Still avoid
+                // borrowing a fighting Covenant wave when spawning friendlies.
+                if (point.HasCombatObjective)
+                    priority += point.IsFriendlyTeam ? -5 : 12;
+                else if (point.IsFriendlyTeam)
+                    priority += 4;
+                if (IsDedicatedName(point.SquadName, DedicatedAllySquadName))
+                    priority -= 50;
+                if (IsDedicatedName(point.SquadName, DedicatedHostileSquadName))
+                    priority += 40;
+            }
+            else if (preferHostileScaffold)
+            {
+                if (point.IsFriendlyTeam)
+                    priority += 20;
+                // Hostiles need combat hooks for attack desire; idle
+                // scaffolds spawn as standing props.
+                if (point.HasCombatObjective)
+                    priority -= 8;
+                else
+                    priority += 6;
+                if (IsDedicatedName(point.SquadName, DedicatedHostileSquadName))
+                    priority -= 50;
+                if (IsDedicatedName(point.SquadName, DedicatedAllySquadName))
+                    priority += 40;
+            }
+            else if (point.IsFriendlyTeam)
+            {
+                priority += 1;
+            }
+            // Task "suppress combat" freezes shooting desire — never prefer it.
+            if (point.SuppressesCombat)
+                priority += 30;
+            // Native fireteam already handles follow. Preferring authored
+            // follow tasks often selects suppress-combat companion orders.
+            bool followsPlayer =
+                followPlayer &&
+                point.IsFriendlyTeam &&
+                point.AuthoredFollowsPlayer;
+            if (followsPlayer)
+                priority += preferFriendlyScaffold ? 8 : -10;
+            if (nearest is null ||
+                priority < nearestPriority ||
+                (priority == nearestPriority &&
+                 distanceSquared < nearest.DistanceSquared))
+            {
+                nearestPriority = priority;
+                nearest = new SpawnTemplate(
+                    point.SquadIndex,
+                    point.TeamIndex,
+                    point.SquadName,
+                    point.ObjectiveIndex,
+                    point.TeamAddress,
+                    point.ReferenceAddress,
+                    point.PositionAddress,
+                    point.VariantAddress,
+                    point.ObjectiveAddress,
+                    point.TaskAddress,
+                    point.TaskFlagsAddress,
+                    point.SquadFlagsAddress,
+                    distanceSquared);
             }
         }
 
@@ -1699,10 +1904,10 @@ public sealed class EnemySpawnerService : IDisposable
                 (placementCount > 1
                     ? $"No scenario squad has {placementCount} usable spawn points in the loaded mission. "
                     : "No scenario squad has a usable spawn point in the loaded mission area. ") +
-                $"Inspected {squads.ChildCount:N0} squads: {allySquads:N0} ally / {hostileSquads:N0} hostile, " +
-                $"{squadsWithSpawnPoints:N0} with spawn-point blocks, " +
-                $"{inspectedSpawnPoints:N0} spawn points, and {indexedSpawnPoints:N0} with " +
-                $"a direct character-palette index ({cellBasedSpawnPoints:N0} resolved through cells).");
+                $"Inspected {index.SquadChildCount:N0} squads: {index.AllySquads:N0} ally / {index.HostileSquads:N0} hostile, " +
+                $"{index.SquadsWithSpawnPoints:N0} with spawn-point blocks, " +
+                $"{index.InspectedSpawnPoints:N0} spawn points, and {index.IndexedSpawnPoints:N0} with " +
+                $"a direct character-palette index ({index.CellBasedSpawnPoints:N0} resolved through cells).");
         }
 
         bool preferFriendly =
@@ -1710,8 +1915,8 @@ public sealed class EnemySpawnerService : IDisposable
         SpawnScaffoldDiagnosis diagnosis = BuildScaffoldDiagnosis(
             nearest,
             preferFriendly,
-            allySquads,
-            hostileSquads,
+            index.AllySquads,
+            index.HostileSquads,
             followPlayer);
         // Native fireteam is squad-wide. Only hm_ally should follow; borrowing
         // a mission squad would drag that whole encounter onto the player.
@@ -1730,7 +1935,7 @@ public sealed class EnemySpawnerService : IDisposable
                 nearest.TeamAddress.ToString("X16", CultureInfo.InvariantCulture),
                 teamOverride.ToString("X4", CultureInfo.InvariantCulture),
             };
-            for (int index = 0; index < placementCount; index++)
+            for (int placement = 0; placement < placementCount; placement++)
             {
                 parts.Add(nearest.ReferenceAddress.ToString("X16", CultureInfo.InvariantCulture));
                 parts.Add(nearest.PositionAddress.ToString("X16", CultureInfo.InvariantCulture));
@@ -2926,6 +3131,42 @@ public sealed class EnemySpawnerService : IDisposable
     }
 
     public void Dispose() { }
+
+    private sealed record ScaffoldIndex(
+        int ProcessId,
+        long ScenarioDataAddress,
+        string ScenarioName,
+        int SquadChildCount,
+        int HostileSquads,
+        int AllySquads,
+        int SquadsWithSpawnPoints,
+        int InspectedSpawnPoints,
+        int IndexedSpawnPoints,
+        int CellBasedSpawnPoints,
+        IReadOnlyList<CachedSpawnPoint> Points);
+
+    private sealed record CachedSpawnPoint(
+        int SquadIndex,
+        short TeamIndex,
+        string SquadName,
+        short ObjectiveIndex,
+        bool IsFriendlyTeam,
+        bool HasCombatObjective,
+        bool SuppressesCombat,
+        bool AuthoredFollowsPlayer,
+        int CharacterIndex,
+        string CharacterName,
+        long TeamAddress,
+        long ReferenceAddress,
+        long PositionAddress,
+        long VariantAddress,
+        long ObjectiveAddress,
+        long TaskAddress,
+        long TaskFlagsAddress,
+        long SquadFlagsAddress,
+        float X,
+        float Y,
+        float Z);
 
     private sealed record SpawnTemplate(
         int SquadIndex,

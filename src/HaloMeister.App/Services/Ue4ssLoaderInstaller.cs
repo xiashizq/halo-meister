@@ -404,6 +404,67 @@ public sealed class Ue4ssLoaderInstaller
 
         string stagedSignatures = Path.Combine(loaderRoot, "UE4SS_Signatures");
         CopyDirectory(_signatureAssetRoot, stagedSignatures);
+        AcceptVerifiedFNameConstructor(loaderRoot);
+    }
+
+    // The pinned UE4SS build hooks FName::FName, waits until the game calls it,
+    // then immediately calls it again to build L"bCanBeDamaged". That second call
+    // races the engine-tick unhooker. A miss replaces the prologue, so later scan
+    // attempts never see FName_Constructor.lua, and the scripting bridge never starts.
+    // The game call already proved the address. Keep that address when the compare misses.
+    private static readonly byte[] FNameValidationProbe =
+    [
+        0x45, 0x84, 0xF6, 0x74, 0x49, 0x48, 0x8D, 0x05,
+    ];
+
+    private static readonly byte[] FNameValidationPatched =
+    [
+        0x45, 0x84, 0xF6, 0x90, 0x90, 0x48, 0x8D, 0x05,
+    ];
+
+    private static void AcceptVerifiedFNameConstructor(string loaderRoot)
+    {
+        string dllPath = Path.Combine(loaderRoot, "UE4SS.dll");
+        if (!File.Exists(dllPath))
+        {
+            throw new InvalidDataException("The staged UE4SS package has no UE4SS.dll.");
+        }
+
+        byte[] dll = File.ReadAllBytes(dllPath);
+        if (IndexOf(dll, FNameValidationPatched) >= 0)
+            return;
+
+        int offset = IndexOf(dll, FNameValidationProbe);
+        if (offset < 0)
+        {
+            throw new InvalidDataException(
+                "UE4SS.dll does not contain the pinned FName validation site.");
+        }
+
+        dll[offset + 3] = 0x90;
+        dll[offset + 4] = 0x90;
+        File.WriteAllBytes(dllPath, dll);
+    }
+
+    private static int IndexOf(byte[] buffer, byte[] pattern)
+    {
+        if (pattern.Length == 0 || pattern.Length > buffer.Length)
+            return -1;
+
+        for (int i = 0; i <= buffer.Length - pattern.Length; i++)
+        {
+            int j = 0;
+            for (; j < pattern.Length; j++)
+            {
+                if (buffer[i + j] != pattern[j])
+                    break;
+            }
+
+            if (j == pattern.Length)
+                return i;
+        }
+
+        return -1;
     }
 
     private static void InstallStagedFiles(

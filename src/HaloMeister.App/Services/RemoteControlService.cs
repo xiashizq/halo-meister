@@ -231,7 +231,7 @@ public sealed class RemoteControlService : IAsyncDisposable
                 processId = _game.ProcessId,
                 buildProfile = _game.BuildProfileId,
                 bridgeReady = bridge.IsRuntimeReady && !bridge.IsStale,
-                bridgeVersion = bridge.RunningVersion,
+                bridgeVersion = bridge.RunningVersion?.ToString(),
                 bridgeSummary = bridge.Summary,
                 language = LocalizationService.Current.Language,
             });

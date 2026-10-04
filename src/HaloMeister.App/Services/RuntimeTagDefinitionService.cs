@@ -121,7 +121,9 @@ public sealed class RuntimeTagDefinitionService
 
         var fields = new List<RuntimeTagFieldValue>();
         WalkStruct(
-            schema!, rootStruct, baseAddress, 0, "", read, resolve,
+            schema!, rootStruct, baseAddress, 0, "",
+            PrefetchStruct(rootStruct, baseAddress, read),
+            resolve,
             fields, new HashSet<string>());
         return fields;
     }
@@ -147,9 +149,53 @@ public sealed class RuntimeTagDefinitionService
         long elementAddress = checked(blockAddress + (long)elementIndex * elementSize);
         var fields = new List<RuntimeTagFieldValue>();
         WalkStruct(
-            schema, structure, elementAddress, 0, "", read, resolve,
+            schema, structure, elementAddress, 0, "",
+            PrefetchStruct(structure, elementAddress, read),
+            resolve,
             fields, new HashSet<string>());
         return fields;
+    }
+
+    /// <summary>
+    /// One cross-process read for the whole struct. Field walks slice that
+    /// buffer; anything outside it still uses <paramref name="read"/>.
+    /// </summary>
+    private static Func<long, int, byte[]> PrefetchStruct(
+        JsonElement structure,
+        long baseAddress,
+        Func<long, int, byte[]> read)
+    {
+        if (!structure.TryGetProperty("size", out JsonElement sizeElement) ||
+            !sizeElement.TryGetInt32(out int size) ||
+            size is <= 0 or > 1024 * 1024)
+            return read;
+
+        byte[] blob;
+        try
+        {
+            blob = read(baseAddress, size);
+        }
+        catch
+        {
+            return read;
+        }
+        if (blob.Length < size)
+            return read;
+
+        return (address, count) =>
+        {
+            long relative = address - baseAddress;
+            if (count >= 0 &&
+                relative >= 0 &&
+                relative <= int.MaxValue - count &&
+                relative + count <= blob.Length)
+            {
+                var slice = new byte[count];
+                blob.AsSpan((int)relative, count).CopyTo(slice);
+                return slice;
+            }
+            return read(address, count);
+        };
     }
 
     public byte[] ParseValue(RuntimeTagFieldValue field, string text)

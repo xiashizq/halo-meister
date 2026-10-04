@@ -47,7 +47,8 @@ public static class LiveToolCapabilityCatalog
             ScriptLanguage.BlamBipedSpawn or ScriptLanguage.BlamBipedVariantSpawn or
                 ScriptLanguage.BlamBipedPossess or ScriptLanguage.BlamBumpPossessionOff =>
                 LiveToolCapability.BipedPossession,
-            ScriptLanguage.BlamAiSpawn or ScriptLanguage.BlamAiTeamSpawn =>
+            ScriptLanguage.BlamAiSpawn or ScriptLanguage.BlamAiTeamSpawn or
+                ScriptLanguage.BlamAiWaveSpawn =>
                 LiveToolCapability.AiPlacement,
             ScriptLanguage.BlamCheatGlobalsRead or ScriptLanguage.BlamCheatGlobalWrite or
                 ScriptLanguage.BlamSkullsRead or ScriptLanguage.BlamSkullWrite =>

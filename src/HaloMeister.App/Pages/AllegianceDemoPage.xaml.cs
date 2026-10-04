@@ -408,41 +408,27 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
         await RunBusy(async () =>
         {
             int created = 0;
-            int batchIndex = 0;
             bool anyHostileFallback = false;
-
-            foreach (AllegianceSquadItem item in _squad.ToArray())
+            var roster = _squad.Select(item => new AllegianceRosterEntry(
+                item.Character,
+                item.Variant,
+                item.SelectedTeam.Value,
+                item.Quantity,
+                item.SelectedWeapon.Weapon,
+                item.SelectedWeaponVariant.Variant)).ToArray();
+            AllegianceRosterSpawnResult spawn = await _demo.SpawnRosterAsync(roster);
+            if (spawn.SpawnResult.Outcome == ScriptOutcome.Failed)
             {
-                int remaining = item.Quantity;
-                while (remaining > 0)
-                {
-                    int batchCount = Math.Min(5, remaining);
-                    (float offsetX, float offsetY) = FormationOffset(batchIndex++);
-                    AllegianceDemoSpawnResult spawn = await _demo.SpawnAsync(
-                        item.Character,
-                        item.Variant,
-                        item.SelectedTeam.Value,
-                        batchCount,
-                        offsetX,
-                        offsetY,
-                        item.SelectedWeapon.Weapon,
-                        item.SelectedWeaponVariant.Variant);
-                    if (spawn.SpawnResult.Outcome == ScriptOutcome.Failed)
-                    {
-                        string detail = string.IsNullOrWhiteSpace(spawn.SpawnResult.Message)
-                            ? L.Get("allegiance_demo.batch_failed_unknown")
-                            : spawn.SpawnResult.Message.Trim();
-                        throw new InvalidOperationException(
-                            L.Format("allegiance_demo.batch_failed", created, detail));
-                    }
-                    _lastActorDatum = spawn.ActorDatum ?? _lastActorDatum;
-                    _lastApplyTeam = item.SelectedTeam.Value;
-                    anyHostileFallback |=
-                        spawn.ScaffoldDiagnosis?.UsedHostileFallback == true;
-                    created += batchCount;
-                    remaining -= batchCount;
-                }
+                string detail = string.IsNullOrWhiteSpace(spawn.SpawnResult.Message)
+                    ? L.Get("allegiance_demo.batch_failed_unknown")
+                    : spawn.SpawnResult.Message.Trim();
+                throw new InvalidOperationException(
+                    L.Format("allegiance_demo.batch_failed", spawn.Created, detail));
             }
+            created = spawn.Created;
+            _lastActorDatum = spawn.LastActor ?? _lastActorDatum;
+            _lastApplyTeam = roster[^1].Team;
+            anyHostileFallback = spawn.AnyHostileFallback;
 
             SyncApplyTeamCombo();
             LastActorText.Text = _lastActorDatum is not null
@@ -484,9 +470,6 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
             option => option.Value == _lastApplyTeam)
             ?? ApplyTeamComboBox.SelectedItem;
     }
-
-    private static (float X, float Y) FormationOffset(int batchIndex) =>
-        AllegianceDemoService.BotFormationOffset(batchIndex);
 
     private async Task RunBusy(Func<Task> action)
     {

@@ -40,6 +40,10 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
         UpdateBridgeStatus();
     }
 
+    public void OnDeactivated()
+    {
+    }
+
     private async void OnScan(object sender, RoutedEventArgs e)
     {
         await RunBusy(async () =>
@@ -409,7 +413,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
                 throw new InvalidOperationException(L.Get("spawner.no_team_selections"));
             if (_teamComposition.Any(item => item.UsesDonorAi) &&
                 (!_spawner.BridgeStatus.IsRuntimeReady ||
-                 _spawner.BridgeStatus.RunningVersion is < 86))
+                 !_spawner.BridgeStatus.RunningVersion.SupportsLegacyFeature(86)))
                 throw new InvalidOperationException(
                     L.Get("spawner.friendly_companion_requires_v86"));
 
@@ -643,7 +647,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
         {
             bool supportsAiComposition =
                 status.IsRuntimeReady &&
-                status.RunningVersion is >= 82;
+                status.RunningVersion.SupportsLegacyFeature(82);
             SpawnArmorAiButton.Visibility =
                 CurrentMode == SpawnMode.Armor
                     ? Visibility.Visible

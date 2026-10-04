@@ -8,7 +8,6 @@
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -72,15 +71,9 @@
             </Grid>
         </Border>
 
-        <InfoBar
-            x:Name="Status"
-            Grid.Row="1"
-            IsClosable="True"
-            IsOpen="False" />
-
         <NavigationView
             x:Name="Nav"
-            Grid.Row="2"
+            Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
             OpenPaneLength="264"
@@ -147,6 +140,11 @@
                         -->
                         <NavigationViewItem x:Name="PlayerAppearanceNavItem" Content="{i18n:Loc Key='shell.player_appearance'}" Icon="Contact" Tag="live-player" />
                         <NavigationViewItem x:Name="CameraWorldNavItem" Content="{i18n:Loc Key='shell.camera_world'}" Icon="Video" Tag="live-world" />
+                        <NavigationViewItem x:Name="CinematicsNavItem" Content="{i18n:Loc Key='shell.cinematics'}" Tag="cinematics">
+                            <NavigationViewItem.Icon>
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE786;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
 
@@ -258,20 +256,76 @@
             </Grid>
         </NavigationView>
 
-        <Border
-            x:Name="LiveToolsStatusCard"
-            Grid.RowSpan="3"
-            MaxWidth="380"
-            Margin="0,0,20,20"
-            Padding="16,14"
+        <StackPanel
+            Grid.RowSpan="2"
+            Margin="20,0,20,20"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
-            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
             Canvas.ZIndex="30"
-            CornerRadius="12"
-            Visibility="Collapsed">
+            Spacing="12">
+            <StackPanel.Resources>
+                <ResourceDictionary>
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Default">
+                            <SolidColorBrush x:Key="ToastFillBrush" Color="#FF2C2C2C" />
+                            <SolidColorBrush x:Key="ToastTextBrush" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="ToastStrokeBrush" Color="#FF4A4A4A" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Light">
+                            <SolidColorBrush x:Key="ToastFillBrush" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="ToastTextBrush" Color="#FF1A1A1A" />
+                            <SolidColorBrush x:Key="ToastStrokeBrush" Color="#FFD0D0D0" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+                </ResourceDictionary>
+            </StackPanel.Resources>
+            <InfoBar
+                x:Name="Status"
+                Width="520"
+                HorizontalAlignment="Right"
+                Background="{ThemeResource ToastFillBrush}"
+                BorderBrush="{ThemeResource ToastStrokeBrush}"
+                Foreground="{ThemeResource ToastTextBrush}"
+                IsClosable="True"
+                IsOpen="False"
+                Visibility="Collapsed">
+                <InfoBar.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <SolidColorBrush x:Key="InfoBarInformationalSeverityBackgroundBrush" Color="#FF2C2C2C" />
+                                <SolidColorBrush x:Key="InfoBarSuccessSeverityBackgroundBrush" Color="#FF2C2C2C" />
+                                <SolidColorBrush x:Key="InfoBarWarningSeverityBackgroundBrush" Color="#FF2C2C2C" />
+                                <SolidColorBrush x:Key="InfoBarErrorSeverityBackgroundBrush" Color="#FF2C2C2C" />
+                                <SolidColorBrush x:Key="InfoBarTitleForeground" Color="#FFFFFFFF" />
+                                <SolidColorBrush x:Key="InfoBarMessageForeground" Color="#FFFFFFFF" />
+                                <SolidColorBrush x:Key="InfoBarInformationalSeverityIconForeground" Color="#FF000000" />
+                                <SolidColorBrush x:Key="InfoBarBorderBrush" Color="#FF4A4A4A" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="InfoBarInformationalSeverityBackgroundBrush" Color="#FFFFFFFF" />
+                                <SolidColorBrush x:Key="InfoBarSuccessSeverityBackgroundBrush" Color="#FFFFFFFF" />
+                                <SolidColorBrush x:Key="InfoBarWarningSeverityBackgroundBrush" Color="#FFFFFFFF" />
+                                <SolidColorBrush x:Key="InfoBarErrorSeverityBackgroundBrush" Color="#FFFFFFFF" />
+                                <SolidColorBrush x:Key="InfoBarTitleForeground" Color="#FF1A1A1A" />
+                                <SolidColorBrush x:Key="InfoBarMessageForeground" Color="#FF1A1A1A" />
+                                <SolidColorBrush x:Key="InfoBarInformationalSeverityIconForeground" Color="#FFFFFFFF" />
+                                <SolidColorBrush x:Key="InfoBarBorderBrush" Color="#FFD0D0D0" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </InfoBar.Resources>
+            </InfoBar>
+            <Border
+                x:Name="LiveToolsStatusCard"
+                MaxWidth="380"
+                Padding="16,14"
+                HorizontalAlignment="Right"
+                Background="{ThemeResource ToastFillBrush}"
+                BorderBrush="{ThemeResource ToastStrokeBrush}"
+                BorderThickness="1"
+                CornerRadius="12"
+                Visibility="Collapsed">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -294,11 +348,12 @@
                     <TextBlock
                         x:Name="LiveToolsCardTitle"
                         FontWeight="SemiBold"
+                        Foreground="{ThemeResource ToastTextBrush}"
                         TextWrapping="Wrap" />
                     <TextBlock
                         x:Name="LiveToolsCardDetail"
                         FontSize="12"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Foreground="{ThemeResource ToastTextBrush}"
                         TextWrapping="Wrap" />
                     <ProgressBar
                         x:Name="LiveToolsCardProgress"
@@ -312,5 +367,6 @@
                 </StackPanel>
             </Grid>
         </Border>
+        </StackPanel>
     </Grid>
 </Window>

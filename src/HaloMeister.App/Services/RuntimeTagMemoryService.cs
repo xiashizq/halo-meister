@@ -37,7 +37,12 @@ public sealed class RuntimeTagMemoryService : IDisposable
     private GameBuildProfile? _buildProfile;
     private RuntimeIdentity? _identity;
     private IReadOnlyList<RuntimeTagEntry>? _tagCache;
-    private DateTimeOffset _tagCacheExpires;
+    private long _tagCacheTable;
+    private long _tagCacheFirst;
+    private long _tagCacheLast;
+    private long _tagCacheScenarioEntry;
+    private long _tagCacheScenarioName;
+    private uint _tagCacheScenarioDataOffset;
     private Dictionary<uint, string>? _stringIdNameCache;
     private DateTimeOffset _stringIdNameCacheExpires;
 
@@ -110,14 +115,16 @@ public sealed class RuntimeTagMemoryService : IDisposable
     {
         EnsureConnected();
         EnsureRuntimeIdentity();
-        if (_tagCache is not null && DateTimeOffset.UtcNow < _tagCacheExpires)
-            return _tagCache;
+        if (TagCacheStillValid())
+            return _tagCache!;
 
         long table = checked((long)ReadUInt64(
             _moduleBase + BuildProfile.TagTablePointerOffset));
         (int elementSize, long first, int capacity) = ValidateTagTable(table);
+        long last = first + (long)capacity * elementSize;
 
-        var result = new List<RuntimeTagEntry>();
+        var pending = new List<PendingTag>();
+        var namePointers = new List<long>();
         const int chunkEntries = 4096;
         for (int chunkStart = 0; chunkStart < capacity; chunkStart += chunkEntries)
         {
@@ -128,32 +135,74 @@ public sealed class RuntimeTagMemoryService : IDisposable
                 int offset = relative * elementSize;
                 long namePointer = BinaryPrimitives.ReadInt64LittleEndian(chunk.AsSpan(offset + 0x10, 8));
                 if (namePointer == 0) continue;
-
-                string name;
-                try { name = ReadCString(namePointer, 1024); }
-                catch { continue; }
-                if (string.IsNullOrWhiteSpace(name)) continue;
-
                 string group = Encoding.ASCII.GetString(chunk, offset + 4, 4);
                 group = new string(group.Reverse().ToArray());
-                uint datum = BinaryPrimitives.ReadUInt32LittleEndian(chunk.AsSpan(offset, 4));
-                int rootCount = BinaryPrimitives.ReadInt32LittleEndian(chunk.AsSpan(offset + 0x18, 4));
-                uint dataOffset = BinaryPrimitives.ReadUInt32LittleEndian(chunk.AsSpan(offset + 0x1C, 4));
-                uint definitionOffset =
-                    BinaryPrimitives.ReadUInt32LittleEndian(chunk.AsSpan(offset + 0x20, 4));
-
-                long dataAddress = TryResolveOffset(dataOffset, out long data) ? data : 0;
-                long definitionAddress =
-                    TryResolveOffset(definitionOffset, out long definition) ? definition : 0;
-                result.Add(new RuntimeTagEntry(
-                    chunkStart + relative, datum, group, name,
-                    namePointer, rootCount,
-                    dataOffset, definitionOffset, dataAddress, definitionAddress));
+                pending.Add(new PendingTag(
+                    chunkStart + relative,
+                    namePointer,
+                    group,
+                    BinaryPrimitives.ReadUInt32LittleEndian(chunk.AsSpan(offset, 4)),
+                    BinaryPrimitives.ReadInt32LittleEndian(chunk.AsSpan(offset + 0x18, 4)),
+                    BinaryPrimitives.ReadUInt32LittleEndian(chunk.AsSpan(offset + 0x1C, 4)),
+                    BinaryPrimitives.ReadUInt32LittleEndian(chunk.AsSpan(offset + 0x20, 4))));
+                namePointers.Add(namePointer);
             }
         }
+
+        IReadOnlyDictionary<long, string> names = ReadCStringBatch(namePointers, 1024);
+        var result = new List<RuntimeTagEntry>(pending.Count);
+        foreach (PendingTag tag in pending)
+        {
+            if (!names.TryGetValue(tag.NamePointer, out string? name) ||
+                string.IsNullOrWhiteSpace(name))
+                continue;
+
+            long dataAddress = TryResolveOffset(tag.DataOffset, out long data) ? data : 0;
+            long definitionAddress =
+                TryResolveOffset(tag.DefinitionOffset, out long definition) ? definition : 0;
+            result.Add(new RuntimeTagEntry(
+                tag.Index, tag.Datum, tag.Group, name,
+                tag.NamePointer, tag.RootCount,
+                tag.DataOffset, tag.DefinitionOffset, dataAddress, definitionAddress));
+        }
+
+        RuntimeTagEntry? scenario = result.FirstOrDefault(tag =>
+            string.Equals(tag.Group, "scnr", StringComparison.OrdinalIgnoreCase) &&
+            tag.DataAddress > 0);
         _tagCache = result;
-        _tagCacheExpires = DateTimeOffset.UtcNow.AddMilliseconds(500);
+        _tagCacheTable = table;
+        _tagCacheFirst = first;
+        _tagCacheLast = last;
+        _tagCacheScenarioEntry = scenario is null
+            ? 0
+            : first + (long)scenario.Index * elementSize;
+        _tagCacheScenarioName = scenario?.NameAddress ?? 0;
+        _tagCacheScenarioDataOffset = scenario?.DataOffset ?? 0;
         return _tagCache;
+    }
+
+    private bool TagCacheStillValid()
+    {
+        if (_tagCache is null || _tagCacheTable == 0)
+            return false;
+        try
+        {
+            long first = checked((long)ReadUInt64(_tagCacheTable + 0x50));
+            long last = checked((long)ReadUInt64(_tagCacheTable + 0x58));
+            if (first != _tagCacheFirst || last != _tagCacheLast)
+                return false;
+            if (_tagCacheScenarioEntry == 0)
+                return false;
+            byte[] header = ReadBytes(_tagCacheScenarioEntry, 0x24);
+            long namePointer = BinaryPrimitives.ReadInt64LittleEndian(header.AsSpan(0x10, 8));
+            uint dataOffset = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x1C, 4));
+            return namePointer == _tagCacheScenarioName &&
+                   dataOffset == _tagCacheScenarioDataOffset;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public long ResolveOffset(uint encodedOffset)
@@ -630,8 +679,7 @@ public sealed class RuntimeTagMemoryService : IDisposable
             throw new IOException($"{error.Message} {rollback}", error);
         }
 
-        _tagCache = null;
-        _tagCacheExpires = default;
+        ClearTagCache();
     }
 
     public void Disconnect()
@@ -647,8 +695,7 @@ public sealed class RuntimeTagMemoryService : IDisposable
         _modulePath = null;
         _buildProfile = null;
         _identity = null;
-        _tagCache = null;
-        _tagCacheExpires = default;
+        ClearTagCache();
         _stringIdNameCache = null;
         _stringIdNameCacheExpires = default;
         if (wasConnected)
@@ -718,6 +765,100 @@ public sealed class RuntimeTagMemoryService : IDisposable
         return true;
     }
 
+    private readonly record struct PendingTag(
+        int Index,
+        long NamePointer,
+        string Group,
+        uint Datum,
+        int RootCount,
+        uint DataOffset,
+        uint DefinitionOffset);
+
+    private void ClearTagCache()
+    {
+        _tagCache = null;
+        _tagCacheTable = 0;
+        _tagCacheFirst = 0;
+        _tagCacheLast = 0;
+        _tagCacheScenarioEntry = 0;
+        _tagCacheScenarioName = 0;
+        _tagCacheScenarioDataOffset = 0;
+    }
+
+    /// <summary>
+    /// Reads many C strings with one <c>ReadProcessMemory</c> per cluster of
+    /// nearby pointers instead of one call per name.
+    /// </summary>
+    private IReadOnlyDictionary<long, string> ReadCStringBatch(
+        IReadOnlyList<long> addresses,
+        int maxBytes)
+    {
+        var map = new Dictionary<long, string>();
+        if (addresses.Count == 0 || maxBytes <= 0)
+            return map;
+
+        long[] sorted = addresses.Where(address => address > 0).Distinct().ToArray();
+        Array.Sort(sorted);
+        const int clusterLimit = 64 * 1024;
+        int index = 0;
+        while (index < sorted.Length)
+        {
+            long start = sorted[index];
+            long end = start + maxBytes;
+            int next = index + 1;
+            while (next < sorted.Length &&
+                   sorted[next] >= start &&
+                   sorted[next] + maxBytes - start <= clusterLimit &&
+                   sorted[next] <= end)
+            {
+                end = sorted[next] + maxBytes;
+                next++;
+            }
+
+            int length = (int)Math.Min(end - start, clusterLimit);
+            byte[]? blob = null;
+            try
+            {
+                blob = ReadBytes(start, length);
+            }
+            catch
+            {
+                blob = null;
+            }
+
+            for (int cursor = index; cursor < next; cursor++)
+            {
+                long address = sorted[cursor];
+                if (blob is not null)
+                {
+                    int offset = (int)(address - start);
+                    if (offset >= 0 && offset < blob.Length)
+                    {
+                        int zero = blob.AsSpan(offset).IndexOf((byte)0);
+                        if (zero >= 0)
+                        {
+                            map[address] = Encoding.UTF8.GetString(blob, offset, zero);
+                            continue;
+                        }
+                    }
+                }
+
+                try
+                {
+                    map[address] = ReadCString(address, maxBytes);
+                }
+                catch
+                {
+                    // Unreadable names are skipped by the caller.
+                }
+            }
+
+            index = next;
+        }
+
+        return map;
+    }
+
     private string ReadCString(long address, int maxBytes)
     {
         var bytes = new List<byte>(Math.Min(maxBytes, 128));
@@ -758,8 +899,7 @@ public sealed class RuntimeTagMemoryService : IDisposable
             _moduleBase + BuildProfile.TagTablePointerOffset));
         if (currentTable != expected.TagTable)
         {
-            _tagCache = null;
-            _tagCacheExpires = default;
+            ClearTagCache();
             throw new InvalidOperationException(
                 "The runtime tag table changed; reconnect before using cached tag addresses.");
         }

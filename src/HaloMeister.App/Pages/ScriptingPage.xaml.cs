@@ -531,18 +531,100 @@ public sealed partial class ScriptingPage : Page, IActivatablePage
     private void OnOpenHaloScriptGuide(object sender, RoutedEventArgs e)
         => MainWindow.Instance?.NavigateTo("help");
 
-    private void OnOpenFullReference(object sender, RoutedEventArgs e)
+    private async void OnOpenFullReference(object sender, RoutedEventArgs e)
     {
         try
         {
-            string path = Path.Combine(
-                AppContext.BaseDirectory,
-                "Assets",
-                "HaloScript",
-                "hs_doc.txt");
-            if (!File.Exists(path))
-                throw new FileNotFoundException(L.Get("scripting.reference_unavailable"), path);
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            IReadOnlyList<HaloScriptReference> catalog = HaloScriptCatalog.Load();
+            if (catalog.Count == 0)
+                throw new FileNotFoundException(L.Get("scripting.reference_unavailable"));
+
+            var countText = new TextBlock
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 12,
+            };
+            var search = new AutoSuggestBox
+            {
+                PlaceholderText = L.Get("scripting.search_commands_or_argument_types"),
+                QueryIcon = new SymbolIcon(Symbol.Find),
+            };
+            var list = new ListView
+            {
+                ItemTemplate = (DataTemplate)Resources["FullReferenceItemTemplate"],
+                SelectionMode = ListViewSelectionMode.Single,
+            };
+
+            double availableWidth = XamlRoot?.Size.Width ?? 1000;
+            double availableHeight = XamlRoot?.Size.Height ?? 800;
+            var content = new Grid
+            {
+                Width = Math.Clamp(availableWidth - 120, 480, 860),
+                Height = Math.Clamp(availableHeight - 280, 280, 520),
+                RowSpacing = 10,
+            };
+            content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            var header = new Grid { ColumnSpacing = 12 };
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            header.Children.Add(search);
+            Grid.SetColumn(countText, 1);
+            header.Children.Add(countText);
+            content.Children.Add(header);
+            Grid.SetRow(list, 1);
+            content.Children.Add(list);
+
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = L.Get("scripting.haloscript_reference"),
+                Content = content,
+                PrimaryButtonText = L.Get("scripting.insert_selected"),
+                CloseButtonText = L.Get("common.close"),
+                DefaultButton = ContentDialogButton.None,
+            };
+            dialog.Resources["ContentDialogMaxWidth"] = content.Width + 80;
+            dialog.Resources["ContentDialogMaxHeight"] = content.Height + 180;
+
+            void ApplyFilter(string? query)
+            {
+                IReadOnlyList<HaloScriptReference> results = string.IsNullOrWhiteSpace(query)
+                    ? catalog
+                    : HaloScriptCatalog.Search(query, int.MaxValue);
+                list.ItemsSource = results;
+                countText.Text = L.Format(
+                    "scripting.catalog_count",
+                    results.Count.ToString("N0", System.Globalization.CultureInfo.InvariantCulture));
+                list.SelectedIndex = results.Count > 0 ? 0 : -1;
+                dialog.IsPrimaryButtonEnabled = list.SelectedItem is HaloScriptReference;
+            }
+
+            search.TextChanged += (_, args) =>
+            {
+                if (args.Reason is AutoSuggestionBoxTextChangeReason.SuggestionChosen)
+                    return;
+                ApplyFilter(search.Text);
+            };
+            list.SelectionChanged += (_, _) =>
+                dialog.IsPrimaryButtonEnabled = list.SelectedItem is HaloScriptReference;
+            list.DoubleTapped += (_, args) =>
+            {
+                if ((args.OriginalSource as FrameworkElement)?.DataContext is not HaloScriptReference item)
+                    return;
+                InsertReference(item);
+                dialog.Hide();
+            };
+            dialog.Opened += (_, _) => search.Focus(FocusState.Programmatic);
+
+            ApplyFilter(null);
+            ContentDialogResult result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary &&
+                list.SelectedItem is HaloScriptReference selected)
+            {
+                InsertReference(selected);
+            }
         }
         catch (Exception ex)
         {
