@@ -92,7 +92,7 @@ public sealed partial class LiveToolsHubPage : Page, IActivatablePage
                     typeof(CheatGlobalsPage),
                     Parameter: "allegiance"),
                 new("live_hub.live_skulls", Symbol.Emoji, typeof(LiveSkullsPage)),
-                new("live_hub.other", Symbol.More, typeof(OtherGameplayPage)),
+                new("live_hub.other", Symbol.AllApps, typeof(OtherGameplayPage)),
             ],
         };
 

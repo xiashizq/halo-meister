@@ -1,0 +1,8 @@
+[package]
+name = "vorbis_rs"
+version = "0.5.6"
+edition = "2021"
+publish = false
+description = "Type-only stand-in so Campaign Evolved music does not need libvorbis."
+
+[dependencies]

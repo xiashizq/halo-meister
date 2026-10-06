@@ -149,6 +149,18 @@
                 </NavigationViewItem>
 
                 <NavigationViewItem
+                    x:Name="MusicNavItem"
+                    Content="{i18n:Loc Key='shell.music'}"
+                    Icon="Audio"
+                    Tag="music" />
+
+                <NavigationViewItem
+                    x:Name="CharacterModelsNavItem"
+                    Content="{i18n:Loc Key='shell.character_models'}"
+                    Icon="People"
+                    Tag="character-models" />
+
+                <NavigationViewItem
                     x:Name="ChangeBipedNavItem"
                     Content="{i18n:Loc Key='shell.change_character'}"
                     Icon="Contact"

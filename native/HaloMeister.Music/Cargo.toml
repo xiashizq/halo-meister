@@ -1,0 +1,23 @@
+[package]
+name = "halomeister-music"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "halomeister-music"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blam-tags = { git = "https://github.com/camden-smallwood/blam-tags", rev = "1c3ad0c", features = ["iostore", "audio"] }
+
+# Campaign Evolved music is Wwise-Vorbis, decoded by the pure-Rust `lewton`
+# path inside blam-tags. The `audio` feature also links libopus and libvorbis
+# for other Halo games. Those native codecs are not used here, and this tree
+# has no MSVC C toolchain, so the crates are replaced with type-compatible
+# stubs that report the encoder as unavailable.
+[patch.crates-io]
+opus = { path = "stubs/opus" }
+vorbis_rs = { path = "stubs/vorbis_rs" }

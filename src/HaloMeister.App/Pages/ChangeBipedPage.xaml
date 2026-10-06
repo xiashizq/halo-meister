@@ -4,13 +4,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel
-            Padding="24"
-            HorizontalAlignment="Stretch"
-            Spacing="18">
+    <Grid Padding="24,24,24,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-            <Grid ColumnSpacing="20">
+            <Grid Margin="0,0,0,18" ColumnSpacing="20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -27,12 +29,16 @@
                     Style="{StaticResource AccentButtonStyle}" />
             </Grid>
             <TextBlock
+                Grid.Row="1"
+                Margin="0,0,0,18"
                 HorizontalAlignment="Stretch"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Text="{i18n:Loc Key='change_biped.switch_to_a_loaded_character_ai_bipeds_ma_7f6d33'}"
                 TextWrapping="Wrap" />
 
             <Border
+                Grid.Row="2"
+                Margin="0,0,0,18"
                 Padding="16,14"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -125,8 +131,13 @@
             </Border>
 
             <Grid
-                Height="580"
-                ColumnSpacing="18">
+                Grid.Row="3"
+                RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid ColumnSpacing="18">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="390" />
                     <ColumnDefinition Width="*" />
@@ -366,19 +377,21 @@
                         </ListView>
                     </Grid>
                 </Border>
+                </Grid>
+
+                <StackPanel Grid.Row="1" Spacing="8">
+                    <InfoBar
+                        x:Name="StatusBar"
+                        IsClosable="True"
+                        IsOpen="False" />
+                    <TextBlock
+                        x:Name="DiagnosticText"
+                        FontFamily="Consolas"
+                        FontSize="11"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+                </StackPanel>
             </Grid>
-
-            <InfoBar
-                x:Name="StatusBar"
-                IsClosable="True"
-                IsOpen="False" />
-
-            <TextBlock
-                x:Name="DiagnosticText"
-                FontFamily="Consolas"
-                FontSize="11"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                TextWrapping="Wrap" />
-        </StackPanel>
-    </ScrollViewer>
+    </Grid>
 </Page>

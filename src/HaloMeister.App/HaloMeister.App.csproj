@@ -24,6 +24,7 @@
     <SelfContained>false</SelfContained>
 
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
 
@@ -38,6 +39,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.6.2" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.6.2" />
+    <PackageReference Include="Vortice.WinUI" Version="3.6.2" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
     <PackageReference Include="Titanium.Web.Proxy" Version="3.2.3" />
   </ItemGroup>

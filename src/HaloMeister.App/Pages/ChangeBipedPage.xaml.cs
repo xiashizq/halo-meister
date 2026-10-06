@@ -96,8 +96,8 @@ public sealed partial class ChangeBipedPage : Page, IActivatablePage
             ShowStatus(
                 L.Get("change_biped.character_overlay_built"),
                 InfoBarSeverity.Success);
-            DiagnosticText.Text =
-                $"overlay={overlay.UtocPath}; variant={_selectedVariant?.Name ?? "(default)"}";
+            SetDiagnostic(
+                $"overlay={overlay.UtocPath}; variant={_selectedVariant?.Name ?? "(default)"}");
         });
     }
 
@@ -133,8 +133,7 @@ public sealed partial class ChangeBipedPage : Page, IActivatablePage
             ShowStatus(
                 L.Get("change_biped.character_overlay_installed"),
                 InfoBarSeverity.Success);
-            DiagnosticText.Text =
-                $"installed={string.Join(", ", result.InstalledFiles)}";
+            SetDiagnostic($"installed={string.Join(", ", result.InstalledFiles)}");
         });
     }
 
@@ -154,7 +153,7 @@ public sealed partial class ChangeBipedPage : Page, IActivatablePage
             ShowStatus(
                 L.Get("change_biped.character_overlay_removed"),
                 InfoBarSeverity.Success);
-            DiagnosticText.Text = $"removed={string.Join(", ", removed)}";
+            SetDiagnostic($"removed={string.Join(", ", removed)}");
         });
     }
 
@@ -171,7 +170,7 @@ public sealed partial class ChangeBipedPage : Page, IActivatablePage
             ShowStatus(
                 L.Get("change_biped.character_overlay_deleted"),
                 InfoBarSeverity.Success);
-            DiagnosticText.Text = $"deleted={string.Join(", ", removed)}";
+            SetDiagnostic($"deleted={string.Join(", ", removed)}");
         });
     }
 
@@ -264,8 +263,7 @@ public sealed partial class ChangeBipedPage : Page, IActivatablePage
         catch (Exception ex)
         {
             ShowStatus(FormatUserFacingError(ex), InfoBarSeverity.Error);
-            DiagnosticText.Text =
-                $"{DateTimeOffset.Now:HH:mm:ss} · {FormatUserFacingError(ex)}";
+            SetDiagnostic($"{DateTimeOffset.Now:HH:mm:ss} · {FormatUserFacingError(ex)}");
         }
         finally
         {
@@ -337,6 +335,14 @@ public sealed partial class ChangeBipedPage : Page, IActivatablePage
         indicator.Fill = new SolidColorBrush(
             ready ? Colors.LimeGreen : Colors.Gray);
         label.Text = text;
+    }
+
+    private void SetDiagnostic(string text)
+    {
+        DiagnosticText.Text = text;
+        DiagnosticText.Visibility = string.IsNullOrWhiteSpace(text)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)

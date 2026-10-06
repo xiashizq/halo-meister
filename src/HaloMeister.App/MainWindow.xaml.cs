@@ -209,6 +209,8 @@ public sealed partial class MainWindow : Window
         PlayerAppearanceNavItem.Content = L.Get("shell.player_appearance");
         CameraWorldNavItem.Content = L.Get("shell.camera_world");
         CinematicsNavItem.Content = L.Get("shell.cinematics");
+        MusicNavItem.Content = L.Get("shell.music");
+        CharacterModelsNavItem.Content = L.Get("shell.character_models");
         ChangeBipedNavItem.Content = L.Get("shell.change_character");
         AdvancedNavItem.Content = L.Get("shell.advanced");
         // RuntimeTagsNavItem.Content = L.Get("shell.realtime_tags");
@@ -955,6 +957,8 @@ public sealed partial class MainWindow : Window
         "runtime-tags" => typeof(RuntimeTagsPage),
         "scripting" => typeof(ScriptingPage),
         "cinematics" => typeof(CinematicsPage),
+        "music" => typeof(MusicPage),
+        "character-models" => typeof(CharacterModelsPage),
         _ => typeof(MissionsPage),
     };
 
@@ -1126,6 +1130,8 @@ public sealed partial class MainWindow : Window
             "live-player" => PlayerAppearanceNavItem,
             "live-world" => CameraWorldNavItem,
             "cinematics" => CinematicsNavItem,
+            "music" => MusicNavItem,
+            "character-models" => CharacterModelsNavItem,
             "change-biped" => ChangeBipedNavItem,
             // "runtime-tags" => RuntimeTagsNavItem,
             "scripting" => ScriptingNavItem,
@@ -1571,6 +1577,7 @@ public sealed partial class MainWindow : Window
         _statusDismissTimer.Stop();
         _liveToolsCardTimer.Stop();
         RemoteControlService.Current.StopForShutdown(TimeSpan.FromSeconds(3));
+        MusicLibraryService.Current.Shutdown();
         LocalizationService.Current.LanguageChanged -= OnAppLanguageChanged;
         _proxy.Error -= OnProxyError;
         _proxy.SessionChanged -= OnPlayFabSessionChanged;

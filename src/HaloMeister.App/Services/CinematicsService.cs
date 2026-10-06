@@ -8,11 +8,12 @@ public sealed record LevelCinematic(
     int Index,
     string Name,
     string TagPath,
-    string TransitionPath)
+    string TransitionPath,
+    string? ZoneSetName,
+    int FadeOutTicks,
+    int ZoneSwitchTicks)
 {
     public string DisplayName => $"{Index + 1}. {Name}";
-
-    public string PlayScript => CinematicsService.BuildPlayScript(TagPath, TransitionPath);
 }
 
 public sealed record LevelCinematicsSession(
@@ -24,23 +25,15 @@ public sealed class CinematicsService
     private const string CinematicExtension = "cinematic";
     private const string TransitionExtension = "cinematic_transition";
     private const int MaximumCinematicEntries = 256;
+    private const int MaximumZoneSets = 64;
+    private const int TicksPerSecond = 30;
+    private const int MaxWaitTicks = TicksPerSecond * 8;
+    private const int DefaultFadeOutTicks = TicksPerSecond;
+    private const int DefaultZoneSwitchTicks = TicksPerSecond;
 
     private readonly RuntimeTagMemoryService _memory = RuntimeTagMemoryService.Current;
     private readonly RuntimeTagDefinitionService _definitions = new();
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
-
-    public static string BuildPlayScript(string cinematicPath, string? transitionPath)
-    {
-        string cinematic = ToTagReference(cinematicPath);
-        string transition = ToTagReference(transitionPath ?? "");
-        var lines = new List<string>();
-        if (transition.Length > 0)
-            lines.Add($"(cinematic_transition_fade_out_from_game {transition})");
-
-        lines.Add($"(cinematic_set {cinematic})");
-        lines.Add("(cinematic_start)");
-        return string.Join(Environment.NewLine, lines);
-    }
 
     private static string ToTagReference(string path)
     {
@@ -62,10 +55,42 @@ public sealed class CinematicsService
 
         ScriptingBridgeStatus status = _bridge.GetStatus();
         status.EnsureRuntimeReady();
-        return await _bridge.ExecuteAsync(
-            ScriptLanguage.HaloScript,
-            cinematic.PlayScript,
-            TimeSpan.FromSeconds(15),
+
+        string reference = ToTagReference(cinematic.TagPath);
+        string zone = ToScriptToken(cinematic.ZoneSetName);
+        ScriptExecutionResult result = await ExecuteScriptAsync(
+            BuildTeardownScript(),
+            cancellationToken);
+        if (result.Outcome == ScriptOutcome.Failed)
+            return result;
+
+        // cinematic_stop only latches on a later game tick. The console runs
+        // every line of one request on the game thread, so the next phase has
+        // to be a separate request.
+        await Task.Delay(TicksToDelay(2), cancellationToken);
+
+        result = await ExecuteScriptAsync(
+            BuildFadeOutScript(reference, zone),
+            cancellationToken);
+        if (result.Outcome == ScriptOutcome.Failed)
+            return result;
+
+        await Task.Delay(TicksToDelay(cinematic.FadeOutTicks), cancellationToken);
+        if (zone.Length > 0)
+        {
+            result = await ExecuteScriptAsync(
+                $"(switch_zone_set {zone})",
+                cancellationToken);
+            if (result.Outcome == ScriptOutcome.Failed)
+                return result;
+
+            await Task.Delay(
+                TicksToDelay(Math.Max(cinematic.ZoneSwitchTicks, DefaultZoneSwitchTicks)),
+                cancellationToken);
+        }
+
+        return await ExecuteScriptAsync(
+            BuildStartScript(reference),
             cancellationToken);
     }
 
@@ -87,8 +112,10 @@ public sealed class CinematicsService
 
         var ordered = new List<RuntimeTagEntry>();
         var seen = new HashSet<int>();
+        var scenarioSlotByTag = new Dictionary<int, int>();
         IReadOnlyList<RuntimeTagFieldValue> root = ReadRoot(scenario);
-        CollectCinematicBlocks(scenario, root, tagsByIndex, ordered, seen);
+        CollectCinematicBlocks(
+            scenario, root, tagsByIndex, ordered, seen, scenarioSlotByTag);
         CollectCutsceneResources(root, tagsByIndex, ordered, seen);
 
         if (ordered.Count == 0)
@@ -98,12 +125,22 @@ public sealed class CinematicsService
         for (int index = 0; index < ordered.Count; index++)
         {
             RuntimeTagEntry cinematic = ordered[index];
-            string transition = ResolveTransitionPath(cinematic, tagsByIndex);
+            string transition = ResolveTransitionPath(cinematic, tagsByIndex, out RuntimeTagEntry? transitionTag);
+            bool hasScenarioSlot = scenarioSlotByTag.TryGetValue(
+                cinematic.Index,
+                out int scenarioSlot);
+            string? zoneSet = hasScenarioSlot
+                ? ResolveZoneSetName(scenario, root, scenarioSlot, cinematic.LeafName)
+                : null;
+            (int fadeOutTicks, int zoneSwitchTicks) = ReadTransitionTiming(transitionTag);
             cinematics.Add(new LevelCinematic(
                 index,
                 cinematic.LeafName,
                 FormatScriptPath(cinematic.Name, CinematicExtension),
-                transition));
+                transition,
+                zoneSet,
+                fadeOutTicks,
+                zoneSwitchTicks));
         }
 
         return new LevelCinematicsSession(scenario.Name, cinematics);
@@ -114,7 +151,8 @@ public sealed class CinematicsService
         IReadOnlyList<RuntimeTagFieldValue> fields,
         IReadOnlyDictionary<int, RuntimeTagEntry> tagsByIndex,
         List<RuntimeTagEntry> ordered,
-        HashSet<int> seen)
+        HashSet<int> seen,
+        Dictionary<int, int>? scenarioSlotByTag = null)
     {
         foreach (RuntimeTagFieldValue block in fields)
         {
@@ -131,7 +169,13 @@ public sealed class CinematicsService
             {
                 IReadOnlyList<RuntimeTagFieldValue> element = ReadBlock(owner, block, index);
                 RuntimeTagFieldValue? reference = element.FirstOrDefault(field => field.IsTagReference);
-                TryAddReferenced(reference, "cine", tagsByIndex, ordered, seen);
+                int countBefore = ordered.Count;
+                if (!TryAddReferenced(reference, "cine", tagsByIndex, ordered, seen) ||
+                    scenarioSlotByTag is null ||
+                    ordered.Count == countBefore)
+                    continue;
+
+                scenarioSlotByTag[ordered[^1].Index] = index;
             }
         }
     }
@@ -180,8 +224,10 @@ public sealed class CinematicsService
 
     private string ResolveTransitionPath(
         RuntimeTagEntry cinematic,
-        IReadOnlyDictionary<int, RuntimeTagEntry> tagsByIndex)
+        IReadOnlyDictionary<int, RuntimeTagEntry> tagsByIndex,
+        out RuntimeTagEntry? transitionTag)
     {
+        transitionTag = null;
         if (cinematic.DataAddress <= 0 || !_definitions.HasSchema("cine"))
             return "";
 
@@ -194,7 +240,167 @@ public sealed class CinematicsService
                 StringComparison.OrdinalIgnoreCase));
         if (!TryResolveReference(transition, "citr", tagsByIndex, out RuntimeTagEntry? tag))
             return "";
+        transitionTag = tag;
         return FormatScriptPath(tag.Name, TransitionExtension);
+    }
+
+    private string? ResolveZoneSetName(
+        RuntimeTagEntry scenario,
+        IReadOnlyList<RuntimeTagFieldValue> scenarioFields,
+        int cinematicSlot,
+        string cinematicName)
+    {
+        if (cinematicSlot is < 0 or >= 32)
+            return null;
+
+        RuntimeTagFieldValue? zoneSets = scenarioFields.FirstOrDefault(field =>
+            field.CanOpenBlock &&
+            string.Equals(
+                CleanFieldName(field.Name),
+                "zone sets",
+                StringComparison.OrdinalIgnoreCase));
+        if (zoneSets is null)
+            return null;
+
+        uint bit = 1u << cinematicSlot;
+        string? namedMatch = null;
+        string? lastMatch = null;
+        int count = Math.Min(zoneSets.ChildCount, MaximumZoneSets);
+        for (int index = 0; index < count; index++)
+        {
+            IReadOnlyList<RuntimeTagFieldValue> element = ReadBlock(scenario, zoneSets, index);
+            RuntimeTagFieldValue? flags = element.FirstOrDefault(field =>
+                string.Equals(
+                    CleanFieldName(field.Name),
+                    "cinematic zones",
+                    StringComparison.OrdinalIgnoreCase));
+            if (flags is null ||
+                !TryParseUnsigned(flags.Value, out uint mask) ||
+                (mask & bit) == 0)
+                continue;
+
+            RuntimeTagFieldValue? nameField = element.FirstOrDefault(field =>
+                string.Equals(field.Type, "string_id", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(
+                    CleanFieldName(field.Name),
+                    "name",
+                    StringComparison.OrdinalIgnoreCase));
+            if (nameField is null ||
+                !TryParseUnsigned(nameField.Value, out uint stringId) ||
+                !_memory.TryGetStringIdName(stringId, out string? name) ||
+                string.IsNullOrWhiteSpace(name))
+                continue;
+
+            lastMatch = name;
+            if (name.Contains(cinematicName, StringComparison.OrdinalIgnoreCase))
+                namedMatch = name;
+        }
+
+        return namedMatch ?? lastMatch;
+    }
+
+    private (int FadeOutTicks, int ZoneSwitchTicks) ReadTransitionTiming(
+        RuntimeTagEntry? transition)
+    {
+        if (transition is null || transition.DataAddress <= 0 || !_definitions.HasSchema("citr"))
+            return (DefaultFadeOutTicks, DefaultZoneSwitchTicks);
+
+        var sleepTicks = new List<int>();
+        foreach (RuntimeTagFieldValue field in ReadRoot(transition))
+        {
+            if (!CleanFieldName(field.Name).EndsWith(
+                    "sleep time",
+                    StringComparison.OrdinalIgnoreCase) ||
+                !TryParseSigned(field.Value, out int ticks))
+                continue;
+            sleepTicks.Add(ticks);
+        }
+
+        int fadeOut = sleepTicks.Count > 0 ? sleepTicks[0] : DefaultFadeOutTicks;
+        // Element 3 is "fade post core load": how long the transition waits
+        // after the cinematic zone finishes loading.
+        int zoneSwitch = sleepTicks.Count > 3 ? sleepTicks[3] : DefaultZoneSwitchTicks;
+        return (fadeOut, zoneSwitch);
+    }
+
+    private async Task<ScriptExecutionResult> ExecuteScriptAsync(
+        string script,
+        CancellationToken cancellationToken) =>
+        await _bridge.ExecuteAsync(
+            ScriptLanguage.HaloScript,
+            script,
+            TimeSpan.FromSeconds(15),
+            cancellationToken);
+
+    private static string BuildTeardownScript() =>
+        string.Join(Environment.NewLine, [
+            "(cinematic_stop)",
+            "(cinematic_skip_stop_internal)",
+            "(cinematic_reset)",
+        ]);
+
+    private static string BuildFadeOutScript(string cinematicReference, string zoneToken)
+    {
+        var lines = new List<string>();
+        if (zoneToken.Length > 0)
+            lines.Add($"(prepare_to_switch_to_zone_set {zoneToken})");
+
+        lines.Add($"(cinematic_set {cinematicReference})");
+        lines.Add("(cinematic_skip_start_internal)");
+        lines.Add($"(cinematic_fade_out_from_game {cinematicReference})");
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string BuildStartScript(string cinematicReference) =>
+        string.Join(Environment.NewLine, [
+            $"(cinematic_fade_in_to_cinematic {cinematicReference})",
+            "(cinematic_start)",
+        ]);
+
+    private static TimeSpan TicksToDelay(int ticks)
+    {
+        int clamped = Math.Clamp(ticks, 1, MaxWaitTicks);
+        return TimeSpan.FromMilliseconds(clamped * 1000.0 / TicksPerSecond);
+    }
+
+    private static string ToScriptToken(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "";
+
+        string value = name.Trim();
+        if (Regex.IsMatch(value, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+            return value;
+
+        return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+    }
+
+    private static bool TryParseUnsigned(string value, out uint parsed)
+    {
+        parsed = 0;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        value = value.Trim();
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            return uint.TryParse(
+                value[2..],
+                System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out parsed);
+        return uint.TryParse(
+            value,
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out parsed);
+    }
+
+    private static bool TryParseSigned(string value, out int parsed)
+    {
+        parsed = 0;
+        if (!TryParseUnsigned(value, out uint unsigned) || unsigned > int.MaxValue)
+            return false;
+        parsed = (int)unsigned;
+        return true;
     }
 
     private static bool TryAddReferenced(
