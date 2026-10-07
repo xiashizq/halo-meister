@@ -128,7 +128,7 @@
                             DisplayMemberPath="Name"
                             Header="{i18n:Loc Key='advanced_machinima.live_camera_location'}"
                             HorizontalAlignment="Stretch"
-                            PlaceholderText="{i18n:Loc Key='advanced_machinima.enter_mode_to_scan_camera_actors'}"
+                            PlaceholderText="{i18n:Loc Key='advanced_machinima.no_camera_actors'}"
                             SelectionChanged="OnLiveNodeSelectionChanged" />
                         <TextBlock
                             x:Name="LiveNodeDetailText"

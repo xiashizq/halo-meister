@@ -1571,7 +1571,7 @@ public sealed class EnemySpawnerService : IDisposable
             : result.Message[(markerOffset + marker.Length)..]
                 .Trim()
                 .Split(',', StringSplitOptions.TrimEntries);
-        if (values.Length != 3 ||
+        if (values.Length < 3 ||
             !float.TryParse(
                 values[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) ||
             !float.TryParse(

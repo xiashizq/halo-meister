@@ -75,6 +75,8 @@ constexpr LONG kPendingWavePlace = 5;
 enum class SpawnKind
 {
     object,
+    object_at,
+    object_delete,
     weapon,
     variant,
     colors,
@@ -845,6 +847,70 @@ bool parse_request(
         }
         request.unit_datum = static_cast<std::int32_t>(unit_datum);
     }
+    else if (operation == "object_at")
+    {
+        request.kind = SpawnKind::object_at;
+        if (payload.size() != 8 ||
+            payload.find_first_not_of("0123456789abcdefABCDEF") !=
+                std::string::npos)
+        {
+            error = "The placed-object payload must be an 8-digit tag datum.";
+            return false;
+        }
+        auto result = std::from_chars(
+            payload.data(), payload.data() + payload.size(), request.tag_datum, 16);
+        if (result.ec != std::errc{} ||
+            result.ptr != payload.data() + payload.size() ||
+            request.tag_datum == 0 ||
+            request.tag_datum == UINT32_MAX)
+        {
+            error = "The placed-object tag datum is invalid.";
+            return false;
+        }
+        char* angle_end = nullptr;
+        request.ai_right_x = std::strtof(right_x.c_str(), &angle_end);
+        if (right_x.empty() ||
+            !angle_end ||
+            *angle_end != '\0' ||
+            !std::isfinite(request.ai_right_x))
+        {
+            error = "The placement yaw is invalid.";
+            return false;
+        }
+        request.ai_right_y = std::strtof(right_y.c_str(), &angle_end);
+        if (right_y.empty() ||
+            !angle_end ||
+            *angle_end != '\0' ||
+            !std::isfinite(request.ai_right_y) ||
+            std::fabs(request.ai_right_y) > 90.0f)
+        {
+            error = "The placement pitch must be between -90 and 90 degrees.";
+            return false;
+        }
+    }
+    else if (operation == "object_delete")
+    {
+        request.kind = SpawnKind::object_delete;
+        if (payload.size() != 8 ||
+            payload.find_first_not_of("0123456789abcdefABCDEF") !=
+                std::string::npos)
+        {
+            error = "The object-delete payload must be an 8-digit object datum.";
+            return false;
+        }
+        std::uint32_t object_datum = 0;
+        auto result = std::from_chars(
+            payload.data(), payload.data() + payload.size(), object_datum, 16);
+        if (result.ec != std::errc{} ||
+            result.ptr != payload.data() + payload.size() ||
+            object_datum == 0 ||
+            object_datum == UINT32_MAX)
+        {
+            error = "The object datum to delete is invalid.";
+            return false;
+        }
+        request.unit_datum = static_cast<std::int32_t>(object_datum);
+    }
     else if (operation == "biped" || operation == "biped_body")
     {
         request.kind = operation == "biped"
@@ -1576,6 +1642,14 @@ bool parse_request(
         error = "The native spawn request contains an invalid number.";
         return false;
     }
+    if (request.kind == SpawnKind::object_at &&
+        (std::fabs(request.x) > 100000.0f ||
+         std::fabs(request.y) > 100000.0f ||
+         std::fabs(request.z) > 100000.0f))
+    {
+        error = "The placement coordinates are out of range.";
+        return false;
+    }
     if (request.kind == SpawnKind::ai_wave)
     {
         for (std::size_t index = 0; index < g_parsed_wave_count; ++index)
@@ -1680,6 +1754,11 @@ bool validate_module(
               module + kObjectChangedRva,
               kObjectChangedPrologue.data(),
               kObjectChangedPrologue.size()) != 0)) ||
+        (kind == SpawnKind::object_delete &&
+         std::memcmp(
+             module + kObjectDeleteRva,
+             kObjectDeletePrologue.data(),
+             kObjectDeletePrologue.size()) != 0) ||
         ((kind == SpawnKind::object ||
           kind == SpawnKind::biped ||
           kind == SpawnKind::biped_body ||
@@ -1707,7 +1786,8 @@ bool validate_module(
               kObjectGetOrientationPrologue.size()) != 0)) ||
         ((kind == SpawnKind::player_teleport ||
           kind == SpawnKind::player_noclip ||
-          kind == SpawnKind::object_teleport) &&
+          kind == SpawnKind::object_teleport ||
+          kind == SpawnKind::object_at) &&
          std::memcmp(
              module + kObjectTeleportRva,
              kObjectTeleportPrologue.data(),
@@ -2019,6 +2099,11 @@ DWORD read_object_transform(
     return exception_code;
 }
 
+void apply_spawn_orientation(
+    std::uint8_t* module,
+    std::int32_t object_datum,
+    const SpawnRequest& request);
+
 std::string spawn(
     const SpawnRequest& request,
     std::int32_t* created_object_datum = nullptr)
@@ -2133,6 +2218,11 @@ std::string spawn(
         *created_object_datum = object_datum;
     }
 
+    if (request.kind == SpawnKind::object_at)
+    {
+        apply_spawn_orientation(module, object_datum, placement_request);
+    }
+
     if (request.kind == SpawnKind::biped_variant_body &&
         request.variant_string_id != 0)
     {
@@ -2221,6 +2311,75 @@ void delete_object_noexcept(
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
     }
+}
+
+DWORD invoke_object_delete(
+    std::uint8_t* module,
+    std::int32_t object_datum,
+    std::uintptr_t* exception_address)
+{
+    using ObjectDelete = void (*)(std::int32_t object_datum);
+    auto object_delete = reinterpret_cast<ObjectDelete>(
+        module + kObjectDeleteRva);
+    DWORD fault = 0;
+    __try
+    {
+        object_delete(object_datum);
+    }
+    __except ((
+        fault = GetExceptionInformation()->ExceptionRecord->ExceptionCode,
+        *exception_address = reinterpret_cast<std::uintptr_t>(
+            GetExceptionInformation()->ExceptionRecord->ExceptionAddress),
+        EXCEPTION_EXECUTE_HANDLER))
+    {
+    }
+    return fault;
+}
+
+std::string delete_spawned_object(const SpawnRequest& request)
+{
+    auto* module = reinterpret_cast<std::uint8_t*>(
+        GetModuleHandleW(kSimulationModule));
+    if (!module)
+    {
+        throw std::runtime_error(
+            "HaloSimulation_tag_release.dll is not loaded. Load a campaign mission first.");
+    }
+
+    std::string validation_error;
+    if (!validate_module(module, validation_error, SpawnKind::object_delete))
+    {
+        throw std::runtime_error(validation_error);
+    }
+
+    std::uintptr_t exception_address = 0;
+    DWORD exception_code = invoke_object_delete(
+        module,
+        request.unit_datum,
+        &exception_address);
+    if (exception_code != 0)
+    {
+        char message[224]{};
+        std::snprintf(
+            message,
+            sizeof(message),
+            "Native object deletion raised Windows exception 0x%08X at "
+            "simulation RVA 0x%llX.",
+            static_cast<unsigned>(exception_code),
+            exception_address >= reinterpret_cast<std::uintptr_t>(module)
+                ? static_cast<unsigned long long>(
+                    exception_address - reinterpret_cast<std::uintptr_t>(module))
+                : 0ULL);
+        throw std::runtime_error(message);
+    }
+
+    char message[96]{};
+    std::snprintf(
+        message,
+        sizeof(message),
+        "Deleted Blam object datum 0x%08X.",
+        static_cast<std::uint32_t>(request.unit_datum));
+    return message;
 }
 
 std::string load_weapon(const SpawnRequest& request)
@@ -2912,6 +3071,75 @@ DWORD invoke_object_teleport(
     return exception_code;
 }
 
+void basis_from_view_angles(float yaw_degrees, float pitch_degrees, float* forward, float* up)
+{
+    constexpr float degrees_to_radians = 0.017453292519943295f;
+    float yaw = yaw_degrees * degrees_to_radians;
+    float pitch = pitch_degrees * degrees_to_radians;
+    float cosine_pitch = std::cos(pitch);
+    float sine_pitch = std::sin(pitch);
+    float cosine_yaw = std::cos(yaw);
+    float sine_yaw = std::sin(yaw);
+    forward[0] = cosine_pitch * cosine_yaw;
+    forward[1] = cosine_pitch * sine_yaw;
+    forward[2] = sine_pitch;
+
+    // right = forward × world up. Straight up or down has no horizontal right.
+    float right[3]{forward[1], -forward[0], 0.0f};
+    float right_length = std::sqrt(right[0] * right[0] + right[1] * right[1]);
+    if (right_length < 1.0e-4f)
+    {
+        right[0] = -sine_yaw;
+        right[1] = cosine_yaw;
+        right[2] = 0.0f;
+    }
+    else
+    {
+        right[0] /= right_length;
+        right[1] /= right_length;
+        right[2] = 0.0f;
+    }
+
+    up[0] = right[1] * forward[2] - right[2] * forward[1];
+    up[1] = right[2] * forward[0] - right[0] * forward[2];
+    up[2] = right[0] * forward[1] - right[1] * forward[0];
+}
+
+void apply_spawn_orientation(
+    std::uint8_t* module,
+    std::int32_t object_datum,
+    const SpawnRequest& request)
+{
+    float forward[3]{};
+    float up[3]{};
+    basis_from_view_angles(request.ai_right_x, request.ai_right_y, forward, up);
+    float position[3]{request.x, request.y, request.z};
+    std::uintptr_t exception_address = 0;
+    DWORD exception_code = invoke_object_teleport(
+        module,
+        object_datum,
+        position,
+        forward,
+        up,
+        &exception_address);
+    if (exception_code != 0)
+    {
+        delete_object_noexcept(module, object_datum);
+        char message[224]{};
+        std::snprintf(
+            message,
+            sizeof(message),
+            "The placed object was removed because setting its facing raised "
+            "Windows exception 0x%08X at simulation RVA 0x%llX.",
+            static_cast<unsigned>(exception_code),
+            exception_address >= reinterpret_cast<std::uintptr_t>(module)
+                ? static_cast<unsigned long long>(
+                    exception_address - reinterpret_cast<std::uintptr_t>(module))
+                : 0ULL);
+        throw std::runtime_error(message);
+    }
+}
+
 DWORD invoke_object_set_physics(
     std::uint8_t* module,
     std::int32_t unit_datum,
@@ -3059,14 +3287,17 @@ std::string read_player_position(const SpawnRequest& request)
             "Could not read the controlled player's native Blam position.");
     }
 
-    char message[160]{};
+    char message[192]{};
     std::snprintf(
         message,
         sizeof(message),
-        "Return value: %.9g,%.9g,%.9g",
+        "Return value: %.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
         position[0],
         position[1],
-        position[2]);
+        position[2],
+        forward[0],
+        forward[1],
+        forward[2]);
     return message;
 }
 
@@ -7164,6 +7395,14 @@ void* hooked_simulation_context()
                 g_pending_request.id,
                 "submitted",
                 launch_saved_film(g_pending_request));
+        }
+        else if (g_pending_request.kind == SpawnKind::object_delete)
+        {
+            write_result(
+                g_pending_result_path,
+                g_pending_request.id,
+                "ok",
+                delete_spawned_object(g_pending_request));
         }
         else
         {

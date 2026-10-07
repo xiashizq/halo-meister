@@ -9,6 +9,14 @@ using Microsoft.Win32.SafeHandles;
 
 namespace HaloMeister.App.Services;
 
+public enum GameAttachResult
+{
+    Connected,
+    NotRunning,
+    NotReady,
+    Failed,
+}
+
 public sealed class RuntimeTagMemoryService : IDisposable
 {
     private const string ProcessName = "HaloCampaignEvolved";
@@ -45,6 +53,7 @@ public sealed class RuntimeTagMemoryService : IDisposable
     private uint _tagCacheScenarioDataOffset;
     private Dictionary<uint, string>? _stringIdNameCache;
     private DateTimeOffset _stringIdNameCacheExpires;
+    private readonly object _sessionGate = new();
 
     public static RuntimeTagMemoryService Current { get; } = new();
 
@@ -54,14 +63,17 @@ public sealed class RuntimeTagMemoryService : IDisposable
     {
         get
         {
-            try
+            lock (_sessionGate)
             {
-                return _handle is { IsInvalid: false, IsClosed: false } &&
-                       _process is { HasExited: false };
-            }
-            catch (ObjectDisposedException)
-            {
-                return false;
+                try
+                {
+                    return _handle is { IsInvalid: false, IsClosed: false } &&
+                           _process is { HasExited: false };
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
             }
         }
     }
@@ -73,42 +85,278 @@ public sealed class RuntimeTagMemoryService : IDisposable
     public void Connect()
     {
         Disconnect();
-        Process process = Process.GetProcessesByName(ProcessName).SingleOrDefault()
-            ?? throw new InvalidOperationException(L.Get("shell.game_not_running"));
-        ProcessModule module = process.Modules.Cast<ProcessModule>()
-            .SingleOrDefault(candidate =>
-                candidate.ModuleName.Equals(SimulationModule, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException(
-                $"{SimulationModule} is not loaded yet. Load into the game and try again.");
-        GameBuildProfile buildProfile = GameBuildProfileCatalog.Resolve(module.FileName);
-
-        SafeProcessHandle handle = OpenProcess(
-            ProcessVmOperation | ProcessVmRead | ProcessVmWrite | ProcessQueryInformation,
-            false,
-            process.Id);
-        if (handle.IsInvalid)
+        switch (TryAttach(out string? error))
         {
-            handle.Dispose();
-            throw Win32("OpenProcess");
+            case GameAttachResult.Connected:
+                return;
+            case GameAttachResult.NotRunning:
+                throw new InvalidOperationException(L.Get("shell.game_not_running"));
+            case GameAttachResult.NotReady:
+                throw new InvalidOperationException(
+                    error ?? $"{SimulationModule} is not loaded yet. Load into the game and try again.");
+            default:
+                throw new InvalidOperationException(error ?? "Could not connect to the game.");
+        }
+    }
+
+    /// <summary>
+    /// Attaches when the game process and simulation module are ready.
+    /// Returns without throwing when the game is closed or still starting,
+    /// so a background watcher can retry without tearing down the UI.
+    /// </summary>
+    public GameAttachResult TryAttach(out string? error)
+    {
+        error = null;
+        ReleaseIfExited();
+        if (IsConnected)
+            return GameAttachResult.Connected;
+
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcessesByName(ProcessName);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return GameAttachResult.Failed;
         }
 
-        _process = process;
-        process.EnableRaisingEvents = true;
-        process.Exited += OnProcessExited;
-        _handle = handle;
-        _moduleBase = module.BaseAddress.ToInt64();
-        _modulePath = module.FileName;
-        _buildProfile = buildProfile;
+        Process? process = null;
+        bool keepProcess = false;
+        try
+        {
+            process = processes.FirstOrDefault(IsAlive);
+            if (process is null)
+                return GameAttachResult.NotRunning;
 
-        long table = checked((long)ReadUInt64(
-            _moduleBase + _buildProfile.TagTablePointerOffset));
-        ValidateTagTable(table);
-        _identity = new RuntimeIdentity(
-            process.Id,
-            process.StartTime.ToUniversalTime().Ticks,
-            _moduleBase,
-            table);
-        ConnectionChanged?.Invoke(this, EventArgs.Empty);
+            ProcessModule? module;
+            try
+            {
+                module = FindSimulationModule(process);
+            }
+            catch (InvalidOperationException)
+            {
+                return GameAttachResult.NotRunning;
+            }
+            catch (Win32Exception ex)
+            {
+                error = ex.Message;
+                return GameAttachResult.NotReady;
+            }
+
+            if (module is null)
+                return GameAttachResult.NotReady;
+
+            GameBuildProfile buildProfile;
+            long moduleBase;
+            string modulePath;
+            try
+            {
+                modulePath = module.FileName;
+                moduleBase = module.BaseAddress.ToInt64();
+                buildProfile = GameBuildProfileCatalog.Resolve(modulePath);
+            }
+            catch (InvalidOperationException)
+            {
+                return GameAttachResult.NotRunning;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return GameAttachResult.Failed;
+            }
+
+            SafeProcessHandle handle = OpenProcess(
+                ProcessVmOperation | ProcessVmRead | ProcessVmWrite | ProcessQueryInformation,
+                false,
+                process.Id);
+            if (handle.IsInvalid)
+            {
+                int code = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                error = $"OpenProcess failed ({code})";
+                return GameAttachResult.NotReady;
+            }
+
+            try
+            {
+                if (!CommitSession(
+                        process,
+                        handle,
+                        moduleBase,
+                        modulePath,
+                        buildProfile,
+                        out bool tookOwnership,
+                        out error))
+                    return error is null ? GameAttachResult.NotRunning : GameAttachResult.NotReady;
+                keepProcess = tookOwnership;
+            }
+            catch (InvalidDataException ex)
+            {
+                error = ex.Message;
+                return GameAttachResult.NotReady;
+            }
+            catch (Win32Exception ex)
+            {
+                error = ex.Message;
+                return GameAttachResult.NotReady;
+            }
+            catch (InvalidOperationException)
+            {
+                return GameAttachResult.NotRunning;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return GameAttachResult.Failed;
+            }
+
+            return GameAttachResult.Connected;
+        }
+        finally
+        {
+            foreach (Process candidate in processes)
+            {
+                if (keepProcess && ReferenceEquals(candidate, process))
+                    continue;
+                try
+                {
+                    candidate.Dispose();
+                }
+                catch (Exception)
+                {
+                    // Already released.
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Drops a session whose process has already exited. This is a single
+    /// wait on the process we already hold, not a system-wide process scan.
+    /// </summary>
+    public bool ReleaseIfExited()
+    {
+        bool exited;
+        lock (_sessionGate)
+        {
+            if (_process is null && _handle is null)
+                return false;
+            try
+            {
+                exited = _process is null || _process.HasExited;
+            }
+            catch (Exception)
+            {
+                exited = true;
+            }
+        }
+
+        if (!exited)
+            return false;
+        Disconnect();
+        return true;
+    }
+
+    private bool CommitSession(
+        Process process,
+        SafeProcessHandle handle,
+        long moduleBase,
+        string modulePath,
+        GameBuildProfile buildProfile,
+        out bool tookOwnership,
+        out string? error)
+    {
+        error = null;
+        tookOwnership = false;
+        bool notify = false;
+        lock (_sessionGate)
+        {
+            if (IsSessionAlive())
+            {
+                handle.Dispose();
+                return true;
+            }
+
+            _process = process;
+            _handle = handle;
+            _moduleBase = moduleBase;
+            _modulePath = modulePath;
+            _buildProfile = buildProfile;
+            try
+            {
+                long table = checked((long)ReadUInt64(
+                    _moduleBase + buildProfile.TagTablePointerOffset));
+                ValidateTagTable(table);
+                if (process.HasExited)
+                    throw new InvalidOperationException("The game process exited.");
+                process.EnableRaisingEvents = true;
+                process.Exited += OnProcessExited;
+                if (!ReferenceEquals(_process, process) || process.HasExited)
+                    throw new InvalidOperationException("The game process exited.");
+                _identity = new RuntimeIdentity(
+                    process.Id,
+                    process.StartTime.ToUniversalTime().Ticks,
+                    moduleBase,
+                    table);
+                tookOwnership = true;
+                notify = true;
+            }
+            catch
+            {
+                if (_process is not null)
+                    _process.Exited -= OnProcessExited;
+                _handle = null;
+                _process = null;
+                _moduleBase = 0;
+                _modulePath = null;
+                _buildProfile = null;
+                _identity = null;
+                handle.Dispose();
+                throw;
+            }
+        }
+
+        if (notify)
+            ConnectionChanged?.Invoke(this, EventArgs.Empty);
+        return tookOwnership || IsConnected;
+    }
+
+    private static ProcessModule? FindSimulationModule(Process process)
+    {
+        foreach (ProcessModule candidate in process.Modules)
+        {
+            if (candidate.ModuleName.Equals(SimulationModule, StringComparison.OrdinalIgnoreCase))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private static bool IsAlive(Process process)
+    {
+        try
+        {
+            return !process.HasExited;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private bool IsSessionAlive()
+    {
+        try
+        {
+            return _handle is { IsInvalid: false, IsClosed: false } &&
+                   _process is { HasExited: false };
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     public IReadOnlyList<RuntimeTagEntry> ReadTags()
@@ -684,21 +932,46 @@ public sealed class RuntimeTagMemoryService : IDisposable
 
     public void Disconnect()
     {
-        bool wasConnected = _handle is not null || _process is not null;
-        if (_process is not null)
-            _process.Exited -= OnProcessExited;
-        _handle?.Dispose();
-        _handle = null;
-        _process?.Dispose();
-        _process = null;
-        _moduleBase = 0;
-        _modulePath = null;
-        _buildProfile = null;
-        _identity = null;
-        ClearTagCache();
-        _stringIdNameCache = null;
-        _stringIdNameCacheExpires = default;
-        if (wasConnected)
+        SafeProcessHandle? handle;
+        Process? process;
+        bool notify;
+        lock (_sessionGate)
+        {
+            notify = _handle is not null || _process is not null;
+            if (_process is not null)
+                _process.Exited -= OnProcessExited;
+            handle = _handle;
+            process = _process;
+            _handle = null;
+            _process = null;
+            _moduleBase = 0;
+            _modulePath = null;
+            _buildProfile = null;
+            _identity = null;
+            ClearTagCache();
+            _stringIdNameCache = null;
+            _stringIdNameCacheExpires = default;
+        }
+
+        try
+        {
+            handle?.Dispose();
+        }
+        catch (Exception)
+        {
+            // The handle may already be closed.
+        }
+
+        try
+        {
+            process?.Dispose();
+        }
+        catch (Exception)
+        {
+            // The process object may already be released.
+        }
+
+        if (notify)
             ConnectionChanged?.Invoke(this, EventArgs.Empty);
     }
 

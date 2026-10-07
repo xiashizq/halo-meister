@@ -18,7 +18,6 @@ public sealed partial class HomePage : Page, IActivatablePage
     private readonly GamePlatformPreference _platform = GamePlatformPreference.Current;
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private string? _gameDirectory;
-    private bool _connecting;
 
     public HomePage()
     {
@@ -35,6 +34,14 @@ public sealed partial class HomePage : Page, IActivatablePage
             window.LiveToolsMaintenanceChanged += OnLiveToolsMaintenanceChanged;
         }
 
+        _game.ConnectionChanged -= OnSessionChanged;
+        _game.ConnectionChanged += OnSessionChanged;
+        if (GameSessionWatcher.Current is { } session)
+        {
+            session.PhaseChanged -= OnSessionChanged;
+            session.PhaseChanged += OnSessionChanged;
+        }
+
         ApplyPlatformChrome();
         RefreshStatus();
         _refreshTimer.Start();
@@ -44,11 +51,17 @@ public sealed partial class HomePage : Page, IActivatablePage
     {
         if (MainWindow.Instance is { } window)
             window.LiveToolsMaintenanceChanged -= OnLiveToolsMaintenanceChanged;
+        _game.ConnectionChanged -= OnSessionChanged;
+        if (GameSessionWatcher.Current is { } session)
+            session.PhaseChanged -= OnSessionChanged;
         _refreshTimer.Stop();
     }
 
     private void OnLiveToolsMaintenanceChanged(object? sender, EventArgs e)
         => RefreshStatus();
+
+    private void OnSessionChanged(object? sender, EventArgs e)
+        => DispatcherQueue.TryEnqueue(RefreshStatus);
 
     private void OnRefreshTick(object? sender, object e) => RefreshStatus();
 
@@ -77,16 +90,23 @@ public sealed partial class HomePage : Page, IActivatablePage
     private void RefreshStatus()
     {
         bool connected = _game.IsConnected;
+        GameSessionPhase phase = connected
+            ? GameSessionPhase.Connected
+            : GameSessionWatcher.Current?.Phase ?? GameSessionPhase.Idle;
+        bool blockConnect = !connected && MainWindow.Instance?.IsLiveToolsBlockingConnect == true;
         GameStatusDot.Fill = StatusBrush(connected);
         GameStatusText.Text = connected
             ? L.Format("home.game_connected_pid", _game.ProcessId)
-            : L.Get("home.game_not_connected");
-        ConnectButton.Content = connected ? L.Get("common.reconnect") : L.Get("common.connect");
-        bool blockConnect = MainWindow.Instance?.IsLiveToolsBlockingConnect == true;
-        ConnectButton.IsEnabled = !_connecting && !blockConnect;
-        ToolTipService.SetToolTip(
-            ConnectButton,
-            blockConnect ? L.Get("shell.live_tools_connect_blocked") : null);
+            : blockConnect
+                ? L.Get("shell.live_tools_connect_blocked")
+                : phase switch
+                {
+                    GameSessionPhase.WaitingForMission => L.Get("home.game_waiting"),
+                    GameSessionPhase.Failed => L.Format(
+                        "home.game_connect_failed",
+                        GameSessionWatcher.Current?.Detail ?? L.Get("shell.game_connect_failed")),
+                    _ => L.Get("home.game_not_connected"),
+                };
 
         ScriptingBridgeStatus bridge = _bridge.GetStatus();
         BridgeStatusDot.Fill = StatusBrush(bridge.IsRuntimeReady);
@@ -140,26 +160,6 @@ public sealed partial class HomePage : Page, IActivatablePage
 
     private async void OnLaunchGame(object sender, RoutedEventArgs e)
         => await (MainWindow.Instance?.LaunchGameAsync() ?? Task.CompletedTask);
-
-    private async void OnConnectGame(object sender, RoutedEventArgs e)
-    {
-        if (MainWindow.Instance?.IsLiveToolsBlockingConnect == true)
-            return;
-
-        _connecting = true;
-        ConnectButton.IsEnabled = false;
-        ConnectBusyRing.IsActive = true;
-        try
-        {
-            await (MainWindow.Instance?.ConnectToGameAsync() ?? Task.CompletedTask);
-        }
-        finally
-        {
-            _connecting = false;
-            ConnectBusyRing.IsActive = false;
-            RefreshStatus();
-        }
-    }
 
     private void OnOpenProgress(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("campaign-progress");
     private void OnOpenCustomization(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateTo("customization");

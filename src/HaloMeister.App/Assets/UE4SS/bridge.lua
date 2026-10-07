@@ -1,5 +1,5 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 0.2.5
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 0.2.6
 do
     local hm_ok, hm_error = pcall(function()
         -- UE4SS can load a mod before its shared helper module becomes available.
@@ -14,7 +14,7 @@ do
         -- Keep in step with Directory.Build.props <Version> and the VERSION marker
         -- above. Halo Meister compares this SemVer with the running app so it can
         -- tell you when the game is still running a stale bridge.
-        local bridge_version = "0.2.5"
+        local bridge_version = "0.2.6"
         -- User scripts execute in a dedicated environment. Expose the UE4SS
         -- helper module there while retaining normal access to global UE4SS
         -- APIs and preserving the historical global assignment behavior.
@@ -883,6 +883,27 @@ do
             end
             local valid_object = operation == "object"
                 and payload:match("^%x%x%x%x%x%x%x%x$")
+            local valid_object_delete = operation == "object_delete"
+                and payload:match("^%x%x%x%x%x%x%x%x$")
+            local object_at_tag, object_at_x, object_at_y, object_at_z,
+                object_at_yaw, object_at_pitch = payload:match(
+                    "^(%x%x%x%x%x%x%x%x),"
+                        .. "([%+%-]?[%d%.eE]+),([%+%-]?[%d%.eE]+),"
+                        .. "([%+%-]?[%d%.eE]+),([%+%-]?[%d%.eE]+),"
+                        .. "([%+%-]?[%d%.eE]+)$")
+            local function finite_place_number(value, limit)
+                local number = tonumber(value)
+                return number
+                    and number == number
+                    and math.abs(number) <= limit
+            end
+            local valid_object_at = operation == "object_at"
+                and object_at_tag ~= nil
+                and finite_place_number(object_at_x, 100000)
+                and finite_place_number(object_at_y, 100000)
+                and finite_place_number(object_at_z, 100000)
+                and finite_place_number(object_at_yaw, 1080)
+                and finite_place_number(object_at_pitch, 90)
             local valid_weapon = operation == "weapon"
                 and payload:match("^%x%x%x%x%x%x%x%x$")
             local valid_variant = operation == "variant"
@@ -1089,7 +1110,9 @@ do
                 and validate_ai_team(payload)
             local valid_ai_wave = operation == "ai_wave"
                 and validate_ai_wave(payload)
-            if not valid_object and not valid_weapon and not valid_variant
+            if not valid_object and not valid_object_delete
+                and not valid_object_at
+                and not valid_weapon and not valid_variant
                 and not valid_colors
                 and not valid_weapon_variant
                 and not valid_biped and not valid_biped_body
@@ -1132,7 +1155,9 @@ do
                         and operation ~= "player_input"
                         and operation ~= "machinima"
                         and operation ~= "object_position"
-                        and operation ~= "object_teleport" then
+                        and operation ~= "object_teleport"
+                        and operation ~= "object_delete"
+                        and operation ~= "object_at" then
                         -- UEHelpers v3 calls this GetPlayer; newer revisions may expose
                         -- GetPlayerPawn. Support both because HCE packages v3.
                         local get_player = UEHelpers.GetPlayerPawn or UEHelpers.GetPlayer
@@ -1374,8 +1399,16 @@ do
                         y = y / 100.0
                         z = z / 100.0
                     end
+                    if operation == "object_at" then
+                        payload = object_at_tag
+                        x = tonumber(object_at_x)
+                        y = tonumber(object_at_y)
+                        z = tonumber(object_at_z)
+                        ai_right_x = tonumber(object_at_yaw)
+                        ai_right_y = tonumber(object_at_pitch)
+                    end
                     local coord_lines = (operation == "ai" or operation == "ai_team"
-                        or operation == "ai_wave")
+                        or operation == "ai_wave" or operation == "object_at")
                         and string.format(
                             "%.9g\n%.9g\n%.9g\n%.9g\n%.9g\n",
                             x, y, z, ai_right_x, ai_right_y)
@@ -1578,6 +1611,10 @@ do
                 execute_console(request.id, request.code, "Console command")
             elseif request.kind == "blam_spawn" then
                 execute_blam_spawn(request.id, "object", request.code)
+            elseif request.kind == "blam_object_delete" then
+                execute_blam_spawn(request.id, "object_delete", request.code)
+            elseif request.kind == "blam_object_place" then
+                execute_blam_spawn(request.id, "object_at", request.code)
             elseif request.kind == "blam_ai_spawn" then
                 execute_blam_spawn(request.id, "ai", request.code)
             elseif request.kind == "blam_ai_team_spawn" then

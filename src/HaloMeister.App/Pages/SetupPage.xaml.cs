@@ -13,7 +13,6 @@ public sealed partial class SetupPage : Page, IActivatablePage
     private CancellationTokenSource? _heartbeatWatchCts;
     private bool _languageComboReady;
     private bool _checkingBridge;
-    private bool _connecting;
 
     public SetupPage()
     {
@@ -29,6 +28,14 @@ public sealed partial class SetupPage : Page, IActivatablePage
             window.LiveToolsMaintenanceChanged += OnLiveToolsMaintenanceChanged;
         }
 
+        _game.ConnectionChanged -= OnSessionChanged;
+        _game.ConnectionChanged += OnSessionChanged;
+        if (GameSessionWatcher.Current is { } session)
+        {
+            session.PhaseChanged -= OnSessionChanged;
+            session.PhaseChanged += OnSessionChanged;
+        }
+
         // Cached page trees do not reliably re-fire Loaded; refresh on show.
         _bridge.InvalidateStatusCaches();
         PopulateLanguageCombo();
@@ -41,12 +48,18 @@ public sealed partial class SetupPage : Page, IActivatablePage
     {
         if (MainWindow.Instance is { } window)
             window.LiveToolsMaintenanceChanged -= OnLiveToolsMaintenanceChanged;
+        _game.ConnectionChanged -= OnSessionChanged;
+        if (GameSessionWatcher.Current is { } session)
+            session.PhaseChanged -= OnSessionChanged;
         _refreshTimer.Stop();
         StopHeartbeatWatch();
     }
 
     private void OnLiveToolsMaintenanceChanged(object? sender, EventArgs e)
         => ApplyStatus(_bridge.GetStatus());
+
+    private void OnSessionChanged(object? sender, EventArgs e)
+        => DispatcherQueue.TryEnqueue(() => ApplyStatus(_bridge.GetStatus()));
 
     private void OnRefreshTick(object? sender, object e)
     {
@@ -140,15 +153,22 @@ public sealed partial class SetupPage : Page, IActivatablePage
     private void ApplyStatus(ScriptingBridgeStatus status)
     {
         bool connected = _game.IsConnected;
-        bool blockConnect = MainWindow.Instance?.IsLiveToolsBlockingConnect == true;
+        GameSessionPhase phase = connected
+            ? GameSessionPhase.Connected
+            : GameSessionWatcher.Current?.Phase ?? GameSessionPhase.Idle;
+        bool blockConnect = !connected && MainWindow.Instance?.IsLiveToolsBlockingConnect == true;
         GameStatusText.Text = connected
             ? L.Format("setup.connected_ready_pid", _game.ProcessId)
-            : L.Get("setup.not_connected");
-        ConnectButton.Content = connected ? L.Get("common.reconnect") : L.Get("common.connect");
-        ConnectButton.IsEnabled = !_connecting && !blockConnect;
-        ToolTipService.SetToolTip(
-            ConnectButton,
-            blockConnect ? L.Get("shell.live_tools_connect_blocked") : null);
+            : blockConnect
+                ? L.Get("shell.live_tools_connect_blocked")
+                : phase switch
+                {
+                    GameSessionPhase.WaitingForMission => L.Get("setup.game_waiting"),
+                    GameSessionPhase.Failed => L.Format(
+                        "home.game_connect_failed",
+                        GameSessionWatcher.Current?.Detail ?? L.Get("shell.game_connect_failed")),
+                    _ => L.Get("setup.not_connected"),
+                };
 
         string? activity = MainWindow.Instance?.LiveToolsActivityText;
         if (!string.IsNullOrEmpty(activity))
@@ -176,38 +196,11 @@ public sealed partial class SetupPage : Page, IActivatablePage
         BusyRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void SetConnectBusy(bool busy)
-    {
-        ConnectBusyRing.IsActive = busy;
-        ConnectBusyRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-    }
-
     private async void OnLaunchGame(object sender, RoutedEventArgs e)
     {
         await (MainWindow.Instance?.LaunchGameAsync() ?? Task.CompletedTask);
         StartHeartbeatWatch();
         ApplyStatus(_bridge.GetStatus());
-    }
-
-    private async void OnConnect(object sender, RoutedEventArgs e)
-    {
-        if (MainWindow.Instance?.IsLiveToolsBlockingConnect == true)
-            return;
-
-        _connecting = true;
-        ConnectButton.IsEnabled = false;
-        SetConnectBusy(true);
-        try
-        {
-            await (MainWindow.Instance?.ConnectToGameAsync() ?? Task.CompletedTask);
-        }
-        finally
-        {
-            _connecting = false;
-            SetConnectBusy(false);
-            StartHeartbeatWatch();
-            ApplyStatus(_bridge.GetStatus());
-        }
     }
 
     private async void OnInstall(object sender, RoutedEventArgs e)

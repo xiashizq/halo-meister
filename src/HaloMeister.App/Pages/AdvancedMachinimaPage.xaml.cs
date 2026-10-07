@@ -41,8 +41,6 @@ public sealed partial class AdvancedMachinimaPage : Page, IActivatablePage
         => await RunBusy(async () =>
         {
             _state = await _machinima.ExitAsync();
-            LiveNodeBox.ItemsSource = null;
-            LiveNodeDetailText.Text = L.Get("advanced_machinima.no_authored_camera_node_selected");
             ShowStatus(
                 L.Get("advanced_machinima.exit_restored"),
                 InfoBarSeverity.Success);
@@ -185,18 +183,13 @@ public sealed partial class AdvancedMachinimaPage : Page, IActivatablePage
     private async Task RefreshAsync(bool showSuccess)
     {
         _state = await _machinima.ReadStateAsync();
-        if (_state.IsEnabled)
-            await RefreshNodesAsync();
-        else
-            LiveNodeBox.ItemsSource = null;
+        await RefreshNodesAsync();
         ReloadSavedLocations(
             (SavedLocationBox.SelectedItem as SavedMachinimaLocation)?.Id);
         if (showSuccess)
         {
             ShowStatus(
-                _state.IsEnabled
-                    ? L.Get("advanced_machinima.refreshed_nodes")
-                    : L.Get("advanced_machinima.not_active"),
+                L.Get("advanced_machinima.refreshed_nodes"),
                 InfoBarSeverity.Success);
         }
     }

@@ -77,15 +77,6 @@
                             <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='home.game_session'}" />
                         </StackPanel>
                         <TextBlock x:Name="GameStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.checking'}" TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="ConnectButton" Click="OnConnectGame" Content="{i18n:Loc Key='home.connect'}" />
-                            <ProgressRing
-                                x:Name="ConnectBusyRing"
-                                Width="20"
-                                Height="20"
-                                VerticalAlignment="Center"
-                                IsActive="False" />
-                        </StackPanel>
                     </StackPanel>
                 </Border>
 

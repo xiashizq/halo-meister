@@ -10,6 +10,8 @@ public enum ScriptLanguage
     Lua,
     HaloScript,
     BlamSpawn,
+    BlamObjectDelete,
+    BlamObjectPlace,
     BlamBipedSpawn,
     BlamBipedVariantSpawn,
     BlamAiSpawn,
@@ -308,6 +310,8 @@ public sealed class ScriptingBridgeService
                 ScriptLanguage.Lua => "lua",
                 ScriptLanguage.HaloScript => "haloscript",
                 ScriptLanguage.BlamSpawn => "blam_spawn",
+                ScriptLanguage.BlamObjectDelete => "blam_object_delete",
+                ScriptLanguage.BlamObjectPlace => "blam_object_place",
                 ScriptLanguage.BlamBipedSpawn => "blam_biped_spawn",
                 ScriptLanguage.BlamBipedVariantSpawn => "blam_biped_variant_spawn",
                 ScriptLanguage.BlamAiSpawn => "blam_ai_spawn",
@@ -914,6 +918,8 @@ public sealed class ScriptingBridgeService
                 "ok" when language is
                     ScriptLanguage.Lua or
                     ScriptLanguage.BlamSpawn or
+                    ScriptLanguage.BlamObjectDelete or
+                    ScriptLanguage.BlamObjectPlace or
                     ScriptLanguage.BlamBipedSpawn or
                     ScriptLanguage.BlamBipedVariantSpawn or
                     ScriptLanguage.BlamAiSpawn or
@@ -1426,6 +1432,8 @@ public sealed class ScriptingBridgeService
         {
             ScriptLanguage.HaloScript => "HaloScript",
             ScriptLanguage.BlamSpawn => "Blam object spawn",
+            ScriptLanguage.BlamObjectDelete => "Blam object delete",
+            ScriptLanguage.BlamObjectPlace => "Blam object place",
             ScriptLanguage.BlamBipedSpawn => "Blam biped spawn",
             ScriptLanguage.BlamBipedVariantSpawn => "Blam variant biped spawn",
             ScriptLanguage.BlamAiSpawn => "Blam AI spawn",

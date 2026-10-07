@@ -24,7 +24,6 @@ public sealed partial class MainWindow : Window
     private readonly ScriptingBridgeService _bridge = ScriptingBridgeService.Current;
     private readonly Ue4ssLoaderInstaller _loaderInstaller = new();
     private byte[]? _patchPayload;
-    private bool _connectingToGame;
     private bool _installingBridge;
     private bool _liveToolsGateOpen;
     private bool _suppressAutoLiveTools;
@@ -40,6 +39,7 @@ public sealed partial class MainWindow : Window
     private bool _awaitingAuthCapture;
     private bool _authSavedDuringCapture;
     private int _navigationGeneration;
+    private readonly GameSessionWatcher _sessionWatcher;
     private readonly Dictionary<Type, Page> _pageCache = new();
     private Page? _activePage;
     private readonly DispatcherTimer _statusDismissTimer = new()
@@ -85,6 +85,10 @@ public sealed partial class MainWindow : Window
         _liveToolsCardTimer.Tick += OnLiveToolsCardTimerTick;
         RootGrid.Loaded += OnRootGridLoaded;
 
+        _sessionWatcher = new GameSessionWatcher(
+            _game,
+            () => !_windowClosed && !IsLiveToolsBlockingConnect);
+        _sessionWatcher.PhaseChanged += OnGameConnectionChanged;
         TryLoadSavedPlayFabSession();
         Nav.SelectedItem = HomeNavItem;
         PresentPage(GetOrCreatePage(typeof(HomePage), out _));
@@ -209,11 +213,14 @@ public sealed partial class MainWindow : Window
         PlayerAppearanceNavItem.Content = L.Get("shell.player_appearance");
         CameraWorldNavItem.Content = L.Get("shell.camera_world");
         CinematicsNavItem.Content = L.Get("shell.cinematics");
+        GameResourcesNavItem.Content = L.Get("shell.game_resources");
         MusicNavItem.Content = L.Get("shell.music");
         CharacterModelsNavItem.Content = L.Get("shell.character_models");
         ChangeBipedNavItem.Content = L.Get("shell.change_character");
         AdvancedNavItem.Content = L.Get("shell.advanced");
         // RuntimeTagsNavItem.Content = L.Get("shell.realtime_tags");
+        ScenarioPropsNavItem.Content = L.Get("shell.scenario_props");
+        ScenarioPaletteNavItem.Content = L.Get("shell.scenario_palette");
         ScriptingNavItem.Content = L.Get("shell.scripting");
         RemoteNavItem.Content = L.Get("shell.phone_remote");
         SetupNavItem.Content = L.Get("shell.setup");
@@ -242,46 +249,19 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void OnConnectGame(object sender, RoutedEventArgs e)
-        => await ConnectToGameAsync();
-
-    public async Task ConnectToGameAsync()
-    {
-        if (_connectingToGame || IsLiveToolsBlockingConnect)
-            return;
-
-        _connectingToGame = true;
-        UpdateGameConnectionChrome();
-        try
-        {
-            await Task.Run(_game.Connect);
-            Report(
-                L.Format("shell.game_connected_msg", _game.ProcessId),
-                InfoBarSeverity.Success,
-                L.Get("shell.game_connected_title"));
-        }
-        catch (Exception ex)
-        {
-            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_connect"));
-        }
-        finally
-        {
-            _connectingToGame = false;
-            UpdateGameConnectionChrome();
-        }
-    }
-
     private void OnGameConnectionChanged(object? sender, EventArgs e)
         => DispatcherQueue.TryEnqueue(UpdateGameConnectionChrome);
+
+    private void AllowGameSessionConnect()
+    {
+        _liveToolsGateOpen = true;
+        _sessionWatcher.RequestProbe();
+    }
 
     private void UpdateGameConnectionChrome()
     {
         bool connected = _game.IsConnected;
-        GameConnectionProgress.IsActive = _connectingToGame;
-        GameConnectionProgress.Visibility =
-            _connectingToGame ? Visibility.Visible : Visibility.Collapsed;
-        GameConnectionIndicator.Visibility =
-            _connectingToGame ? Visibility.Collapsed : Visibility.Visible;
+        GameSessionPhase phase = connected ? GameSessionPhase.Connected : _sessionWatcher.Phase;
         GameConnectionIndicator.Fill = connected
             ? new Microsoft.UI.Xaml.Media.SolidColorBrush(
                 Microsoft.UI.Colors.LimeGreen)
@@ -289,14 +269,14 @@ public sealed partial class MainWindow : Window
                 "TextFillColorTertiaryBrush"];
         GameConnectionText.Text = connected
             ? L.Format("shell.connected_pid", _game.ProcessId)
-            : L.Get("shell.game_disconnected");
-        GameConnectionButton.Content = connected
-            ? L.Get("common.reconnect")
-            : L.Get("common.connect");
-        GameConnectionButton.IsEnabled = !_connectingToGame && !IsLiveToolsBlockingConnect;
-        ToolTipService.SetToolTip(
-            GameConnectionButton,
-            IsLiveToolsBlockingConnect ? L.Get("shell.live_tools_connect_blocked") : null);
+            : IsLiveToolsBlockingConnect
+                ? L.Get("shell.game_tools_pending")
+                : phase switch
+                {
+                    GameSessionPhase.WaitingForMission => L.Get("shell.game_waiting"),
+                    GameSessionPhase.Failed => L.Get("shell.game_connect_failed"),
+                    _ => L.Get("shell.game_idle"),
+                };
     }
 
     public async Task LaunchGameAsync()
@@ -330,7 +310,7 @@ public sealed partial class MainWindow : Window
             return;
         if (automatic && _suppressAutoLiveTools && !forcePickFolder)
         {
-            _liveToolsGateOpen = true;
+            AllowGameSessionConnect();
             SetLiveToolsCard(LiveToolsCardKind.Hidden);
             return;
         }
@@ -433,7 +413,7 @@ public sealed partial class MainWindow : Window
         {
             _installingBridge = false;
             if (succeeded)
-                _liveToolsGateOpen = true;
+                AllowGameSessionConnect();
             PublishLiveToolsMaintenance();
         }
     }
@@ -854,7 +834,7 @@ public sealed partial class MainWindow : Window
             PublishLiveToolsMaintenance();
             string removedPath = await Task.Run(_bridge.UninstallBridge);
             _suppressAutoLiveTools = true;
-            _liveToolsGateOpen = true;
+            AllowGameSessionConnect();
             SetLiveToolsCard(LiveToolsCardKind.Hidden);
             Report(
                 string.IsNullOrEmpty(removedPath)
@@ -955,6 +935,8 @@ public sealed partial class MainWindow : Window
         // "live-ai-battle" => typeof(AiBattlePage),
         "change-biped" => typeof(ChangeBipedPage),
         "runtime-tags" => typeof(RuntimeTagsPage),
+        "scenario-props" => typeof(ScenarioPropsPage),
+        "scenario-palette" => typeof(ScenarioPalettePage),
         "scripting" => typeof(ScriptingPage),
         "cinematics" => typeof(CinematicsPage),
         "music" => typeof(MusicPage),
@@ -1134,6 +1116,8 @@ public sealed partial class MainWindow : Window
             "character-models" => CharacterModelsNavItem,
             "change-biped" => ChangeBipedNavItem,
             // "runtime-tags" => RuntimeTagsNavItem,
+            "scenario-props" => ScenarioPropsNavItem,
+            "scenario-palette" => ScenarioPaletteNavItem,
             "scripting" => ScriptingNavItem,
             "phone-remote" => RemoteNavItem,
             "setup" => SetupNavItem,
@@ -1584,6 +1568,8 @@ public sealed partial class MainWindow : Window
         _proxy.TrafficObserved -= OnPlayFabTraffic;
         _proxy.PatchPayloadProvider = null;
         _proxy.Stop();
+        _sessionWatcher.PhaseChanged -= OnGameConnectionChanged;
+        _sessionWatcher.Dispose();
         _game.ConnectionChanged -= OnGameConnectionChanged;
         _game.Dispose();
     }

@@ -47,11 +47,6 @@
                     VerticalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="10">
-                    <ProgressRing
-                        x:Name="GameConnectionProgress"
-                        Width="18"
-                        Height="18"
-                        IsActive="False" />
                     <Ellipse
                         x:Name="GameConnectionIndicator"
                         Width="8"
@@ -61,12 +56,7 @@
                         x:Name="GameConnectionText"
                         VerticalAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="{i18n:Loc Key='shell.game_disconnected'}" />
-                    <Button
-                        x:Name="GameConnectionButton"
-                        Click="OnConnectGame"
-                        Content="{i18n:Loc Key='shell.connect'}"
-                        Style="{StaticResource AccentButtonStyle}" />
+                        Text="{i18n:Loc Key='shell.game_idle'}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -149,16 +139,24 @@
                 </NavigationViewItem>
 
                 <NavigationViewItem
-                    x:Name="MusicNavItem"
-                    Content="{i18n:Loc Key='shell.music'}"
-                    Icon="Audio"
-                    Tag="music" />
-
-                <NavigationViewItem
-                    x:Name="CharacterModelsNavItem"
-                    Content="{i18n:Loc Key='shell.character_models'}"
-                    Icon="People"
-                    Tag="character-models" />
+                    x:Name="GameResourcesNavItem"
+                    Content="{i18n:Loc Key='shell.game_resources'}"
+                    Icon="Library"
+                    IsExpanded="False"
+                    SelectsOnInvoked="False">
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem
+                            x:Name="MusicNavItem"
+                            Content="{i18n:Loc Key='shell.music'}"
+                            Icon="Audio"
+                            Tag="music" />
+                        <NavigationViewItem
+                            x:Name="CharacterModelsNavItem"
+                            Content="{i18n:Loc Key='shell.character_models'}"
+                            Icon="People"
+                            Tag="character-models" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
 
                 <NavigationViewItem
                     x:Name="ChangeBipedNavItem"
@@ -176,6 +174,8 @@
                         <!-- Temporarily hidden: realtime tags menu entry
                         <NavigationViewItem x:Name="RuntimeTagsNavItem" Content="{i18n:Loc Key='shell.realtime_tags'}" Icon="Bullets" Tag="runtime-tags" />
                         -->
+                        <NavigationViewItem x:Name="ScenarioPropsNavItem" Content="{i18n:Loc Key='shell.scenario_props'}" Icon="View" Tag="scenario-props" />
+                        <NavigationViewItem x:Name="ScenarioPaletteNavItem" Content="{i18n:Loc Key='shell.scenario_palette'}" Icon="Pictures" Tag="scenario-palette" />
                         <NavigationViewItem x:Name="ScriptingNavItem" Content="{i18n:Loc Key='shell.scripting'}" Icon="Keyboard" Tag="scripting" />
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>

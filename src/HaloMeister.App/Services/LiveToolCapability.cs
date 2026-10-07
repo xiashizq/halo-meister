@@ -38,7 +38,8 @@ public static class LiveToolCapabilityCatalog
     public static LiveToolCapability? For(ScriptLanguage language)
         => language switch
         {
-            ScriptLanguage.BlamSpawn or ScriptLanguage.BlamTagAssetLoad =>
+            ScriptLanguage.BlamSpawn or ScriptLanguage.BlamObjectDelete or
+                ScriptLanguage.BlamObjectPlace or ScriptLanguage.BlamTagAssetLoad =>
                 LiveToolCapability.ObjectSpawn,
             ScriptLanguage.BlamWeaponLoad or ScriptLanguage.BlamWeaponVariant =>
                 LiveToolCapability.WeaponLoad,
