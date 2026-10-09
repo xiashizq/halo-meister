@@ -166,7 +166,7 @@ public sealed partial class SetupPage : Page, IActivatablePage
                     GameSessionPhase.WaitingForMission => L.Get("setup.game_waiting"),
                     GameSessionPhase.Failed => L.Format(
                         "home.game_connect_failed",
-                        GameSessionWatcher.Current?.Detail ?? L.Get("shell.game_connect_failed")),
+                        UserFacingErrors.Sanitize(GameSessionWatcher.Current?.Detail ?? L.Get("shell.game_connect_failed"))),
                     _ => L.Get("setup.not_connected"),
                 };
 

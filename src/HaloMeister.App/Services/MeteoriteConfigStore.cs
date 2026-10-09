@@ -14,7 +14,7 @@ public sealed class MeteoriteConfigStore
     {
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         SavedRoot = savedRoot ?? Path.Combine(localAppData, "Meteorite", "Saved");
-        BackupRoot = backupRoot ?? Path.Combine(localAppData, "HaloMeister", "ConfigBackups");
+        BackupRoot = backupRoot ?? Path.Combine(localAppData, AppPaths.DataFolderName, "ConfigBackups");
     }
 
     public string SavedRoot { get; }
@@ -87,7 +87,7 @@ public sealed class MeteoriteConfigStore
 
         File.WriteAllText(
             Path.Combine(destinationRoot, "_backup.txt"),
-            $"Halo Meister Meteorite config backup{Environment.NewLine}" +
+            $"Cartographer Toolkit Meteorite config backup{Environment.NewLine}" +
             $"Created: {DateTimeOffset.Now:O}{Environment.NewLine}" +
             $"Reason: {reason}{Environment.NewLine}" +
             $"Source: {SavedRoot}{Environment.NewLine}" +

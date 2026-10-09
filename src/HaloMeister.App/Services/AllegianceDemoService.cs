@@ -558,7 +558,7 @@ public sealed class AllegianceDemoService
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
         return ParseObjectTeam(result.Message);
     }
 
@@ -669,7 +669,7 @@ public sealed class AllegianceDemoService
             TimeSpan.FromSeconds(8),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
         if (!TryParseReturnPosition(result.Message, out WorldPoint point))
         {
             throw new InvalidDataException(

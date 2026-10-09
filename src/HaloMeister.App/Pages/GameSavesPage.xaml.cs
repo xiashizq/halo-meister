@@ -145,7 +145,7 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -237,7 +237,7 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -263,7 +263,7 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -300,7 +300,7 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
         catch (Exception ex)
         {
             SetBusy(false);
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -354,7 +354,7 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
         catch (Exception ex)
         {
             SetBusy(false);
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -388,7 +388,7 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -408,17 +408,15 @@ public sealed partial class GameSavesPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
     private void Report(string message, InfoBarSeverity severity)
-    {
-        PageStatus.Title = severity == InfoBarSeverity.Error
-            ? L.Get("game_saves.operation_failed")
-            : L.Get("game_saves.game_saves");
-        PageStatus.Message = message;
-        PageStatus.Severity = severity;
-        PageStatus.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(
+            message,
+            severity,
+            severity == InfoBarSeverity.Error
+                ? L.Get("game_saves.operation_failed")
+                : L.Get("game_saves.game_saves"));
 }

@@ -67,7 +67,7 @@ public partial class App : Application
         {
             string directory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "HaloMeister");
+                AppPaths.DataFolderName);
             Directory.CreateDirectory(directory);
             string path = Path.Combine(directory, "crash.log");
             File.AppendAllText(

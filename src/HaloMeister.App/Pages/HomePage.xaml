@@ -1,65 +1,183 @@
-<Page
+﻿<Page
     x:Class="HaloMeister.App.Pages.HomePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
+    <Page.Resources>
+        <!-- 图标底座:强调色淡底 + 强调色图标 -->
+        <Style x:Key="HomeBadgeStyle" TargetType="Border">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="BorderBrush" Value="#553CC8E0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Offset="0" Color="#333CC8E0" />
+                        <GradientStop Offset="1" Color="#338B7BFF" />
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HomeBadgeIconStyle" TargetType="FontIcon">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+        </Style>
+
+        <Style x:Key="HomeStatusCardStyle" TargetType="Border">
+            <Setter Property="Padding" Value="18,16" />
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+        </Style>
+
+        <Style x:Key="HomeSectionTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="HomeActionCardStyle" TargetType="Button" BasedOn="{StaticResource TaskCardButtonStyle}">
+            <Setter Property="MinHeight" Value="104" />
+            <Setter Property="Padding" Value="18,16" />
+            <Setter Property="CornerRadius" Value="14" />
+        </Style>
+    </Page.Resources>
+
     <ScrollViewer
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto">
         <StackPanel
-            Padding="28,28,28,48"
+            Padding="28,24,28,40"
             HorizontalAlignment="Stretch"
-            Spacing="22">
+            Spacing="24">
 
-            <Grid ColumnSpacing="28">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Spacing="6">
-                    <TextBlock FontSize="32" FontWeight="SemiBold" Text="{i18n:Loc Key='home.welcome_to_halo_meister'}" />
-                    <TextBlock
-                        MaxWidth="720"
-                        FontSize="17"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        HorizontalAlignment="Left"
-                        Text="{i18n:Loc Key='home.edit_campaign_progress_manage_your_local_5d49d0'}"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel
-                    Grid.Column="1"
-                    VerticalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="8">
-                    <DropDownButton x:Name="PlatformButton">
-                        <DropDownButton.Content>
-                            <TextBlock x:Name="PlatformButtonText" Text="{i18n:Loc Key='game_saves.platform_steam'}" />
-                        </DropDownButton.Content>
-                        <DropDownButton.Flyout>
-                            <MenuFlyout>
-                                <MenuFlyoutItem
-                                    Click="OnSelectSteamPlatform"
-                                    Text="{i18n:Loc Key='game_saves.platform_steam'}" />
-                                <!-- Microsoft Store launch is disabled; Steam only.
-                                <MenuFlyoutItem
-                                    Click="OnSelectStorePlatform"
-                                    Text="{i18n:Loc Key='game_saves.platform_microsoft_store'}" />
-                                -->
-                            </MenuFlyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                    <Button
-                        Click="OnLaunchGame"
-                        Style="{StaticResource AccentButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <SymbolIcon Symbol="Play" />
-                            <TextBlock x:Name="LaunchGameButtonText" Text="{i18n:Loc Key='home.launch_game'}" />
+            <!-- ═══════════ 顶部横幅 ═══════════ -->
+            <Border
+                MinHeight="188"
+                BorderBrush="#33FFFFFF"
+                BorderThickness="1"
+                CornerRadius="16">
+                <Border.Background>
+                    <ImageBrush
+                        x:Name="HeroBackgroundBrush"
+                        AlignmentX="Center"
+                        AlignmentY="Center"
+                        ImageSource="ms-appx:///Assets/Backgrounds/home_hero.jpg"
+                        Stretch="UniformToFill" />
+                </Border.Background>
+                <Grid CornerRadius="16">
+                    <!-- 左深右浅的遮罩:保证文字可读,同时露出右侧星图 -->
+                    <Grid.Background>
+                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                            <GradientStop Offset="0" Color="#F2080B13" />
+                            <GradientStop Offset="0.5" Color="#B8080B13" />
+                            <GradientStop Offset="1" Color="#33080B13" />
+                        </LinearGradientBrush>
+                    </Grid.Background>
+
+                    <!-- 底部强调光带 -->
+                    <Rectangle Height="2" VerticalAlignment="Bottom">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                <GradientStop Offset="0" Color="#003CC8E0" />
+                                <GradientStop Offset="0.35" Color="#CC3CC8E0" />
+                                <GradientStop Offset="0.75" Color="#CC8B7BFF" />
+                                <GradientStop Offset="1" Color="#008B7BFF" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+
+                    <Grid Padding="32,28" ColumnSpacing="28">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Center" Spacing="10">
+                            <TextBlock
+                                FontSize="34"
+                                FontWeight="SemiBold"
+                                Foreground="White"
+                                Text="{i18n:Loc Key='home.welcome_to_halo_meister'}" />
+                            <TextBlock
+                                MaxWidth="560"
+                                HorizontalAlignment="Left"
+                                FontSize="15"
+                                Foreground="#CCFFFFFF"
+                                LineHeight="22"
+                                Text="{i18n:Loc Key='home.edit_campaign_progress_manage_your_local_5d49d0'}"
+                                TextWrapping="Wrap" />
                         </StackPanel>
-                    </Button>
-                </StackPanel>
-            </Grid>
 
+                        <StackPanel
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            RequestedTheme="Dark"
+                            Spacing="10">
+                            <DropDownButton x:Name="PlatformButton" Height="40" MinWidth="96">
+                                <DropDownButton.Content>
+                                    <TextBlock x:Name="PlatformButtonText" Text="{i18n:Loc Key='game_saves.platform_steam'}" />
+                                </DropDownButton.Content>
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem
+                                            Click="OnSelectSteamPlatform"
+                                            Text="{i18n:Loc Key='game_saves.platform_steam'}" />
+                                        <!-- Microsoft Store launch is disabled; Steam only.
+                                        <MenuFlyoutItem
+                                            Click="OnSelectStorePlatform"
+                                            Text="{i18n:Loc Key='game_saves.platform_microsoft_store'}" />
+                                        -->
+                                    </MenuFlyout>
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                            <Button
+                                Height="40"
+                                Padding="20,0"
+                                Click="OnLaunchGame"
+                                CornerRadius="8"
+                                Style="{StaticResource AccentButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <FontIcon FontSize="14" Glyph="&#xE768;" />
+                                    <TextBlock
+                                        x:Name="LaunchGameButtonText"
+                                        FontWeight="SemiBold"
+                                        Text="{i18n:Loc Key='home.launch_game'}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 更换 / 恢复首页背景图 -->
+                    <Button
+                        Margin="0,0,12,12"
+                        Padding="8,6"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Background="#66000000"
+                        BorderBrush="#33FFFFFF"
+                        RequestedTheme="Dark"
+                        ToolTipService.ToolTip="{i18n:Loc Key='home.change_background'}">
+                        <FontIcon FontSize="14" Glyph="&#xE91B;" />
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Click="OnPickBackground" Text="{i18n:Loc Key='home.choose_background_image'}" />
+                                <MenuFlyoutItem Click="OnResetBackground" Text="{i18n:Loc Key='home.reset_background'}" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ═══════════ 运行状态 ═══════════ -->
             <Grid ColumnSpacing="12" RowSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -70,75 +188,161 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Border Style="{StaticResource DashboardCardStyle}">
-                    <StackPanel Spacing="9">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse x:Name="GameStatusDot" Width="8" Height="8" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                            <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='home.game_session'}" />
+                <!-- 游戏会话 -->
+                <Border Style="{StaticResource HomeStatusCardStyle}">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource HomeBadgeStyle}"><FontIcon Glyph="&#xE7FC;" Style="{StaticResource HomeBadgeIconStyle}" /></Border>
+                        <StackPanel Grid.Column="1" Spacing="6">
+                            <Grid>
+                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{i18n:Loc Key='home.game_session'}" />
+                                <Ellipse
+                                    x:Name="GameStatusDot"
+                                    Width="10"
+                                    Height="10"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="GameStatusText"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='home.checking'}"
+                                TextWrapping="Wrap" />
                         </StackPanel>
-                        <TextBlock x:Name="GameStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.checking'}" TextWrapping="Wrap" />
-                    </StackPanel>
+                    </Grid>
                 </Border>
 
-                <Border Grid.Column="1" Style="{StaticResource DashboardCardStyle}">
-                    <StackPanel Spacing="9">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse x:Name="BridgeStatusDot" Width="8" Height="8" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                            <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='home.live_tools_bridge'}" />
-                        </StackPanel>
-                        <TextBlock x:Name="BridgeStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.checking'}" TextWrapping="Wrap" />
-                        <Button HorizontalAlignment="Left" Click="OnOpenSetup" Content="{i18n:Loc Key='home.open_setup'}" />
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Row="1" Style="{StaticResource DashboardCardStyle}">
-                    <StackPanel Spacing="9">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse x:Name="CloudStatusDot" Width="8" Height="8" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                            <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='home.campaign_data'}" />
-                        </StackPanel>
-                        <TextBlock x:Name="CloudStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.checking'}" TextWrapping="Wrap" />
-                        <Button HorizontalAlignment="Left" Click="OnOpenProgress" Content="{i18n:Loc Key='home.open_progress'}" />
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource DashboardCardStyle}">
-                    <StackPanel Spacing="9">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse x:Name="GamePathStatusDot" Width="8" Height="8" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                            <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='home.game_path'}" />
-                        </StackPanel>
-                        <TextBlock
-                            x:Name="GamePathText"
-                            FontFamily="Consolas"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            IsTextSelectionEnabled="True"
-                            Text="{i18n:Loc Key='home.game_path_disconnected'}"
-                            TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                <!-- 实时工具 bridge -->
+                <Border Grid.Column="1" Style="{StaticResource HomeStatusCardStyle}">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource HomeBadgeStyle}"><FontIcon Glyph="&#xE71B;" Style="{StaticResource HomeBadgeIconStyle}" /></Border>
+                        <StackPanel Grid.Column="1" Spacing="6">
+                            <Grid>
+                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{i18n:Loc Key='home.live_tools_bridge'}" />
+                                <Ellipse
+                                    x:Name="BridgeStatusDot"
+                                    Width="10"
+                                    Height="10"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="BridgeStatusText"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='home.checking'}"
+                                TextWrapping="Wrap" />
                             <Button
-                                x:Name="ChangeGamePathButton"
-                                Click="OnChangeGamePath"
-                                Content="{i18n:Loc Key='home.change_game_folder'}" />
-                            <Button
-                                x:Name="OpenGamePathButton"
-                                Click="OnOpenGamePath"
-                                Content="{i18n:Loc Key='home.open_game_folder'}"
-                                IsEnabled="False" />
-                            <ProgressRing
-                                x:Name="PathBusyRing"
-                                Width="20"
-                                Height="20"
-                                VerticalAlignment="Center"
-                                IsActive="False" />
+                                Margin="0,6,0,0"
+                                HorizontalAlignment="Left"
+                                Click="OnOpenSetup"
+                                Content="{i18n:Loc Key='home.open_setup'}" />
                         </StackPanel>
-                    </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 战役数据 -->
+                <Border Grid.Row="1" Style="{StaticResource HomeStatusCardStyle}">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource HomeBadgeStyle}"><FontIcon Glyph="&#xE753;" Style="{StaticResource HomeBadgeIconStyle}" /></Border>
+                        <StackPanel Grid.Column="1" Spacing="6">
+                            <Grid>
+                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{i18n:Loc Key='home.campaign_data'}" />
+                                <Ellipse
+                                    x:Name="CloudStatusDot"
+                                    Width="10"
+                                    Height="10"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="CloudStatusText"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{i18n:Loc Key='home.checking'}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                Margin="0,6,0,0"
+                                HorizontalAlignment="Left"
+                                Click="OnOpenProgress"
+                                Content="{i18n:Loc Key='home.open_progress'}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 游戏路径 -->
+                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource HomeStatusCardStyle}">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource HomeBadgeStyle}"><FontIcon Glyph="&#xE8B7;" Style="{StaticResource HomeBadgeIconStyle}" /></Border>
+                        <StackPanel Grid.Column="1" Spacing="6">
+                            <Grid>
+                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{i18n:Loc Key='home.game_path'}" />
+                                <Ellipse
+                                    x:Name="GamePathStatusDot"
+                                    Width="10"
+                                    Height="10"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </Grid>
+                            <Border
+                                Padding="10,7"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                CornerRadius="6">
+                                <TextBlock
+                                    x:Name="GamePathText"
+                                    FontFamily="Consolas"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    IsTextSelectionEnabled="True"
+                                    Text="{i18n:Loc Key='home.game_path_disconnected'}"
+                                    TextWrapping="Wrap" />
+                            </Border>
+                            <StackPanel
+                                Margin="0,6,0,0"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <Button
+                                    x:Name="ChangeGamePathButton"
+                                    Click="OnChangeGamePath"
+                                    Content="{i18n:Loc Key='home.change_game_folder'}" />
+                                <Button
+                                    x:Name="OpenGamePathButton"
+                                    Click="OnOpenGamePath"
+                                    Content="{i18n:Loc Key='home.open_game_folder'}"
+                                    IsEnabled="False" />
+                                <ProgressRing
+                                    x:Name="PathBusyRing"
+                                    Width="20"
+                                    Height="20"
+                                    VerticalAlignment="Center"
+                                    IsActive="False" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
             </Grid>
 
-            <StackPanel Spacing="10">
-                <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{i18n:Loc Key='home.what_would_you_like_to_do'}" />
+            <!-- ═══════════ 快捷入口 ═══════════ -->
+            <StackPanel Spacing="12">
+                <TextBlock Style="{StaticResource HomeSectionTitleStyle}" Text="{i18n:Loc Key='home.what_would_you_like_to_do'}" />
+
                 <Grid ColumnSpacing="12" RowSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -149,57 +353,109 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Button Style="{StaticResource TaskCardButtonStyle}" Click="OnOpenProgress">
-                        <Grid ColumnSpacing="14">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <SymbolIcon Symbol="Map" />
-                            <StackPanel Grid.Column="1" Spacing="3">
+                    <Button Click="OnOpenProgress" PointerEntered="OnActionCardPointerEntered" PointerExited="OnActionCardPointerExited" Style="{StaticResource HomeActionCardStyle}">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border VerticalAlignment="Center" Style="{StaticResource HomeBadgeStyle}"><FontIcon Glyph="&#xE707;" Style="{StaticResource HomeBadgeIconStyle}" /></Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                 <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='home.review_campaign_progress'}" />
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.missions_skulls_terminals_profile_and_ent_7694ac'}" TextWrapping="Wrap" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='home.missions_skulls_terminals_profile_and_ent_7694ac'}"
+                                    TextWrapping="Wrap" />
                             </StackPanel>
-                            <FontIcon Grid.Column="2" VerticalAlignment="Center" Glyph="&#xE76C;" />
+                            <FontIcon
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE76C;" />
                         </Grid>
                     </Button>
 
-                    <Button Grid.Column="1" Style="{StaticResource TaskCardButtonStyle}" Click="OnOpenCustomization">
-                        <Grid ColumnSpacing="14">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <SymbolIcon Symbol="Folder" />
-                            <StackPanel Grid.Column="1" Spacing="3">
+                    <Button Grid.Column="1" Click="OnOpenCustomization" PointerEntered="OnActionCardPointerEntered" PointerExited="OnActionCardPointerExited" Style="{StaticResource HomeActionCardStyle}">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border VerticalAlignment="Center" Style="{StaticResource HomeBadgeStyle}"><FontIcon Glyph="&#xE8B7;" Style="{StaticResource HomeBadgeIconStyle}" /></Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                 <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='home.manage_game_files'}" />
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.customization_settings_backups_and_game_saves'}" TextWrapping="Wrap" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='home.customization_settings_backups_and_game_saves'}"
+                                    TextWrapping="Wrap" />
                             </StackPanel>
-                            <FontIcon Grid.Column="2" VerticalAlignment="Center" Glyph="&#xE76C;" />
+                            <FontIcon
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE76C;" />
                         </Grid>
                     </Button>
 
-                    <Button Grid.Row="1" Style="{StaticResource TaskCardButtonStyle}" Click="OnOpenLiveTools">
-                        <Grid ColumnSpacing="14">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE7FC;" />
-                            <StackPanel Grid.Column="1" Spacing="3">
+                    <Button Grid.Row="1" Click="OnOpenLiveTools" PointerEntered="OnActionCardPointerEntered" PointerExited="OnActionCardPointerExited" Style="{StaticResource HomeActionCardStyle}">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border VerticalAlignment="Center" Style="{StaticResource HomeBadgeStyle}"><FontIcon Glyph="&#xE7FC;" Style="{StaticResource HomeBadgeIconStyle}" /></Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                 <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='home.use_live_tools'}" />
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.gameplay_spawning_player_appearance_camer_2a634e'}" TextWrapping="Wrap" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='home.gameplay_spawning_player_appearance_camer_2a634e'}"
+                                    TextWrapping="Wrap" />
                             </StackPanel>
-                            <FontIcon Grid.Column="2" VerticalAlignment="Center" Glyph="&#xE76C;" />
+                            <FontIcon
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE76C;" />
                         </Grid>
                     </Button>
 
-                    <Button Grid.Row="1" Grid.Column="1" Style="{StaticResource TaskCardButtonStyle}" Click="OnOpenHelp">
-                        <Grid ColumnSpacing="14">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <SymbolIcon Symbol="Help" />
-                            <StackPanel Grid.Column="1" Spacing="3">
+                    <Button Grid.Row="1" Grid.Column="1" Click="OnOpenHelp" PointerEntered="OnActionCardPointerEntered" PointerExited="OnActionCardPointerExited" Style="{StaticResource HomeActionCardStyle}">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border VerticalAlignment="Center" Style="{StaticResource HomeBadgeStyle}"><FontIcon Glyph="&#xE897;" Style="{StaticResource HomeBadgeIconStyle}" /></Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                 <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='home.learn_and_troubleshoot'}" />
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='home.setup_guidance_safety_notes_troubleshooti_f1fc61'}" TextWrapping="Wrap" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='home.setup_guidance_safety_notes_troubleshooti_f1fc61'}"
+                                    TextWrapping="Wrap" />
                             </StackPanel>
-                            <FontIcon Grid.Column="2" VerticalAlignment="Center" Glyph="&#xE76C;" />
+                            <FontIcon
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE76C;" />
                         </Grid>
                     </Button>
                 </Grid>
             </StackPanel>
 
-            <Border Style="{StaticResource LiveToolInsetStyle}">
+            <!-- ═══════════ 提示 ═══════════ -->
+            <Border
+                Padding="16,14"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                CornerRadius="8">
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -207,10 +463,10 @@
                     </Grid.ColumnDefinitions>
                     <FontIcon
                         VerticalAlignment="Top"
-                        FontSize="14"
+                        FontSize="16"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Glyph="&#xE946;" />
-                    <StackPanel Grid.Column="1" Spacing="2">
+                    <StackPanel Grid.Column="1" Spacing="3">
                         <TextBlock FontWeight="SemiBold" Text="{i18n:Loc Key='home.built_for_offline_campaign'}" />
                         <TextBlock
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -220,25 +476,26 @@
                 </Grid>
             </Border>
 
-            <Border
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="0,1,0,0"
-                Padding="0,16,0,0">
-                <StackPanel HorizontalAlignment="Center" Spacing="3">
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="{i18n:Loc Key='home.credits_fork'}"
-                        TextAlignment="Center"
-                        TextWrapping="Wrap" />
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Text="{i18n:Loc Key='home.credits_nicolaas_nel'}"
-                        TextAlignment="Center"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+            <!-- ═══════════ 页脚 ═══════════ -->
+            <StackPanel
+                Margin="0,4,0,0"
+                HorizontalAlignment="Center"
+                Spacing="3">
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Text="{i18n:Loc Key='home.credits_fork'}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Text="{i18n:Loc Key='home.credits_nicolaas_nel'}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Page>

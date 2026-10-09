@@ -8,7 +8,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <StackPanel Spacing="4">
@@ -120,11 +119,5 @@
                 </StackPanel>
             </Grid>
         </Border>
-
-        <InfoBar
-            x:Name="StatusInfo"
-            Grid.Row="2"
-            IsClosable="True"
-            IsOpen="False" />
     </Grid>
 </Page>

@@ -2,13 +2,13 @@
     x:Class="HaloMeister.App.Pages.CheatGlobalsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:HaloMeister.App.Controls"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
     <Grid Padding="28,20,28,16" RowSpacing="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -48,203 +48,291 @@
                 x:Name="QuickCheatsPanel"
                 HorizontalScrollBarVisibility="Disabled"
                 VerticalScrollBarVisibility="Auto">
-                <StackPanel Padding="0,4,0,18" Spacing="14">
-                    <Border Padding="18,16" Style="{StaticResource LiveToolCardStyle}">
-                        <Grid ColumnSpacing="18">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="3">
-                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.mission_cheats'}" />
-                                <TextBlock
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="{i18n:Loc Key='cheat_globals.load_the_current_state_then_switch_indivi_427e72'}"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="9">
-                                <Button
-                                    x:Name="RefreshButton"
-                                    Click="OnRefresh"
-                                    Content="{i18n:Loc Key='cheat_globals.load_cheats'}"
-                                    IsEnabled="False" />
-                                <Button
-                                    x:Name="DisableAllButton"
-                                    Click="OnDisableAll"
-                                    Content="{i18n:Loc Key='cheat_globals.turn_all_off'}"
-                                    IsEnabled="False" />
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                <StackPanel Padding="0,2,12,18" Spacing="14">
 
-                    <Border
-                        x:Name="CheatsEmptyPanel"
-                        MinHeight="260"
-                        Padding="28"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="10">
-                        <StackPanel
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="8">
-                            <FontIcon
-                                HorizontalAlignment="Center"
-                                FontSize="28"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Glyph="&#xE90F;" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="16"
-                                FontWeight="SemiBold"
-                                Text="{i18n:Loc Key='cheat_globals.load_the_mission_cheats'}" />
-                            <TextBlock
-                                MaxWidth="460"
-                                HorizontalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{i18n:Loc Key='cheat_globals.start_or_resume_an_offline_mission_then_c_1672f7'}"
-                                TextAlignment="Center"
-                                TextWrapping="Wrap" />
+                    <!-- 任务作弊 -->
+                    <Border Padding="18,14,18,16" Style="{StaticResource LiveToolCardStyle}">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="16"
+                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                        Glyph="&#xE945;" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="16"
+                                        FontWeight="SemiBold"
+                                        Text="{i18n:Loc Key='cheat_globals.mission_cheats'}" />
+                                    <TextBlock
+                                        x:Name="CheatsCountText"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Button
+                                        x:Name="RefreshButton"
+                                        Click="OnRefresh"
+                                        Content="{i18n:Loc Key='cheat_globals.load_cheats'}"
+                                        IsEnabled="False" />
+                                    <Button
+                                        x:Name="DisableAllButton"
+                                        Click="OnDisableAll"
+                                        Content="{i18n:Loc Key='cheat_globals.turn_all_off'}"
+                                        IsEnabled="False" />
+                                </StackPanel>
+                            </Grid>
+                            <ItemsControl x:Name="GlobalsList">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <controls:UniformColumnPanel
+                                            MaxColumns="4"
+                                            MinColumnWidth="230"
+                                            ColumnSpacing="10"
+                                            RowSpacing="10" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border MinHeight="48" Padding="14,6,10,6" Style="{StaticResource LiveToolInsetStyle}">
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    VerticalAlignment="Center"
+                                                    Text="{Binding DisplayName}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <ToggleSwitch
+                                                    Grid.Column="1"
+                                                    MinWidth="0"
+                                                    Margin="0,0,-6,0"
+                                                    VerticalAlignment="Center"
+                                                    IsOn="{Binding IsEnabled, Mode=TwoWay}"
+                                                    OffContent=""
+                                                    OnContent=""
+                                                    Toggled="OnGlobalToggled" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
 
-                    <ItemsControl x:Name="GlobalsList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,8" Style="{StaticResource LiveToolInsetStyle}">
-                                    <Grid ColumnSpacing="18">
+                    <!-- 玩家特性 -->
+                    <Border
+                        x:Name="PlayerTraitsHeader"
+                        Padding="18,14,18,16"
+                        Style="{StaticResource LiveToolCardStyle}">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="16"
+                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                        Glyph="&#xE77B;" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="16"
+                                        FontWeight="SemiBold"
+                                        Text="{i18n:Loc Key='cheat_globals.player_traits'}" />
+                                    <TextBlock
+                                        x:Name="TraitsCountText"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Button
+                                        x:Name="RefreshModifiersButton"
+                                        Click="OnRefreshModifiers"
+                                        Content="{i18n:Loc Key='cheat_globals.load_traits'}" />
+                                    <Button
+                                        x:Name="RestoreModifiersButton"
+                                        Click="OnRestoreModifiers"
+                                        Content="{i18n:Loc Key='cheat_globals.restore_changes'}"
+                                        IsEnabled="False" />
+                                </StackPanel>
+                            </Grid>
+                            <ItemsControl x:Name="ModifierList">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <controls:UniformColumnPanel
+                                            MaxColumns="4"
+                                            MinColumnWidth="230"
+                                            ColumnSpacing="10"
+                                            RowSpacing="10" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="14,10,14,12" Style="{StaticResource LiveToolInsetStyle}">
+                                            <StackPanel Spacing="6">
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{Binding DisplayName}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <ComboBox
+                                                    HorizontalAlignment="Stretch"
+                                                    DisplayMemberPath="Label"
+                                                    ItemsSource="{Binding Options}"
+                                                    SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
+                                                    SelectionChanged="OnModifierChanged" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 战斗 -->
+                    <Border Padding="18,14,18,16" Style="{StaticResource LiveToolCardStyle}">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="16"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    Glyph="&#xE7C9;" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Text="{i18n:Loc Key='player_tools.combat'}" />
+                            </StackPanel>
+                            <controls:UniformColumnPanel
+                                MaxColumns="4"
+                                MinColumnWidth="230"
+                                ColumnSpacing="10"
+                                RowSpacing="10">
+                                <Border MinHeight="48" Padding="14,6,10,6" Style="{StaticResource LiveToolInsetStyle}">
+                                    <Grid ColumnSpacing="10">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel Spacing="3">
-                                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding DisplayName}" />
-                                            <TextBlock
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Text="{Binding Description}"
-                                                TextWrapping="Wrap" />
-                                        </StackPanel>
-                                        <ToggleSwitch
-                                            Grid.Column="1"
-                                            MinWidth="92"
+                                        <TextBlock
                                             VerticalAlignment="Center"
-                                            IsOn="{Binding IsEnabled, Mode=TwoWay}"
-                                            OffContent="{i18n:Loc Key='cheat_globals.off'}"
-                                            OnContent="{i18n:Loc Key='cheat_globals.on'}"
-                                            Toggled="OnGlobalToggled" />
+                                            Text="{i18n:Loc Key='player_tools.weapon_animation_interruption'}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <ToggleSwitch
+                                            x:Name="ImmediateWeaponInterruptionToggle"
+                                            Grid.Column="1"
+                                            MinWidth="0"
+                                            Margin="0,0,-6,0"
+                                            VerticalAlignment="Center"
+                                            IsOn="False"
+                                            OffContent=""
+                                            OnContent=""
+                                            Toggled="OnWeaponInterruptionToggled" />
                                     </Grid>
                                 </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </ScrollViewer>
-
-            <ScrollViewer
-                x:Name="PlayerTraitsPanel"
-                HorizontalScrollBarVisibility="Disabled"
-                VerticalScrollBarVisibility="Auto"
-                Visibility="Collapsed">
-                <StackPanel Padding="0,4,0,18" Spacing="14">
-                    <Border Padding="18,16" Style="{StaticResource LiveToolCardStyle}">
-                        <Grid ColumnSpacing="18">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="3">
-                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='cheat_globals.player_trait_profile'}" />
-                                <TextBlock
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="{i18n:Loc Key='cheat_globals.adjust_survivability_combat_movement_and_8de132'}"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="9">
-                                <Button
-                                    x:Name="RefreshModifiersButton"
-                                    Click="OnRefreshModifiers"
-                                    Content="{i18n:Loc Key='cheat_globals.load_traits'}" />
-                                <Button
-                                    x:Name="RestoreModifiersButton"
-                                    Click="OnRestoreModifiers"
-                                    Content="{i18n:Loc Key='cheat_globals.restore_changes'}"
-                                    IsEnabled="False" />
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <Border
-                        x:Name="ModifiersEmptyPanel"
-                        MinHeight="260"
-                        Padding="28"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="10">
-                        <StackPanel
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="8">
-                            <FontIcon
-                                HorizontalAlignment="Center"
-                                FontSize="28"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Glyph="&#xE713;" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="16"
-                                FontWeight="SemiBold"
-                                Text="{i18n:Loc Key='cheat_globals.load_the_player_traits'}" />
-                            <TextBlock
-                                MaxWidth="460"
-                                HorizontalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{i18n:Loc Key='cheat_globals.choose_load_traits_after_entering_an_offl_051ba4'}"
-                                TextAlignment="Center" />
+                                <Border
+                                    controls:UniformColumnPanel.ColumnSpan="2"
+                                    Padding="14,10,14,12"
+                                    Style="{StaticResource LiveToolInsetStyle}">
+                                    <StackPanel Spacing="6">
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{i18n:Loc Key='player_tools.super_punch'}" />
+                                        <Grid ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox
+                                                x:Name="SuperPunchStrengthBox"
+                                                HorizontalAlignment="Stretch"
+                                                SelectedIndex="2">
+                                                <ComboBoxItem Content="{i18n:Loc Key='player_tools.10_strong'}" Tag="10" />
+                                                <ComboBoxItem Content="{i18n:Loc Key='player_tools.25_huge'}" Tag="25" />
+                                                <ComboBoxItem Content="{i18n:Loc Key='player_tools.50_across_the_map'}" Tag="50" />
+                                                <ComboBoxItem Content="{i18n:Loc Key='player_tools.100_ridiculous'}" Tag="100" />
+                                            </ComboBox>
+                                            <Button
+                                                x:Name="EnableSuperPunchButton"
+                                                Grid.Column="1"
+                                                Click="OnEnableSuperPunch"
+                                                Content="{i18n:Loc Key='player_tools.enable_super_punch'}"
+                                                Style="{StaticResource AccentButtonStyle}" />
+                                            <Button
+                                                x:Name="RestoreSuperPunchButton"
+                                                Grid.Column="2"
+                                                Click="OnRestoreSuperPunch"
+                                                Content="{i18n:Loc Key='player_tools.restore_normal_punch'}"
+                                                IsEnabled="False" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </controls:UniformColumnPanel>
                         </StackPanel>
                     </Border>
 
-                    <ItemsControl x:Name="ModifierList">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <ItemsWrapGrid
-                                    ItemWidth="490"
-                                    Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,10,10" Style="{StaticResource LiveToolCardStyle}">
-                                    <Grid ColumnSpacing="14">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="150" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Spacing="4">
-                                            <TextBlock FontWeight="SemiBold" Text="{Binding DisplayName}" TextWrapping="Wrap" />
-                                            <TextBlock
-                                                Style="{StaticResource CompactSafetyTextStyle}"
-                                                Text="{Binding Description}" />
-                                        </StackPanel>
-                                        <ComboBox
-                                            Grid.Column="1"
-                                            HorizontalAlignment="Stretch"
-                                            VerticalAlignment="Center"
-                                            DisplayMemberPath="Label"
-                                            ItemsSource="{Binding Options}"
-                                            SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
-                                            SelectionChanged="OnModifierChanged" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <Border Style="{StaticResource LiveToolInsetStyle}">
-                        <TextBlock
-                            Style="{StaticResource CompactSafetyTextStyle}"
-                            Text="{i18n:Loc Key='cheat_globals.if_the_current_player_body_retained_copie_dc2bfe'}" />
+                    <!-- 其他 -->
+                    <Border Padding="18,14,18,16" Style="{StaticResource LiveToolCardStyle}">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="16"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    Glyph="&#xE712;" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Text="{i18n:Loc Key='other_gameplay.title'}" />
+                            </StackPanel>
+                            <ItemsControl x:Name="OtherFeaturesList">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <controls:UniformColumnPanel
+                                            MaxColumns="4"
+                                            MinColumnWidth="230"
+                                            ColumnSpacing="10"
+                                            RowSpacing="10" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border MinHeight="48" Padding="14,6,8,6" Style="{StaticResource LiveToolInsetStyle}">
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    VerticalAlignment="Center"
+                                                    Text="{Binding Title}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <Button
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    Click="OnRunOtherFeature"
+                                                    Content="{Binding ActionLabel}"
+                                                    IsEnabled="{Binding IsEnabled}"
+                                                    Tag="{Binding}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </ScrollViewer>
@@ -361,25 +449,7 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="{i18n:Loc Key='cheat_globals.load_an_offline_campaign_mission_then_cho_e859a5'}"
                     TextWrapping="Wrap" />
-                <StackPanel
-                    x:Name="SuccessPanel"
-                    Grid.Column="1"
-                    Orientation="Horizontal"
-                    Spacing="7"
-                    Visibility="Collapsed">
-                    <FontIcon
-                        VerticalAlignment="Center"
-                        FontSize="13"
-                        Foreground="{ThemeResource SystemFillColorSuccessBrush}"
-                        Glyph="&#xE73E;" />
-                    <TextBlock
-                        x:Name="SuccessStatusText"
-                        VerticalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
             </Grid>
         </Border>
-
-        <InfoBar x:Name="StatusBar" Grid.Row="3" IsOpen="False" />
     </Grid>
 </Page>

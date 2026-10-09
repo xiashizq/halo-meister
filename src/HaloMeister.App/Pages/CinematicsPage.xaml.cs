@@ -35,7 +35,7 @@ public sealed partial class CinematicsPage : Page, IActivatablePage
             ScriptExecutionResult result = await _cinematics.PlayAsync(cinematic);
             if (result.Outcome == ScriptOutcome.Failed)
             {
-                ShowStatus(result.Message, InfoBarSeverity.Error);
+                ShowStatus(UserFacingErrors.FromBridge(result.Message), InfoBarSeverity.Error);
                 return;
             }
 
@@ -45,7 +45,7 @@ public sealed partial class CinematicsPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -83,7 +83,7 @@ public sealed partial class CinematicsPage : Page, IActivatablePage
                 ? Visibility.Visible
                 : Visibility.Collapsed;
             if (_items.Count > 0)
-                StatusInfo.IsOpen = false;
+                MainWindow.Instance?.DismissStatus();
         }
         catch (Exception ex)
         {
@@ -92,7 +92,7 @@ public sealed partial class CinematicsPage : Page, IActivatablePage
             _items.Clear();
             EmptyState.Visibility = Visibility.Visible;
             LevelText.Text = "";
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -124,12 +124,5 @@ public sealed partial class CinematicsPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusInfo.Severity = severity;
-        StatusInfo.Title = severity == InfoBarSeverity.Success
-            ? L.Get("common.done")
-            : L.Get("common.something_went_wrong");
-        StatusInfo.Message = message;
-        StatusInfo.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 }

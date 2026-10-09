@@ -380,10 +380,6 @@
                 </Grid>
 
                 <StackPanel Grid.Row="1" Spacing="8">
-                    <InfoBar
-                        x:Name="StatusBar"
-                        IsClosable="True"
-                        IsOpen="False" />
                     <TextBlock
                         x:Name="DiagnosticText"
                         FontFamily="Consolas"

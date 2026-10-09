@@ -1,4 +1,4 @@
-using HaloMeister.App.Localization;
+﻿using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
 using HaloMeister.App.Services;
 using Microsoft.UI.Xaml;
@@ -12,7 +12,6 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly WeaponLoaderService _loader = new();
     private readonly ProjectileSwapperService _swapper = new();
-    private readonly FullPalettesOverlayService _fullPalettes = new();
     private IReadOnlyList<LoadableWeapon> _weapons = [];
     private ProjectileSwapperSession? _projectileSession;
     private LoadableWeapon? _selected;
@@ -23,21 +22,18 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
     private StanchionImportPreview? _stanchionPreview;
     private bool _busy;
     private bool _hasScanned;
-    private bool _fullPalettesInstalled;
     private int _variantRequestVersion;
 
     public WeaponLoaderPage()
     {
         InitializeComponent();
         _game.ConnectionChanged += OnGameConnectionChanged;
-        RefreshFullPalettesState();
         UpdateConnectionButtons();
         UpdateBridgeStatus();
     }
 
     public void OnActivated()
     {
-        RefreshFullPalettesState();
         UpdateConnectionButtons();
         UpdateBridgeStatus();
     }
@@ -80,43 +76,6 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
         });
     }
 
-    private async void OnToggleFullPalettes(object sender, RoutedEventArgs e)
-    {
-        await RunBusy(async () =>
-        {
-            if (_fullPalettes.IsGameRunning)
-            {
-                ShowStatus(
-                    L.Get("builtin_mod.close_game"),
-                    InfoBarSeverity.Warning);
-                return;
-            }
-
-            bool installing = !_fullPalettesInstalled;
-            string actionLabel = installing
-                ? L.Get("vehicle_workshop.add_all_vehicles_weapons")
-                : L.Get("vehicle_workshop.remove_all_vehicles_weapons");
-            var confirm = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = actionLabel,
-                Content = installing
-                    ? L.Get("builtin_mod.install_confirm")
-                    : L.Get("builtin_mod.remove_confirm"),
-                PrimaryButtonText = actionLabel,
-                CloseButtonText = L.Get("common.cancel"),
-                DefaultButton = ContentDialogButton.Close,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-
-            FullPalettesOverlayResult result = await Task.Run(() =>
-                installing ? _fullPalettes.Install() : _fullPalettes.Remove());
-            RefreshFullPalettesState();
-            ShowStatus(result.Message, InfoBarSeverity.Success);
-        });
-    }
-
     private void OnSearchChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
 
     private void ApplyFilter()
@@ -126,6 +85,7 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
             .Where(weapon =>
                 query.Length == 0 ||
                 weapon.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                weapon.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 weapon.Tag.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         WeaponList.ItemsSource = filtered;
@@ -152,7 +112,11 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
         SelectionDetails.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         StanchionPanel.Visibility = isStanchion ? Visibility.Visible : Visibility.Collapsed;
 
-        SelectedWeaponText.Text = _selected?.Name ?? "";
+        SelectedWeaponText.Text = _selected?.DisplayName ?? "";
+        SelectedWeaponSubText.Text = _selected?.SecondaryName ?? "";
+        SelectedWeaponSubText.Visibility = string.IsNullOrEmpty(SelectedWeaponSubText.Text)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
         SelectedPathText.Text = _selected?.TagPath ?? "";
         SelectedWeaponImage.Source = _selected is null
             ? null
@@ -314,7 +278,7 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
                 return;
             }
             _variantsInspected = true;
-            VariantSummaryText.Text = L.Format("weapon_loader.variants_unavailable", ex.Message);
+            VariantSummaryText.Text = L.Format("weapon_loader.variants_unavailable", UserFacingErrors.Format(ex));
         }
 
         UpdateVariantControls();
@@ -344,13 +308,13 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
                 variant is null
                     ? L.Format(
                         "weapon_loader.weapon_handed_to_player",
-                        weapon.Name,
-                        result.Message)
+                        weapon.DisplayName,
+                        string.Empty)
                     : L.Format(
                         "weapon_loader.weapon_handed_to_player_variant",
-                        weapon.Name,
+                        weapon.DisplayName,
                         variant.Name,
-                        result.Message),
+                        string.Empty),
                 InfoBarSeverity.Success);
         });
     }
@@ -435,12 +399,11 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
         ImportStanchionButton.IsEnabled = false;
         ApplySubstitutionsButton.IsEnabled = false;
         try { await action(); }
-        catch (Exception ex) { ShowStatus(ex.Message, InfoBarSeverity.Error); }
+        catch (Exception ex) { ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error); }
         finally
         {
             _busy = false;
             BusyRing.IsActive = false;
-            RefreshFullPalettesState();
             UpdateConnectionButtons();
             UpdateImportButtons();
             UpdateProjectileControls();
@@ -451,26 +414,10 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
     private void OnGameConnectionChanged(object? sender, EventArgs e)
         => DispatcherQueue.TryEnqueue(UpdateConnectionButtons);
 
-    private void RefreshFullPalettesState()
-    {
-        try
-        {
-            _fullPalettesInstalled = _fullPalettes.IsInstalled();
-        }
-        catch
-        {
-            _fullPalettesInstalled = false;
-        }
-    }
-
     private void UpdateConnectionButtons()
     {
         ScanButton.IsEnabled = !_busy && _game.IsConnected;
         RefreshButton.IsEnabled = !_busy && _game.IsConnected && _hasScanned;
-        FullPalettesButton.IsEnabled = !_busy;
-        FullPalettesButton.Content = _fullPalettesInstalled
-            ? L.Get("vehicle_workshop.remove_all_vehicles_weapons")
-            : L.Get("vehicle_workshop.add_all_vehicles_weapons");
         UpdateImportButtons();
         UpdateProjectileControls();
         UpdateVariantControls();
@@ -522,9 +469,5 @@ public sealed partial class WeaponLoaderPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 }

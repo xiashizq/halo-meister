@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using HaloMeister.App.Models;
+using HaloMeister.App.Localization;
 
 namespace HaloMeister.App.Services;
 
@@ -91,7 +92,7 @@ public sealed class RuntimeCustomizationVariantService : IDisposable
                 TimeSpan.FromSeconds(15),
                 cancellationToken);
             if (runtime.Outcome != ScriptOutcome.Confirmed)
-                throw new InvalidOperationException(runtime.Message);
+                throw new BridgeFailureException(runtime.Message);
 
             return new RuntimeArmorVariantResult(
                 selected.Model.Name,
@@ -129,7 +130,7 @@ public sealed class RuntimeCustomizationVariantService : IDisposable
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (runtime.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(runtime.Message);
+            throw new BridgeFailureException(runtime.Message);
 
         return new RuntimeWeaponVariantResult(
             selected.Model.Name,
@@ -154,7 +155,7 @@ public sealed class RuntimeCustomizationVariantService : IDisposable
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (runtime.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(runtime.Message);
+            throw new BridgeFailureException(runtime.Message);
 
         _originalVariants.Clear();
         _capturedPlayerNameAddress = 0;

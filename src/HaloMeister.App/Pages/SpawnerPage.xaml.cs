@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
 using HaloMeister.App.Services;
@@ -189,7 +189,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
             case EnemySpawnChoice character:
                 _selectedCharacter = character;
                 ShowSelection(
-                    character.DisplayName,
+                    CombineName(character.DisplayName, character.SecondaryName),
                     character.Category,
                     character.TagPath,
                     character.Variants,
@@ -207,7 +207,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
             case LoadableVehicle vehicle:
                 _selectedVehicle = vehicle;
                 ShowSelection(
-                    vehicle.DisplayName,
+                    CombineName(vehicle.DisplayName, vehicle.SecondaryName),
                     vehicle.Category,
                     vehicle.TagPath,
                     _vehicleSpawner.ReadSpawnVariants(vehicle),
@@ -216,6 +216,9 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
         }
         UpdateSpawnButton();
     }
+
+    private static string CombineName(string display, string secondary) =>
+        secondary.Length == 0 ? display : $"{display} ({secondary})";
 
     private void ShowSelection(
         string name,
@@ -296,7 +299,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
                         string.Empty);
                     break;
             }
-            ShowStatus(successPrefix + result.Message, InfoBarSeverity.Success);
+            ShowStatus(successPrefix, InfoBarSeverity.Success);
         });
     }
 
@@ -317,7 +320,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
                     "spawner.spawn_team_success",
                     character.DisplayName,
                     variant.Name,
-                    result.Message),
+                    string.Empty),
                 InfoBarSeverity.Success);
         });
     }
@@ -338,7 +341,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
                     variant,
                     1);
             ShowStatus(
-                L.Format("spawner.armor_spawn_success", variant.Name, result.Message),
+                L.Format("spawner.armor_spawn_success", variant.Name, string.Empty),
                 InfoBarSeverity.Success);
         });
     }
@@ -532,7 +535,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
                         if (result.Outcome == ScriptOutcome.Failed)
                         {
                             throw new InvalidOperationException(
-                                L.Format("spawner.batch_failed", created, result.Message));
+                                L.Format("spawner.batch_failed", created, UserFacingErrors.FromBridge(result.Message)));
                         }
                         created += batchCount;
                         remaining -= batchCount;
@@ -583,7 +586,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -673,11 +676,7 @@ public sealed partial class SpawnerPage : Page, IActivatablePage
         };
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private sealed record FilterOption(string Value, string Label);
 

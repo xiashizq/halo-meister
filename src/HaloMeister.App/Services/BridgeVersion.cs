@@ -109,7 +109,7 @@ public readonly record struct BridgeVersion : IComparable<BridgeVersion>
     private static BridgeVersion FromAssembly()
     {
         Version version = typeof(BridgeVersion).Assembly.GetName().Version
-            ?? throw new InvalidOperationException("Halo Meister has no assembly version.");
+            ?? throw new InvalidOperationException("Cartographer Toolkit has no assembly version.");
         int patch = version.Build < 0 ? 0 : version.Build;
         return new BridgeVersion(version.Major, version.Minor, patch);
     }

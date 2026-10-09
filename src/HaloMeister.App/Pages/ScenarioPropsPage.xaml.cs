@@ -163,14 +163,14 @@ public sealed partial class ScenarioPropsPage : Page, IActivatablePage
     {
         if (result.Outcome == ScriptOutcome.Failed)
         {
-            ShowStatus(result.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.FromBridge(result.Message), InfoBarSeverity.Error);
             return;
         }
 
         ShowStatus(
             result.Outcome == ScriptOutcome.Submitted
                 ? submittedMessage
-                : result.Message,
+                : submittedMessage,
             result.Outcome == ScriptOutcome.Confirmed
                 ? InfoBarSeverity.Success
                 : InfoBarSeverity.Warning);
@@ -181,7 +181,7 @@ public sealed partial class ScenarioPropsPage : Page, IActivatablePage
         _busy = true;
         UpdateControls();
         try { await action(); }
-        catch (Exception ex) { ShowStatus(ex.Message, InfoBarSeverity.Error); }
+        catch (Exception ex) { ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error); }
         finally
         {
             _busy = false;
@@ -209,9 +209,5 @@ public sealed partial class ScenarioPropsPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 }

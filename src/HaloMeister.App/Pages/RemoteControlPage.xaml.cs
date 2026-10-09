@@ -16,7 +16,6 @@ public sealed partial class RemoteControlPage : Page, IActivatablePage
     private readonly RemoteControlService _remote = RemoteControlService.Current;
     private readonly RemoteControlFirewallService _firewall = new();
     private bool _busy;
-    private int _statusVersion;
     private bool _subscribed;
 
     public RemoteControlPage()
@@ -79,7 +78,7 @@ public sealed partial class RemoteControlPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -102,11 +101,11 @@ public sealed partial class RemoteControlPage : Page, IActivatablePage
         }
         catch (OperationCanceledException ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Warning);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Warning);
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -129,11 +128,11 @@ public sealed partial class RemoteControlPage : Page, IActivatablePage
         }
         catch (OperationCanceledException ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Warning);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Warning);
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -213,26 +212,12 @@ public sealed partial class RemoteControlPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        int version = ++_statusVersion;
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-        if (severity == InfoBarSeverity.Success)
-            _ = DismissSuccessAsync(version);
-    }
-
-    private async Task DismissSuccessAsync(int version)
-    {
-        await Task.Delay(TimeSpan.FromSeconds(4));
-        if (version == _statusVersion && StatusBar.Severity == InfoBarSeverity.Success)
-            StatusBar.IsOpen = false;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private void SetBusy(bool busy)
     {

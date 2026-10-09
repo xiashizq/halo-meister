@@ -21,7 +21,7 @@ public sealed record Ue4ssDownloadProgress(
 
 /// <summary>
 /// Installs a pinned, verified upstream UE4SS build and the Campaign Evolved
-/// signatures Halo Meister needs. The game must be closed during installation.
+/// signatures Cartographer Toolkit needs. The game must be closed during installation.
 /// Prefers the archive shipped under Assets/UE4SSLoader; if that file is missing
 /// or fails SHA-256, downloads the same pinned build from GitHub.
 /// </summary>
@@ -60,7 +60,7 @@ public sealed class Ue4ssLoaderInstaller
         string localAppData = Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData);
         string haloMeisterDataRoot = dataRoot ??
-            Path.Combine(localAppData, "HaloMeister");
+            Path.Combine(localAppData, AppPaths.DataFolderName);
         _downloadRoot = Path.Combine(haloMeisterDataRoot, "Downloads");
         _backupRoot = Path.Combine(haloMeisterDataRoot, "UE4SSBackups");
         _loaderAssetRoot = Path.Combine(
@@ -319,7 +319,7 @@ public sealed class Ue4ssLoaderInstaller
             Timeout = TimeSpan.FromMinutes(10),
         };
         client.DefaultRequestHeaders.UserAgent.ParseAdd(
-            $"HaloMeister/{ReleaseUpdateService.Current.CurrentVersion} " +
+            $"CartographerToolkit/{ReleaseUpdateService.Current.CurrentVersion} " +
             "(+https://github.com/NicmeisteR/halo-meister)");
         return client;
     }

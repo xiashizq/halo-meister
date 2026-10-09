@@ -1,4 +1,4 @@
-using HaloMeister.App.Localization;
+﻿using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -17,6 +17,10 @@ public sealed partial class LiveSkullsPage : Page, IActivatablePage
     public LiveSkullsPage()
     {
         InitializeComponent();
+        CategoryBox.Items.Add(L.Get("live_skulls.filter_all"));
+        foreach (LiveSkullCategory category in Enum.GetValues<LiveSkullCategory>())
+            CategoryBox.Items.Add(LiveSkullMetadata.CategoryLabel(category));
+        CategoryBox.SelectedIndex = 0;
         UpdateBridgeStatus();
         UpdateButtons();
     }
@@ -103,7 +107,7 @@ public sealed partial class LiveSkullsPage : Page, IActivatablePage
             toggle.IsOn = previous;
             item.IsEnabled = previous;
             _loading = false;
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -114,21 +118,48 @@ public sealed partial class LiveSkullsPage : Page, IActivatablePage
         }
     }
 
-    private void OnFilterChanged(object sender, TextChangedEventArgs e)
+    private void OnFilterChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        => ApplyFilter();
+
+    private void OnCategoryChanged(object sender, SelectionChangedEventArgs e)
+        => ApplyFilter();
+
+    private void OnEnabledOnlyChanged(object sender, RoutedEventArgs e)
         => ApplyFilter();
 
     private void ApplyFilter()
     {
         string query = FilterBox.Text.Trim();
-        SkullsList.ItemsSource = query.Length == 0
-            ? _items
-            : _items
-                .Where(item =>
-                    item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    item.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-    }
+        int categoryIndex = CategoryBox.SelectedIndex;
+        LiveSkullCategory? category = categoryIndex > 0
+            ? Enum.GetValues<LiveSkullCategory>()[categoryIndex - 1]
+            : null;
+        bool enabledOnly = EnabledOnlyToggle.IsChecked == true;
 
+        LiveSkullItem[] shown = _items
+            .Where(item =>
+                (category is null || item.Category == category) &&
+                (!enabledOnly || item.IsEnabled) &&
+                (query.Length == 0 ||
+                 item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                 item.EnglishName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                 item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                 item.Description.Contains(query, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+
+        // Rebuilding the list re-fires Toggled for every row; ShowItems/ToggleSwitch guard on _loading.
+        bool wasLoading = _loading;
+        _loading = true;
+        SkullsList.ItemsSource = shown;
+        _loading = wasLoading;
+
+        bool empty = shown.Length == 0;
+        EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        SkullsList.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+        EmptyText.Text = _items.Count == 0
+            ? L.Get("live_skulls.load_mission_then_refresh")
+            : L.Get("live_skulls.no_match");
+    }
     private void ShowItems(IReadOnlyList<LiveSkullItem> items)
     {
         _loading = true;
@@ -149,7 +180,7 @@ public sealed partial class LiveSkullsPage : Page, IActivatablePage
         BusyRing.IsActive = true;
         UpdateButtons();
         try { await action(); }
-        catch (Exception ex) { ShowStatus(ex.Message, InfoBarSeverity.Error); }
+        catch (Exception ex) { ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error); }
         finally
         {
             _busy = false;
@@ -187,13 +218,11 @@ public sealed partial class LiveSkullsPage : Page, IActivatablePage
     {
         if (severity == InfoBarSeverity.Success)
         {
-            StatusBar.IsOpen = false;
+            MainWindow.Instance?.DismissStatus();
             SummaryText.Text = message;
             return;
         }
 
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
+        MainWindow.Instance?.Report(message, severity);
     }
 }

@@ -85,7 +85,7 @@ public sealed class AdvancedMachinimaService
             Environment.SpecialFolder.LocalApplicationData);
         _locationsPath = Path.Combine(
             localAppData,
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "AdvancedMachinima",
             "locations.json");
     }
@@ -631,7 +631,7 @@ public sealed class AdvancedMachinimaService
     private static void EnsureConfirmed(ScriptExecutionResult result)
     {
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
     }
 
     private static bool TryGetFinite(

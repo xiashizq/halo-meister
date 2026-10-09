@@ -74,7 +74,7 @@ public sealed class PlayerTeamService
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
         return result.Message;
     }
 
@@ -109,7 +109,7 @@ public sealed class PlayerTeamService
             ?? new PlayerTeamOption(
                 $"Unknown team ({value})",
                 value,
-                "The game returned a campaign team that Halo Meister does not recognize.");
+                "The game returned a campaign team that Cartographer Toolkit does not recognize.");
         return new PlayerTeamState(selected, snapshotText == "1");
     }
 

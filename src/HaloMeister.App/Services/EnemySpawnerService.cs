@@ -1,5 +1,6 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Buffers.Binary;
+using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
 
 namespace HaloMeister.App.Services;
@@ -15,8 +16,8 @@ public sealed record SpawnVariantChoice(
         ? BinaryPrimitives.ReadUInt32LittleEndian(StringIdBytes)
         : 0;
     public string Detail => VariantIndex >= 0
-        ? $"Model variant {VariantIndex}"
-        : "Authored default";
+        ? L.Format("spawner.variant_model", VariantIndex)
+        : L.Get("spawner.variant_default");
 }
 
 /// <summary>
@@ -67,14 +68,42 @@ public sealed record EnemySpawnChoice(
     IReadOnlyList<SpawnVariantChoice> Variants)
 {
     public string LeafName => CharacterTag.LeafName;
-    public string DisplayName => FriendlyName(LeafName);
+    /// <summary>Tag-derived English name; use for matching logic.</summary>
+    public string EnglishName => FriendlyName(LeafName);
+
+    /// <summary>
+    /// Localized character name (official / community terminology), resolved from
+    /// <c>spawner.character.&lt;tag leaf&gt;</c>. Falls back to the English name.
+    /// </summary>
+    public string DisplayName
+    {
+        get
+        {
+            string leaf = LeafName.ToLowerInvariant();
+            if (leaf.EndsWith("-character", StringComparison.Ordinal))
+                leaf = leaf[..^"-character".Length];
+            string key = "spawner.character." + leaf;
+            return LocalizationService.Current.Has(key) ? L.Get(key) : EnglishName;
+        }
+    }
+    /// <summary>English name shown beside the localized one when they differ.</summary>
+    public string SecondaryName =>
+        string.Equals(DisplayName, EnglishName, StringComparison.OrdinalIgnoreCase)
+            ? ""
+            : EnglishName;
+
+    public Microsoft.UI.Xaml.Visibility SecondaryNameVisibility =>
+        SecondaryName.Length == 0
+            ? Microsoft.UI.Xaml.Visibility.Collapsed
+            : Microsoft.UI.Xaml.Visibility.Visible;
+
     public string TagPath => CharacterTag.Name;
     public string Category => CategorizeCharacter(CharacterTag.Name);
     public string VariantSummary => Variants.Count == 1
         ? "1 available variant"
         : $"{Variants.Count:N0} available variants";
     public string SearchText =>
-        $"{DisplayName} {TagPath} {Category} {string.Join(' ', Variants.Select(item => item.Name))}";
+        $"{DisplayName} {EnglishName} {TagPath} {Category} {string.Join(' ', Variants.Select(item => item.Name))}";
 
     private static string CategorizeCharacter(string path)
     {
@@ -116,6 +145,9 @@ public sealed record ArmorSpawnChoice(
     IReadOnlyList<SpawnVariantChoice> Variants)
 {
     public string DisplayName => "Johnson Spartan";
+    public string SecondaryName => "";
+    public Microsoft.UI.Xaml.Visibility SecondaryNameVisibility =>
+        Microsoft.UI.Xaml.Visibility.Collapsed;
     public string TagPath => BipedTag.Name;
     public string Category => "UNSC companion";
     public string VariantSummary => $"{Variants.Count:N0} available armor sets";
@@ -125,8 +157,26 @@ public sealed record ArmorSpawnChoice(
 
 public sealed record AiWeaponChoice(RuntimeTagEntry WeaponTag)
 {
-    public string DisplayName =>
+    public string EnglishName =>
         EnemySpawnChoice.FriendlyName(WeaponTag.LeafName);
+
+    /// <summary>Localized name plus the English name in parentheses when they differ.</summary>
+    public string ListName =>
+        string.Equals(DisplayName, EnglishName, StringComparison.OrdinalIgnoreCase)
+            ? DisplayName
+            : $"{DisplayName} ({EnglishName})";
+
+    public string DisplayName
+    {
+        get
+        {
+            string leaf = WeaponTag.LeafName.ToLowerInvariant();
+            if (leaf.EndsWith("-weapon", StringComparison.Ordinal))
+                leaf = leaf[..^"-weapon".Length];
+            string key = "weapon_loader.name." + leaf;
+            return LocalizationService.Current.Has(key) ? L.Get(key) : EnglishName;
+        }
+    }
     public string TagPath => WeaponTag.Name;
     public uint Datum =>
         RuntimeTagMemoryService.BuildRuntimeDatum(WeaponTag);
@@ -1541,7 +1591,7 @@ public sealed class EnemySpawnerService : IDisposable
                 TimeSpan.FromSeconds(15),
                 cancellationToken);
             if (result.Outcome != ScriptOutcome.Confirmed)
-                throw new InvalidOperationException(result.Message);
+                throw new BridgeFailureException(result.Message);
             return result;
         }
         finally
@@ -1562,7 +1612,7 @@ public sealed class EnemySpawnerService : IDisposable
             "current",
             cancellationToken: cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
 
         const string marker = "Return value: ";
         int markerOffset = result.Message.IndexOf(marker, StringComparison.Ordinal);
@@ -2897,7 +2947,7 @@ public sealed class EnemySpawnerService : IDisposable
                 StringComparison.OrdinalIgnoreCase));
         if (variants is null)
         {
-            return [new SpawnVariantChoice("Authored default", new byte[4], -1, -1)];
+            return [new SpawnVariantChoice(L.Get("spawner.variant_default"), new byte[4], -1, -1)];
         }
 
         for (int index = 0; index < Math.Min(variants.ChildCount, 128); index++)
@@ -2929,14 +2979,14 @@ public sealed class EnemySpawnerService : IDisposable
             byte[] stringId = _memory.ReadBytes(name.Address, 4);
             short skinIndex = ReadInt16(variantIndex.Address);
             results.Add(new SpawnVariantChoice(
-                skinIndex >= 0 ? $"Skin variant {skinIndex}" : "Authored default",
+                skinIndex >= 0 ? L.Format("spawner.variant_skin", skinIndex) : L.Get("spawner.variant_default"),
                 stringId,
                 skinIndex,
                 index));
         }
         if (results.Count == 0)
             results.Add(new SpawnVariantChoice(
-                "Authored default", new byte[4], -1, -1));
+                L.Get("spawner.variant_default"), new byte[4], -1, -1));
         return results
             .GroupBy(
                 item => $"{item.StringId:X8}:{item.VariantIndex}",
@@ -2963,7 +3013,7 @@ public sealed class EnemySpawnerService : IDisposable
                     StringComparison.OrdinalIgnoreCase));
         if (armorCatalog is null)
         {
-            status = "Halo Meister's Master Chief armor catalog is unavailable.";
+            status = "Cartographer Toolkit's Master Chief armor catalog is unavailable.";
             return [];
         }
 

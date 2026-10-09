@@ -51,7 +51,6 @@ public sealed partial class MusicPage : Page, IActivatablePage
     private bool _suppressLanguage;
     private bool _suppressSelection;
     private bool _scrubbing;
-    private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private int _waveVersion;
     private float[] _peaks = [];
     private bool _suppressVolume = true;
@@ -65,7 +64,6 @@ public sealed partial class MusicPage : Page, IActivatablePage
         _player.AutoPlay = false;
         _player.MediaEnded += OnMediaEnded;
         _player.PlaybackSession.PlaybackStateChanged += OnPlaybackStateChanged;
-        _toastTimer.Tick += OnToastTick;
         ExportTrackButton.IsEnabled = false;
         CueText.Text = L.Get("music.select_track");
         ShowIdlePlayer();
@@ -247,7 +245,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
     private static string VolumeStorePath() =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "music-volume.txt");
 
     private static string? LoadStoredLanguage()
@@ -285,7 +283,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
     private static string LanguageStorePath() =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "music-language.txt");
 
     private void OnTransport(object sender, RoutedEventArgs e)
@@ -520,7 +518,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
             ApplyCatalogChrome();
             ApplyFilter();
             if (_all.Count > 0)
-                HideToast();
+                MainWindow.Instance?.DismissStatus();
         }
         catch (Exception ex)
         {
@@ -533,7 +531,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
             _variantTitle = null;
             _permutations.Clear();
             EmptyState.Visibility = Visibility.Visible;
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -588,7 +586,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
             _permutations.Clear();
             ExportTrackButton.IsEnabled = false;
             CueText.Text = L.Get(NoMediaKey);
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -971,7 +969,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
 
         string directory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "music-preview");
         Directory.CreateDirectory(directory);
         string languageToken = Sanitize(string.IsNullOrWhiteSpace(language) ? "default" : language);
@@ -1264,7 +1262,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
 
     private static string NewScratch()
     {
-        string path = Path.Combine(Path.GetTempPath(), "HaloMeister", Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(Path.GetTempPath(), AppPaths.DataFolderName, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
@@ -1293,7 +1291,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
     }
 
     private static string ExportError(Exception ex) =>
-        string.IsNullOrWhiteSpace(ex.Message) ? L.Get("music.export_failed") : ex.Message;
+        string.IsNullOrWhiteSpace(ex.Message) ? L.Get("music.export_failed") : UserFacingErrors.Format(ex);
 
     private bool TryEnter()
     {
@@ -1320,27 +1318,7 @@ public sealed partial class MusicPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        ToastHost.Background = severity == InfoBarSeverity.Success
-            ? (Brush)Application.Current.Resources["SystemFillColorSuccessBackgroundBrush"]
-            : (Brush)Application.Current.Resources["SystemFillColorCriticalBackgroundBrush"];
-        ToastText.Text = message;
-        ToastHost.Visibility = Visibility.Visible;
-        _toastTimer.Stop();
-        _toastTimer.Start();
-    }
-
-    private void OnToastTick(object? sender, object e)
-    {
-        _toastTimer.Stop();
-        HideToast();
-    }
-
-    private void HideToast()
-    {
-        ToastHost.Visibility = Visibility.Collapsed;
-        _toastTimer.Stop();
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private async Task ShowWaveformAsync(string path)
     {

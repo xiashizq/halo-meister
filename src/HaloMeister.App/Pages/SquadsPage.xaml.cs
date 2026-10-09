@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
 using Microsoft.UI.Xaml;
@@ -11,7 +12,7 @@ public sealed partial class SquadsPage : Page, IActivatablePage
     private readonly ScenarioSquadsService _squads = new();
     private readonly PlayerToolsService _playerTools = new();
     private IReadOnlyList<ScenarioSquadInfo> _all = [];
-    private ScenarioSquadInfo? _selected;
+    private SquadRow[] _rows = [];
     private bool _busy;
     private bool _hasScanned;
 
@@ -41,14 +42,11 @@ public sealed partial class SquadsPage : Page, IActivatablePage
 
     private async void OnRefresh(object sender, RoutedEventArgs e)
     {
-        int selectedIndex = _selected?.Index ?? -1;
         await RunBusy(async () =>
         {
             ScenarioSquadsSession session = await Task.Run(_squads.Scan);
             _all = FilterScaffoldSquads(session.Squads);
-            _selected = _all.FirstOrDefault(item => item.Index == selectedIndex);
             ApplyFilter();
-            ShowSelection();
             ShowStatus(
                 L.Format("squads.refreshed_squads", _all.Count),
                 InfoBarSeverity.Success);
@@ -57,8 +55,7 @@ public sealed partial class SquadsPage : Page, IActivatablePage
 
     private async void OnPlace(object sender, RoutedEventArgs e)
     {
-        if (_selected is null) return;
-        ScenarioSquadInfo squad = _selected;
+        if (SquadOf(sender) is not { } squad) return;
         await RunBusy(async () =>
         {
             ScriptExecutionResult result = await _squads.PlaceAsync(squad);
@@ -70,8 +67,7 @@ public sealed partial class SquadsPage : Page, IActivatablePage
 
     private async void OnErase(object sender, RoutedEventArgs e)
     {
-        if (_selected is null) return;
-        ScenarioSquadInfo squad = _selected;
+        if (SquadOf(sender) is not { } squad) return;
         await RunBusy(async () =>
         {
             ScriptExecutionResult result = await _squads.EraseAsync(squad);
@@ -81,19 +77,104 @@ public sealed partial class SquadsPage : Page, IActivatablePage
         });
     }
 
-    private async void OnTeleportToSpawnPoint(object sender, RoutedEventArgs e)
+    private async void OnTeleport(object sender, RoutedEventArgs e)
     {
-        if (_busy ||
-            sender is not FrameworkElement { Tag: ScenarioSquadSpawnPoint point })
+        if (SquadOf(sender) is not { } squad) return;
+        if (squad.SpawnPoints.Count == 0)
+        {
+            ShowStatus(L.Get("squads.error_no_spawn_points"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        SpawnPointOption? choice = await ShowTeleportDialogAsync(squad);
+        if (choice is null)
             return;
 
         await RunBusy(async () =>
         {
             await _playerTools.TeleportAsync(
-                new PlayerCoordinates(point.X, point.Y, point.Z));
+                new PlayerCoordinates(choice.Point.X, choice.Point.Y, choice.Point.Z));
             ShowStatus(
-                L.Format("squads.teleported_to_spawn", point.Display),
+                L.Format("squads.teleported_to_point", choice.Number),
                 InfoBarSeverity.Success);
+        });
+    }
+
+    private async Task<SpawnPointOption?> ShowTeleportDialogAsync(ScenarioSquadInfo squad)
+    {
+        SpawnPointOption[] options = squad.SpawnPoints
+            .Select((point, index) => new SpawnPointOption(index + 1, point))
+            .ToArray();
+        var list = new ListView
+        {
+            ItemsSource = options,
+            MinWidth = 280,
+            MaxHeight = 360,
+            SelectionMode = ListViewSelectionMode.Single,
+            SelectedIndex = 0,
+        };
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = L.Get("squads.teleport_dialog_title"),
+            Content = list,
+            PrimaryButtonText = L.Get("squads.teleport"),
+            CloseButtonText = L.Get("common.cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        dialog.Resources["ContentDialogMaxHeight"] = 560.0;
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return null;
+        return list.SelectedItem as SpawnPointOption ?? options[0];
+    }
+
+    private static ScenarioSquadInfo? SquadOf(object sender) =>
+        (sender as FrameworkElement)?.DataContext is SquadRow row ? row.Squad : null;
+
+    private async void OnInvincible(object sender, RoutedEventArgs e) =>
+        await SetInvincibleAsync(SquadOf(sender), true);
+
+    private async void OnMortal(object sender, RoutedEventArgs e) =>
+        await SetInvincibleAsync(SquadOf(sender), false);
+
+    private async void OnAlly(object sender, RoutedEventArgs e) =>
+        await SetAllegianceAsync(SquadOf(sender), true);
+
+    private async void OnHostile(object sender, RoutedEventArgs e) =>
+        await SetAllegianceAsync(SquadOf(sender), false);
+
+    private async Task SetInvincibleAsync(ScenarioSquadInfo? squad, bool invincible)
+    {
+        if (squad is null) return;
+        await RunBusy(async () =>
+        {
+            ScriptExecutionResult result = await _squads.SetInvincibleAsync(
+                squad,
+                invincible);
+            ShowScriptResult(
+                result,
+                L.Format(
+                    invincible
+                        ? "squads.invincible_submitted"
+                        : "squads.invincible_off_submitted",
+                    squad.Name));
+        });
+    }
+
+    private async Task SetAllegianceAsync(ScenarioSquadInfo? squad, bool allied)
+    {
+        if (squad is null) return;
+        await RunBusy(async () =>
+        {
+            ScriptExecutionResult result = await _squads.SetAllegianceAsync(
+                squad,
+                allied);
+            ShowScriptResult(
+                result,
+                L.Format(
+                    allied ? "squads.ally_submitted" : "squads.hostile_submitted",
+                    squad.Name));
         });
     }
 
@@ -107,40 +188,12 @@ public sealed partial class SquadsPage : Page, IActivatablePage
                 query.Length == 0 ||
                 squad.SearchText.Contains(query, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        SquadList.ItemsSource = filtered;
-        SquadList.SelectedItem = _selected;
+        _rows = filtered.Select(squad => new SquadRow(squad)).ToArray();
+        SquadList.ItemsSource = _rows;
         CountText.Text = L.Format(
             "squads.shown_count",
             filtered.Length,
             _all.Count);
-    }
-
-    private void OnSquadClicked(object sender, ItemClickEventArgs e)
-    {
-        _selected = e.ClickedItem as ScenarioSquadInfo;
-        ShowSelection();
-    }
-
-    private void ShowSelection()
-    {
-        bool selected = _selected is not null;
-        EmptyState.Visibility = selected ? Visibility.Collapsed : Visibility.Visible;
-        SelectionDetails.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-        if (_selected is null)
-        {
-            UpdateControls();
-            return;
-        }
-
-        SelectedNameText.Text = _selected.Name;
-        TeamText.Text = L.Format("squads.team_label", _selected.TeamDisplay);
-        bool hasSpawnPoints = _selected.SpawnPoints.Count > 0;
-        SpawnPointsHeaderText.Visibility = Visibility.Visible;
-        SpawnPointsList.ItemsSource = _selected.SpawnPoints;
-        SpawnPointsList.Visibility =
-            hasSpawnPoints ? Visibility.Visible : Visibility.Collapsed;
-        SpawnPointsEmptyText.Visibility =
-            hasSpawnPoints ? Visibility.Collapsed : Visibility.Visible;
         UpdateControls();
     }
 
@@ -148,14 +201,14 @@ public sealed partial class SquadsPage : Page, IActivatablePage
     {
         if (result.Outcome == ScriptOutcome.Failed)
         {
-            ShowStatus(result.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.FromBridge(result.Message), InfoBarSeverity.Error);
             return;
         }
 
         ShowStatus(
             result.Outcome == ScriptOutcome.Submitted
                 ? submittedMessage
-                : result.Message,
+                : submittedMessage,
             result.Outcome == ScriptOutcome.Confirmed
                 ? InfoBarSeverity.Success
                 : InfoBarSeverity.Warning);
@@ -167,7 +220,7 @@ public sealed partial class SquadsPage : Page, IActivatablePage
         _busy = true;
         UpdateControls();
         try { await action(); }
-        catch (Exception ex) { ShowStatus(ex.Message, InfoBarSeverity.Error); }
+        catch (Exception ex) { ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error); }
         finally
         {
             _busy = false;
@@ -180,15 +233,11 @@ public sealed partial class SquadsPage : Page, IActivatablePage
 
     private void UpdateControls()
     {
-        bool canAct =
-            !_busy &&
-            _game.IsConnected &&
-            _selected is not null &&
-            _selected.CanScript;
-        ScanButton.IsEnabled = !_busy && _game.IsConnected;
-        RefreshButton.IsEnabled = !_busy && _game.IsConnected && _hasScanned;
-        PlaceButton.IsEnabled = canAct;
-        EraseButton.IsEnabled = canAct;
+        bool ready = !_busy && _game.IsConnected;
+        ScanButton.IsEnabled = ready;
+        RefreshButton.IsEnabled = ready && _hasScanned;
+        foreach (SquadRow row in _rows)
+            row.SetReady(ready);
         BusyRing.IsActive = _busy;
         ConnectionText.Text = _hasScanned
             ? L.Format("squads.loaded_summary", _all.Count)
@@ -198,11 +247,7 @@ public sealed partial class SquadsPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private static IReadOnlyList<ScenarioSquadInfo> FilterScaffoldSquads(
         IReadOnlyList<ScenarioSquadInfo> squads) =>
@@ -222,4 +267,34 @@ public sealed partial class SquadsPage : Page, IActivatablePage
             name.Trim(),
             EnemySpawnerService.DedicatedHostileSquadName,
             StringComparison.OrdinalIgnoreCase);
+
+    private sealed class SquadRow : INotifyPropertyChanged
+    {
+        private bool _ready;
+
+        public SquadRow(ScenarioSquadInfo squad) => Squad = squad;
+
+        public ScenarioSquadInfo Squad { get; }
+        public string ListTitle => Squad.ListTitle;
+        public string TeamDisplay => Squad.TeamDisplay;
+        public bool CanAct => _ready && Squad.CanScript;
+        public bool CanTeleport => _ready && Squad.SpawnPoints.Count > 0;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public void SetReady(bool ready)
+        {
+            if (_ready == ready)
+                return;
+            _ready = ready;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanAct)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanTeleport)));
+        }
+    }
+
+    private sealed record SpawnPointOption(int Number, ScenarioSquadSpawnPoint Point)
+    {
+        public string Title => L.Format("squads.spawn_point_option", Number);
+        public override string ToString() => Title;
+    }
 }

@@ -21,7 +21,7 @@ public sealed class SteamGameSaveStore : IGameSaveStore
             "SaveGames");
         BackupRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "GameSaveBackupsSteam");
     }
 

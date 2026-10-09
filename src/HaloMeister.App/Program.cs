@@ -11,12 +11,13 @@ namespace HaloMeister.App;
 /// </summary>
 public static class Program
 {
-    private const string InstanceKey = "HaloMeister.SingleInstance";
+    private const string InstanceKey = "CartographerToolkit.SingleInstance";
 
     [STAThread]
     private static int Main(string[] args)
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
+        AppPaths.EnsureInitialized();
 
         if (DecideRedirection())
             return 0;

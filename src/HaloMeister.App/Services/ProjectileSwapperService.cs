@@ -164,13 +164,9 @@ public sealed class ProjectileSwapperService : IDisposable
             path.Contains("grenade_launcher", StringComparison.Ordinal) ? "T_UI_SPNKR_WeaponIcon.png" :
             path.Contains("sentinel", StringComparison.Ordinal) ||
             path.Contains("target_laser", StringComparison.Ordinal) ? "T_UI_SentinelBeam_WeaponIcon.png" :
-            path.Contains("brute_shot", StringComparison.Ordinal) ||
-            path.Contains("bruteshot", StringComparison.Ordinal) ? "wiki_brute_shot.png" :
-            path.Contains("mauler", StringComparison.Ordinal) ||
-            path.Contains("excavator", StringComparison.Ordinal) ? "wiki_mauler.png" :
             path.Contains("magnum", StringComparison.Ordinal) ||
             path.Contains("pistol", StringComparison.Ordinal) ? "T_UI_Pistol_WeaponIcon.png" :
-            "missing.png";
+            "T_UI_AssaultRifle_WeaponIcon.png";
         return $"ms-appx:///Assets/WeaponIcons/{icon}";
     }
 

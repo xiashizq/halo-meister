@@ -1,10 +1,13 @@
 using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
+using System.Numerics;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.UI;
 
 namespace HaloMeister.App.Pages;
 
@@ -15,9 +18,39 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
     private int _installButtonWave;
     private int _installButtonsPending;
     private TaskCompletionSource? _installButtonsReady;
-    private BuiltinModListItem[] _items = [];
+    private BuiltinModListItem[] _coreItems = [];
+    private BuiltinModListItem[] _enhanceItems = [];
 
     public BuiltinModPage() => InitializeComponent();
+
+    /// <summary>Rounds the poster's left corners to match the card.</summary>
+    private void OnPosterSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not Image image || e.NewSize.Width <= 0 || e.NewSize.Height <= 0)
+            return;
+
+        Visual visual = ElementCompositionPreview.GetElementVisual(image);
+        RectangleClip rounded = visual.Compositor.CreateRectangleClip(
+            0,
+            0,
+            (float)e.NewSize.Width,
+            (float)e.NewSize.Height,
+            new Vector2(9, 9),
+            new Vector2(0, 0),
+            new Vector2(0, 0),
+            new Vector2(9, 9));
+        visual.Clip = rounded;
+    }
+
+    private void OnModHostSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.NewSize.Width <= 0)
+            return;
+        if (ReferenceEquals(sender, CoreHost))
+            CoreModList.Width = e.NewSize.Width;
+        else if (ReferenceEquals(sender, EnhanceHost))
+            EnhanceModList.Width = e.NewSize.Width;
+    }
 
     public void OnActivated() => _ = RefreshStatusAsync(showLoading: true);
 
@@ -123,16 +156,23 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
             if (generation != _refreshGeneration)
                 return;
 
-            BuiltinModListItem[] next = catalog
+            BuiltinModListItem[] nextCore = catalog
+                .Where(entry => BuiltinModCatalog.IsCore(entry.Definition.Id))
                 .Select(entry => CreateListItem(entry, _busy))
                 .ToArray();
-            bool changed = !next.SequenceEqual(_items);
-            _items = next;
+            BuiltinModListItem[] nextEnhance = catalog
+                .Where(entry => !BuiltinModCatalog.IsCore(entry.Definition.Id))
+                .Select(entry => CreateListItem(entry, _busy))
+                .ToArray();
+            bool changed = !nextCore.SequenceEqual(_coreItems) ||
+                           !nextEnhance.SequenceEqual(_enhanceItems);
+            _coreItems = nextCore;
+            _enhanceItems = nextEnhance;
             if (changed)
             {
                 if (showLoading)
-                    ArmInstallButtonGate(_items.Length);
-                ModList.ItemsSource = _items;
+                    ArmInstallButtonGate(_coreItems.Length + _enhanceItems.Length);
+                BindLists();
             }
 
             PublishedVersionReport? published = await PublishedVersionService.Current.CheckAsync();
@@ -162,9 +202,10 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
             if (generation != _refreshGeneration)
                 return;
 
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
-            _items = [];
-            ModList.ItemsSource = _items;
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
+            _coreItems = [];
+            _enhanceItems = [];
+            BindLists();
         }
         finally
         {
@@ -183,6 +224,15 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
         LoadingRing.IsActive = loading;
         ModListHost.Opacity = loading ? 0 : 1;
     }
+
+    private void BindLists()
+    {
+        CoreModList.ItemsSource = _coreItems;
+        EnhanceModList.ItemsSource = _enhanceItems;
+    }
+
+    private static BuiltinModListItem[] DisableActions(BuiltinModListItem[] items) =>
+        items.Select(item => item with { CanInstall = false, CanRemove = false }).ToArray();
 
     private void ArmInstallButtonGate(int count)
     {
@@ -226,6 +276,55 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
         });
     }
 
+    private static readonly Dictionary<string, BitmapImage> PosterCache = new(StringComparer.Ordinal);
+
+    private static BitmapImage? LoadPoster(BuiltinModDefinition definition)
+    {
+        if (PosterCache.TryGetValue(definition.Id, out BitmapImage? cached))
+            return cached;
+
+        string path = Path.Combine(
+            AppContext.BaseDirectory,
+            "Assets",
+            "BuiltinMods",
+            $"{definition.Id}.jpg");
+        if (!File.Exists(path))
+            return null;
+
+        var bitmap = new BitmapImage
+        {
+            CreateOptions = BitmapCreateOptions.IgnoreImageCache,
+            UriSource = new Uri(path, UriKind.Absolute),
+        };
+        PosterCache[definition.Id] = bitmap;
+        return bitmap;
+    }
+
+    // Shared brush instances keep list-item record equality stable across refreshes.
+    private static readonly SolidColorBrush SuccessBrush = new(Color.FromArgb(255, 108, 203, 95));
+    private static readonly SolidColorBrush CautionBrush = new(Color.FromArgb(255, 252, 225, 0));
+    private static readonly SolidColorBrush CriticalBrush = new(Color.FromArgb(255, 255, 153, 164));
+    private static readonly SolidColorBrush NeutralBrush = new(Color.FromArgb(255, 160, 160, 160));
+
+    private static string StatusGlyphFor(BuiltinModSyncState state) => state switch
+    {
+        BuiltinModSyncState.UpToDate => "\uE73E",
+        BuiltinModSyncState.Outdated or BuiltinModSyncState.Incomplete => "\uE7BA",
+        BuiltinModSyncState.BundleMissing or BuiltinModSyncState.BundleTampered => "\uEA39",
+        BuiltinModSyncState.GameFolderMissing => "\uE7BA",
+        _ => "\uE946",
+    };
+
+    private static Brush StatusBrushFor(BuiltinModSyncState state) => state switch
+    {
+        BuiltinModSyncState.UpToDate => SuccessBrush,
+        BuiltinModSyncState.Outdated or
+            BuiltinModSyncState.Incomplete or
+            BuiltinModSyncState.GameFolderMissing => CautionBrush,
+        BuiltinModSyncState.BundleMissing or BuiltinModSyncState.BundleTampered => CriticalBrush,
+        _ => NeutralBrush,
+    };
+
     private static BuiltinModListItem CreateListItem(
         BuiltinModCatalogStatus entry,
         bool busy)
@@ -237,6 +336,7 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
             entry.Definition.NoteKeys.Select(L.Get));
         return new BuiltinModListItem(
             Definition: entry.Definition,
+            Poster: LoadPoster(entry.Definition),
             Title: L.Get(entry.Definition.TitleKey),
             Description: L.Get(entry.Definition.DescriptionKey),
             Notes: notes,
@@ -252,6 +352,8 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
             InstallLabel: update
                 ? L.Get("builtin_mod.update")
                 : L.Get("builtin_mod.install"),
+            StatusGlyph: StatusGlyphFor(entry.Sync.State),
+            StatusBrush: StatusBrushFor(entry.Sync.State),
             CanInstall: !busy && entry.Sync.CanInstall,
             CanRemove: !busy && entry.Sync.CanRemove,
             State: entry.Sync.State);
@@ -263,12 +365,11 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
         _busy = true;
         BusyRing.IsActive = true;
         RefreshButton.IsEnabled = false;
-        if (_items.Length > 0)
+        if (_coreItems.Length + _enhanceItems.Length > 0)
         {
-            _items = _items
-                .Select(item => item with { CanInstall = false, CanRemove = false })
-                .ToArray();
-            ModList.ItemsSource = _items;
+            _coreItems = DisableActions(_coreItems);
+            _enhanceItems = DisableActions(_enhanceItems);
+            BindLists();
         }
         try
         {
@@ -276,7 +377,7 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
             await RefreshStatusAsync();
         }
         finally
@@ -289,34 +390,12 @@ public sealed partial class BuiltinModPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
-}
-
-public sealed class BuiltinModPosterConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, string language)
-    {
-        if (value is not string uri || string.IsNullOrWhiteSpace(uri))
-            return null!;
-
-        return new ImageBrush
-        {
-            ImageSource = new BitmapImage(new Uri(uri)),
-            Stretch = Stretch.UniformToFill,
-            AlignmentY = AlignmentY.Center,
-        };
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, string language) =>
-        throw new NotSupportedException();
+        => MainWindow.Instance?.Report(message, severity);
 }
 
 public sealed record BuiltinModListItem(
     BuiltinModDefinition Definition,
+    BitmapImage? Poster,
     string Title,
     string Description,
     string Notes,
@@ -326,6 +405,8 @@ public sealed record BuiltinModListItem(
     Visibility VersionVisibility,
     string Stem,
     string InstallLabel,
+    string StatusGlyph,
+    Brush StatusBrush,
     bool CanInstall,
     bool CanRemove,
     BuiltinModSyncState State);

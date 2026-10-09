@@ -9,7 +9,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid>
@@ -268,11 +267,5 @@
                 </Grid>
             </Grid>
         </Border>
-
-        <InfoBar
-            x:Name="PageStatus"
-            Grid.Row="3"
-            IsClosable="True"
-            IsOpen="False" />
     </Grid>
 </Page>

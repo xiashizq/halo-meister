@@ -226,7 +226,6 @@
                 </Border>
             </Grid>
 
-            <InfoBar x:Name="StatusBar" IsOpen="False" />
         </StackPanel>
     </ScrollViewer>
 </Page>

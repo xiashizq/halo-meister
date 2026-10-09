@@ -7,16 +7,29 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <Grid ColumnSpacing="16">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel Spacing="4">
+            <Border
+                Width="52"
+                Height="52"
+                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                CornerRadius="14"
+                VerticalAlignment="Center">
+                <FontIcon
+                    FontSize="24"
+                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                    Glyph="&#xE7FC;"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                 <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{i18n:Loc Key='spawner.spawner'}" />
                 <TextBlock
                     Style="{StaticResource LivePageDescriptionStyle}"
@@ -24,7 +37,7 @@
                     />
             </StackPanel>
             <StackPanel
-                Grid.Column="1"
+                Grid.Column="2"
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
                 Spacing="8">
@@ -32,7 +45,10 @@
                     x:Name="ScanButton"
                     Click="OnScan"
                     IsEnabled="False"
-                    Style="{StaticResource AccentButtonStyle}">
+                    MinHeight="38"
+                Padding="18,6"
+                CornerRadius="8"
+                Style="{StaticResource AccentButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
                         <SymbolIcon Symbol="Refresh" />
                         <TextBlock Text="{i18n:Loc Key='spawner.scan_loaded_mission'}" />
@@ -46,44 +62,48 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="1" ColumnSpacing="10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="180" />
-                <ColumnDefinition Width="180" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <ComboBox
-                x:Name="SpawnTypePicker"
-                Header="{i18n:Loc Key='spawner.spawn_type'}"
-                IsEnabled="False"
-                SelectionChanged="OnSpawnTypeChanged">
-                <ComboBoxItem Content="{i18n:Loc Key='spawner.characters'}" Tag="character" />
-                <ComboBoxItem Content="{i18n:Loc Key='spawner.johnson_spartan_ai'}" Tag="armor" />
-                <ComboBoxItem Content="{i18n:Loc Key='spawner.vehicles'}" Tag="vehicle" />
-            </ComboBox>
-            <ComboBox
-                x:Name="CategoryPicker"
-                Grid.Column="1"
-                DisplayMemberPath="Label"
-                Header="{i18n:Loc Key='spawner.category'}"
-                IsEnabled="False"
-                SelectionChanged="OnCategoryChanged" />
-            <TextBox
-                x:Name="SearchBox"
-                Grid.Column="2"
-                Header="{i18n:Loc Key='spawner.search'}"
-                IsEnabled="False"
-                PlaceholderText="{i18n:Loc Key='spawner.search_names_categories_variants_or_tag_paths'}"
-                TextChanged="OnSearchChanged" />
-        </Grid>
+        <Border
+            Grid.Row="1"
+            Padding="16,12,16,14"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="12">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="190" />
+                    <ColumnDefinition Width="190" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ComboBox
+                    x:Name="SpawnTypePicker"
+                    HorizontalAlignment="Stretch"
+                    Header="{i18n:Loc Key='spawner.spawn_type'}"
+                    IsEnabled="False"
+                    SelectionChanged="OnSpawnTypeChanged">
+                    <ComboBoxItem Content="{i18n:Loc Key='spawner.characters'}" Tag="character" />
+                    <ComboBoxItem Content="{i18n:Loc Key='spawner.johnson_spartan_ai'}" Tag="armor" />
+                    <ComboBoxItem Content="{i18n:Loc Key='spawner.vehicles'}" Tag="vehicle" />
+                </ComboBox>
+                <ComboBox
+                    x:Name="CategoryPicker"
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    DisplayMemberPath="Label"
+                    Header="{i18n:Loc Key='spawner.category'}"
+                    IsEnabled="False"
+                    SelectionChanged="OnCategoryChanged" />
+                <TextBox
+                    x:Name="SearchBox"
+                    Grid.Column="2"
+                    Header="{i18n:Loc Key='spawner.search'}"
+                    IsEnabled="False"
+                    PlaceholderText="{i18n:Loc Key='spawner.search_names_categories_variants_or_tag_paths'}"
+                    TextChanged="OnSearchChanged" />
+            </Grid>
+        </Border>
 
-        <InfoBar
-            x:Name="StatusBar"
-            Grid.Row="2"
-            IsClosable="True"
-            IsOpen="False" />
-
-        <Grid Grid.Row="3" ColumnSpacing="16">
+        <Grid Grid.Row="2" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="5*" MinWidth="360" />
                 <ColumnDefinition Width="7*" MinWidth="440" />
@@ -93,14 +113,18 @@
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
-                CornerRadius="8">
+                CornerRadius="12">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <Grid Padding="16,14,16,10" ColumnSpacing="8">
+                    <Grid
+                        Padding="18,16,18,12"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
@@ -119,14 +143,15 @@
                         </StackPanel>
                         <Border
                             Grid.Column="1"
-                            Padding="9,4"
-                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            Padding="10,3"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}"
                             CornerRadius="12"
                             VerticalAlignment="Center">
                             <TextBlock
                                 x:Name="CountText"
                                 FontSize="12"
                                 FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                 Text="0" />
                         </Border>
                     </Grid>
@@ -140,51 +165,78 @@
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                <Setter Property="Padding" Value="8,6" />
-                                <Setter Property="Margin" Value="8,1" />
+                                <Setter Property="Padding" Value="10,9" />
+                                <Setter Property="Margin" Value="10,2" />
+                                <Setter Property="CornerRadius" Value="8" />
                             </Style>
                         </ListView.ItemContainerStyle>
+                        <ListView.Header>
+                            <Border Height="6" />
+                        </ListView.Header>
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="40" />
+                                        <ColumnDefinition Width="44" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <Border
-                                        Width="40"
-                                        Height="40"
+                                        Width="44"
+                                        Height="44"
+                                        VerticalAlignment="Center"
                                         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                        CornerRadius="6">
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="10">
                                         <FontIcon
-                                            FontSize="18"
+                                            FontSize="19"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                             Glyph="&#xE7FC;"
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Spacing="2">
-                                        <TextBlock
-                                            FontWeight="SemiBold"
-                                            Text="{Binding DisplayName}"
-                                            TextTrimming="CharacterEllipsis" />
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Grid ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock
+                                                FontWeight="SemiBold"
+                                                Text="{Binding DisplayName}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{Binding SecondaryName}"
+                                                TextTrimming="CharacterEllipsis"
+                                                Visibility="{Binding SecondaryNameVisibility}" />
+                                        </Grid>
+                                        <StackPanel
+                                            Margin="0,2,0,1"
+                                            Orientation="Horizontal"
+                                            Spacing="8">
+                                            <Border
+                                                Padding="7,1,7,2"
+                                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                CornerRadius="8">
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                    Text="{Binding Category}" />
+                                            </Border>
                                             <TextBlock
                                                 FontSize="12"
-                                                Opacity="0.76"
-                                                Text="{Binding Category}" />
-                                            <TextBlock
-                                                FontSize="12"
-                                                Opacity="0.45"
-                                                Text="•" />
-                                            <TextBlock
-                                                FontSize="12"
-                                                Opacity="0.66"
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                 Text="{Binding VariantSummary}" />
                                         </StackPanel>
                                         <TextBlock
                                             FontFamily="Consolas"
                                             FontSize="11"
-                                            Opacity="0.50"
+                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                             Text="{Binding TagPath}"
                                             TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
@@ -204,34 +256,49 @@
                         VerticalAlignment="Center"
                         Visibility="Collapsed" />
 
-                    <TextBlock
+                    <Border
                         Grid.Row="2"
-                        Margin="16,8,16,14"
-                        FontSize="11"
-                        Opacity="0.55"
-                        Text="{i18n:Loc Key='spawner.duplicate_tag_rows_are_collapsed_variants_0c4f50'}"
-                        TextWrapping="Wrap" />
+                        Padding="18,10,18,12"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="0,1,0,0">
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Text="{i18n:Loc Key='spawner.duplicate_tag_rows_are_collapsed_variants_0c4f50'}"
+                            TextWrapping="Wrap" />
+                    </Border>
                 </Grid>
             </Border>
 
             <Border
                 Grid.Column="1"
-                Padding="20"
+                Padding="24"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
-                CornerRadius="8">
+                CornerRadius="12">
                 <Grid>
                     <StackPanel
                         x:Name="EmptySelectionPanel"
                         MaxWidth="420"
                         HorizontalAlignment="Center"
-                        Spacing="10"
+                        Spacing="12"
                         VerticalAlignment="Center">
-                        <FontIcon
-                            FontSize="42"
-                            Glyph="&#xE7FC;"
-                            Opacity="0.45" />
+                        <Border
+                            Width="84"
+                            Height="84"
+                            Margin="0,0,0,6"
+                            HorizontalAlignment="Center"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="42">
+                            <FontIcon
+                                FontSize="38"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                Glyph="&#xE7FC;"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Opacity="0.85" />
+                        </Border>
                         <TextBlock
                             FontSize="20"
                             FontWeight="SemiBold"
@@ -249,35 +316,53 @@
                         x:Name="SelectionPanel"
                         VerticalScrollBarVisibility="Auto"
                         Visibility="Collapsed">
-                        <StackPanel Spacing="16">
-                            <Grid ColumnSpacing="16">
+                        <StackPanel Spacing="18">
+                            <Grid ColumnSpacing="18">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="5">
+                                <StackPanel Spacing="8">
                                     <TextBlock
                                         x:Name="SelectedNameText"
-                                        FontSize="24"
+                                        FontSize="26"
                                         FontWeight="SemiBold"
                                         TextWrapping="Wrap" />
-                                    <TextBlock
-                                        x:Name="SelectedCategoryText"
-                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                    <TextBlock
-                                        x:Name="SelectedTagText"
-                                        FontFamily="Consolas"
-                                        FontSize="12"
-                                        Opacity="0.60"
-                                        TextWrapping="Wrap" />
+                                    <Border
+                                        Padding="10,2,10,3"
+                                        HorizontalAlignment="Left"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        CornerRadius="10">
+                                        <TextBlock
+                                            x:Name="SelectedCategoryText"
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    </Border>
+                                    <Border
+                                        Padding="10,6"
+                                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6">
+                                        <TextBlock
+                                            x:Name="SelectedTagText"
+                                            FontFamily="Consolas"
+                                            FontSize="12"
+                                            IsTextSelectionEnabled="True"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            TextWrapping="Wrap" />
+                                    </Border>
                                 </StackPanel>
                                 <Border
                                     x:Name="ArmorPreviewBorder"
                                     Grid.Column="1"
-                                    Width="150"
-                                    Height="110"
+                                    Width="180"
+                                    Height="132"
                                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                    CornerRadius="7"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
                                     Visibility="Collapsed">
                                     <Image
                                         x:Name="ArmorPreview"
@@ -287,13 +372,22 @@
 
                             <Border
                                 x:Name="VariantPanel"
-                                Padding="14"
-                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                CornerRadius="7">
-                                <StackPanel Spacing="8">
-                                    <TextBlock
-                                        FontWeight="SemiBold"
-                                        Text="{i18n:Loc Key='spawner.variant'}" />
+                                Padding="16"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon
+                                            FontSize="14"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            Glyph="&#xE790;"
+                                            VerticalAlignment="Center" />
+                                        <TextBlock
+                                            FontWeight="SemiBold"
+                                            Text="{i18n:Loc Key='spawner.variant'}" />
+                                    </StackPanel>
                                     <ComboBox
                                         x:Name="VariantPicker"
                                         DisplayMemberPath="Name"
@@ -302,16 +396,24 @@
                                     <TextBlock
                                         x:Name="VariantDetailText"
                                         FontSize="12"
-                                        Opacity="0.65" />
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock
-                                x:Name="BridgeStatusText"
-                                FontSize="12"
-                                Opacity="0.68"
-                                Text="{i18n:Loc Key='spawner.connect_to_inspect_bridge_status'}"
-                                TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Glyph="&#xE946;"
+                                    VerticalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="BridgeStatusText"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{i18n:Loc Key='spawner.connect_to_inspect_bridge_status'}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
 
                             <InfoBar
                                 IsClosable="False"
@@ -326,8 +428,11 @@
                                     AllowFocusWhenDisabled="True"
                                     Click="OnSpawn"
                                     IsEnabled="False"
+                                    MinHeight="40"
+                                    Padding="22,8"
+                                    CornerRadius="8"
                                     Style="{StaticResource AccentButtonStyle}">
-                                    <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
                                         <SymbolIcon Symbol="Add" />
                                         <TextBlock Text="{i18n:Loc Key='spawner.spawn_ahead_of_player'}" />
                                     </StackPanel>

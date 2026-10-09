@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -34,7 +34,9 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
     private IReadOnlyList<EnemySpawnChoice> _characters = [];
     private int? _lastActorDatum;
     private int _lastApplyTeam = AllegianceDemoService.FriendlyTeam;
+    private readonly Dictionary<int, IReadOnlyList<WeaponOption>> _weaponChoiceCache = [];
     private bool _busy;
+    private bool _adding;
     private bool _hotkeyWasDown;
     private bool _suppressHotkey;
     private bool _modNeedsUpdate;
@@ -50,6 +52,7 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
         ApplyTeamComboBox.ItemsSource = _teamOptions;
         ApplyTeamComboBox.SelectedItem = _defaultTeam;
         SquadList.ItemsSource = _squad;
+        CatalogCountText.Text = "0 / 0";
         _game.ConnectionChanged += OnConnectionChanged;
         _statusTimer.Tick += OnStatusTick;
         _hotkeyTimer.Tick += OnHotkeyTick;
@@ -102,6 +105,8 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
         {
             SpawnerCatalog catalog = await Task.Run(_demo.Connect);
             _characters = catalog.Characters;
+            // A rescan may load a different mission: stale tag handles must go.
+            _weaponChoiceCache.Clear();
             ApplyCharacterFilter();
             SpawnScaffoldInventory inventory = await Task.Run(_demo.ProbeScaffolds);
             if (inventory.NeedsDedicatedAlly)
@@ -130,56 +135,107 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
         {
             query = query.Where(character =>
                 character.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                character.EnglishName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                 character.Category.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                 character.TagPath.Contains(filter, StringComparison.OrdinalIgnoreCase));
         }
 
-        CharacterList.ItemsSource = query.ToArray();
+        EnemySpawnChoice[] shown = query.ToArray();
+        CharacterList.ItemsSource = shown;
+        CatalogCountText.Text = $"{shown.Length:N0} / {_characters.Count:N0}";
+        UpdateCatalogEmptyState(shown.Length);
     }
 
-    private void OnAddCharacterRow(object sender, RoutedEventArgs e)
+    private void UpdateCatalogEmptyState(int shownCount)
     {
-        if (_busy || !_game.IsConnected || !EnsureBuiltinMod()) return;
+        bool empty = shownCount == 0;
+        EmptyCatalogPanel.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        if (!empty)
+            return;
+        EmptyCatalogText.Text = _characters.Count == 0
+            ? L.Get("allegiance_demo.catalog_empty")
+            : L.Get("allegiance_demo.catalog_no_match");
+    }
+
+    private async void OnAddFriendly(object sender, RoutedEventArgs e) =>
+        await AddCharacterFromSenderAsync(sender, AllegianceDemoService.FriendlyTeam);
+
+    private async void OnAddHostile(object sender, RoutedEventArgs e) =>
+        await AddCharacterFromSenderAsync(sender, AllegianceDemoService.HostileTeam);
+
+    private async Task AddCharacterFromSenderAsync(object sender, int teamValue)
+    {
+        if (_busy || _adding || !_game.IsConnected || !EnsureBuiltinMod()) return;
         if (sender is not FrameworkElement { DataContext: EnemySpawnChoice character })
             return;
 
-        SpawnVariantChoice variant = character.Variants.FirstOrDefault()
-            ?? throw new InvalidOperationException(L.Get("spawner.select_character_variant"));
-        WeaponOption weaponPick = WeaponOption.Default;
-        PlayerTeamOption team = _defaultTeam;
+        _adding = true;
+        try
+        {
+            PlayerTeamOption team = _teamOptions.FirstOrDefault(
+                option => option.Value == teamValue) ?? _defaultTeam;
+            await AddCharacterAsync(character, team);
+        }
+        catch (Exception ex)
+        {
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
 
-        IReadOnlyList<WeaponOption> weaponChoices =
-        [
-            WeaponOption.Default,
-            .. (_demo.GetCompatibleWeapons(character)
-                .Select(weapon => new WeaponOption(weapon.DisplayName, weapon))),
-        ];
+    private async Task AddCharacterAsync(EnemySpawnChoice character, PlayerTeamOption team)
+    {
+        SpawnVariantChoice? variant = character.Variants.FirstOrDefault();
+        if (variant is null)
+        {
+            ShowStatus(
+                L.Get("spawner.select_character_variant"),
+                InfoBarSeverity.Warning);
+            return;
+        }
 
+        // Same character / variant / team with default weapon: just bump the count.
         AllegianceSquadItem? existing = _squad.FirstOrDefault(item =>
             item.Identity == AllegianceSquadItem.MakeIdentity(
                 character,
                 variant,
                 team.Value,
-                weaponPick.Weapon,
+                weapon: null,
                 weaponVariant: null));
         if (existing is not null)
         {
             existing.Quantity = Math.Min(50, existing.Quantity + 1);
-        }
-        else
-        {
-            AllegianceSquadItem item = new(
-                character,
-                variant,
-                quantity: 1,
-                team,
-                _teamOptions,
-                weaponPick,
-                weaponChoices);
-            item.PropertyChanged += OnSquadItemPropertyChanged;
-            _squad.Add(item);
+            UpdateControls();
+            return;
         }
 
+        int key = character.CharacterTag.Index;
+        if (!_weaponChoiceCache.TryGetValue(key, out IReadOnlyList<WeaponOption>? weaponChoices))
+        {
+            // Reading the weapon list walks tag memory; keep it off the UI thread.
+            weaponChoices = await Task.Run(() =>
+                (IReadOnlyList<WeaponOption>)
+                [
+                    WeaponOption.Default,
+                    .. _demo.GetCompatibleWeapons(character)
+                        .Select(weapon => new WeaponOption(weapon.ListName, weapon)),
+                ]);
+            _weaponChoiceCache[key] = weaponChoices;
+        }
+
+        AllegianceSquadItem added = new(
+            character,
+            variant,
+            quantity: 1,
+            team,
+            _teamOptions,
+            WeaponOption.Default,
+            weaponChoices);
+        added.PropertyChanged += OnSquadItemPropertyChanged;
+        _squad.Add(added);
         UpdateControls();
     }
 
@@ -421,7 +477,7 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
             {
                 string detail = string.IsNullOrWhiteSpace(spawn.SpawnResult.Message)
                     ? L.Get("allegiance_demo.batch_failed_unknown")
-                    : spawn.SpawnResult.Message.Trim();
+                    : UserFacingErrors.FromBridge(spawn.SpawnResult.Message);
                 throw new InvalidOperationException(
                     L.Format("allegiance_demo.batch_failed", spawn.Created, detail));
             }
@@ -482,7 +538,7 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -536,8 +592,20 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
         if (!modReady && _characters.Count > 0)
         {
             _characters = [];
+            _weaponChoiceCache.Clear();
             CharacterList.ItemsSource = Array.Empty<EnemySpawnChoice>();
+            CatalogCountText.Text = "0 / 0";
         }
+        UpdateCatalogEmptyState(
+            (CharacterList.ItemsSource as System.Collections.ICollection)?.Count ?? 0);
+        if (!modReady)
+            EmptyCatalogText.Text = L.Get("allegiance_demo.mod_required_body");
+        StatusDot.Fill = (Microsoft.UI.Xaml.Media.Brush)Resources[
+            ready && connected
+                ? "FriendlyBrush"
+                : connected
+                    ? "WarningBrush"
+                    : "IdleBrush"];
 
         CharacterFilterBox.IsEnabled = !_busy && modReady && _characters.Count > 0;
         CharacterList.IsEnabled = !_busy && connected && modReady && _characters.Count > 0;
@@ -569,23 +637,20 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
             .Where(item => item.SelectedTeam.Value == AllegianceDemoService.HostileTeam)
             .Sum(item => item.Quantity);
         int total = friendly + hostile;
-        string summary = L.Format(
-            "allegiance_demo.roster_summary",
-            friendly,
-            hostile,
-            total);
-        RosterSummaryText.Text = summary;
-        SpawnSummaryText.Text = empty
-            ? L.Get("allegiance_demo.spawn_bar_empty")
-            : summary;
+        FriendlyChipText.Text =
+            $"{L.Get("allegiance_demo.stance_friendly")} {friendly}";
+        HostileChipText.Text =
+            $"{L.Get("allegiance_demo.stance_hostile")} {hostile}";
+        TotalChipText.Text = L.Format("allegiance_demo.total_chip", total);
+        SpawnSummaryText.Text =
+            empty ? L.Get("allegiance_demo.spawn_bar_empty")
+            : !connected ? L.Get("allegiance_demo.disabled_not_connected")
+            : !ready ? L.Get("allegiance_demo.disabled_bridge")
+            : L.Format("allegiance_demo.roster_summary", friendly, hostile, total);
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private void OnConnectionChanged(object? sender, EventArgs e) =>
         DispatcherQueue.TryEnqueue(UpdateControls);
@@ -634,6 +699,12 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
 
     private sealed class AllegianceSquadItem : ObservableObject
     {
+        private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush FriendlyBrush =
+            new(Windows.UI.Color.FromArgb(255, 0x4C, 0xAF, 0x78));
+        private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush HostileBrush =
+            new(Windows.UI.Color.FromArgb(255, 0xE0, 0x56, 0x56));
+
+        private SpawnVariantChoice _variant;
         private int _quantity;
         private PlayerTeamOption _selectedTeam;
         private WeaponOption _selectedWeapon;
@@ -651,7 +722,7 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
             IReadOnlyList<WeaponOption> weaponChoices)
         {
             Character = character;
-            Variant = variant;
+            _variant = variant;
             _quantity = quantity;
             _selectedTeam = team;
             TeamChoices = teamChoices;
@@ -660,7 +731,26 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
         }
 
         public EnemySpawnChoice Character { get; }
-        public SpawnVariantChoice Variant { get; }
+        public SpawnVariantChoice Variant => _variant;
+        public IReadOnlyList<SpawnVariantChoice> VariantChoices => Character.Variants;
+        public bool CanSelectVariant => Character.Variants.Count > 1;
+
+        public SpawnVariantChoice SelectedVariant
+        {
+            get => _variant;
+            set
+            {
+                if (value is not null && Set(ref _variant, value))
+                    Raise(nameof(Detail));
+            }
+        }
+
+        public Microsoft.UI.Xaml.Media.Brush TeamBrush =>
+            SelectedTeam.Value == AllegianceDemoService.FriendlyTeam
+                ? FriendlyBrush
+                : HostileBrush;
+
+        public string Category => Character.Category;
         public IReadOnlyList<PlayerTeamOption> TeamChoices { get; }
         public IReadOnlyList<WeaponOption> WeaponChoices { get; }
         public IReadOnlyList<WeaponVariantOption> WeaponVariantChoices =>
@@ -692,7 +782,10 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
             set
             {
                 if (Set(ref _selectedTeam, value) && value is not null)
+                {
+                    Raise(nameof(TeamBrush));
                     Raise(nameof(Detail));
+                }
             }
         }
 
@@ -747,6 +840,9 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
         }
 
         public string DisplayName => Character.DisplayName;
+        public string SecondaryName => Character.SecondaryName;
+        public Microsoft.UI.Xaml.Visibility SecondaryNameVisibility =>
+            Character.SecondaryNameVisibility;
 
         public string CategoryLabel =>
             string.IsNullOrWhiteSpace(Character.Category)

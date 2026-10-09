@@ -14,7 +14,7 @@ runtime weapon tags.
 ## Coverage notes
 
 `WeaponCradle/Textures` was re-scanned against `pakchunk0-Windows` (2026-08).
-The game ships one cradle icon that was previously missing from Halo Meister:
+The game ships one cradle icon that was previously missing from Cartographer Toolkit:
 
 - `T_UI_SeraphMissiles_Icons` (DXT1) — added for Seraph missile hardpoints
 
@@ -22,12 +22,5 @@ Every other `T_UI_*WeaponIcon*` / turret cradle texture was already present.
 Close cousins (gravity hammer → energy sword, concussion → fuel rod, etc.)
 still reuse nearby cradle art via `ProjectileSwapperService.WeaponIconUri`.
 
-Wiki fallbacks (no dedicated cradle icon in the game pak):
-
-| File | Source |
-|------|--------|
-| `wiki_brute_shot.png` | Halopedia [H2A - Brute Shot model.jpg](https://www.halopedia.org/File:H2A_-_Brute_Shot_model.jpg) |
-| `wiki_mauler.png` | Halopedia [HO Mauler HiPoly Render 1.jpg](https://www.halopedia.org/File:HO_Mauler_HiPoly_Render_1.jpg) |
-
-Anything with no confident mapping falls back to `missing.png` rather than
-the assault rifle.
+Weapons with no cradle icon, including the Brute Shot and Mauler, use
+`T_UI_AssaultRifle_WeaponIcon.png`.

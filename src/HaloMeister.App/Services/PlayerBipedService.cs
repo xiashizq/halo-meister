@@ -92,7 +92,7 @@ public sealed class PlayerBipedService : IDisposable
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
 
         DateTimeOffset deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(5);
         int? activeTagIndex = null;
@@ -130,7 +130,7 @@ public sealed class PlayerBipedService : IDisposable
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
         return result;
     }
 
@@ -202,7 +202,7 @@ public sealed class PlayerBipedService : IDisposable
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome == ScriptOutcome.Failed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
         return result;
     }
 
@@ -531,7 +531,7 @@ public sealed class PlayerBipedService : IDisposable
     public static string GetCharacterOverlayDirectory() =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister", "CharacterOverlays");
+            AppPaths.DataFolderName, "CharacterOverlays");
 
     private static string? TryFingerprintOverlayTriplet(string directory, string stem)
     {

@@ -4,8 +4,8 @@
       Canonical application version. Change this in the release commit, then tag
       that exact commit v<Version> (for example v0.2.0).
     -->
-    <Version>0.2.6</Version>
-    <Product>Halo Meister</Product>
-    <Authors>Halo Meister contributors</Authors>
+    <Version>0.2.7</Version>
+    <Product>Cartographer Toolkit</Product>
+    <Authors>Cartographer Toolkit contributors</Authors>
   </PropertyGroup>
 </Project>

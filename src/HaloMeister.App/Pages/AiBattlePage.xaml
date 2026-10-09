@@ -63,7 +63,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid ColumnSpacing="12">
@@ -276,11 +275,5 @@
                 IsEnabled="False"
                 Style="{StaticResource AccentButtonStyle}" />
         </Grid>
-
-        <InfoBar
-            x:Name="StatusBar"
-            Grid.Row="4"
-            IsClosable="True"
-            IsOpen="False" />
     </Grid>
 </Page>

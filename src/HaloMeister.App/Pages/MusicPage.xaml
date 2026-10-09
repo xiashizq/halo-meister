@@ -435,23 +435,5 @@
                     </Border>
 
                 </Grid>
-        <Border
-            x:Name="ToastHost"
-            Grid.RowSpan="2"
-            Margin="0,0,24,24"
-            Padding="14,10"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Bottom"
-            Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8"
-            MaxWidth="420"
-            Visibility="Collapsed">
-            <TextBlock
-                x:Name="ToastText"
-                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                TextWrapping="Wrap" />
-        </Border>
     </Grid>
 </Page>

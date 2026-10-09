@@ -364,7 +364,8 @@ public sealed class ScenarioPaletteService(RuntimeTagMemoryService memory)
             placed.ObjectDatum.ToString("X8"),
             TimeSpan.FromSeconds(15),
             cancellationToken);
-        if (result.Outcome != ScriptOutcome.Confirmed)
+        if (result.Outcome != ScriptOutcome.Confirmed &&
+            !IsAlreadyGoneDestroyFailure(result.Message))
         {
             throw new InvalidOperationException(
                 DestroyFailureMessage(placed.Title, result.Message));
@@ -415,6 +416,11 @@ public sealed class ScenarioPaletteService(RuntimeTagMemoryService memory)
             datum != 0 &&
             datum != uint.MaxValue;
     }
+
+    internal static bool IsAlreadyGoneDestroyFailure(string message) =>
+        message.Contains(
+            "Native object deletion raised Windows exception 0xC0000005",
+            StringComparison.OrdinalIgnoreCase);
 
     private static string DestroyFailureMessage(string title, string message) =>
         BridgeFailureMessage(message, title);

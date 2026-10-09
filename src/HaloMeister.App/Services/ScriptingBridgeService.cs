@@ -138,8 +138,8 @@ public sealed class ScriptingBridgeService
         ProcessingPath = Path.Combine(BridgeRoot, "processing.hm");
         ResultPath = Path.Combine(BridgeRoot, "result.hm");
         StatusPath = Path.Combine(BridgeRoot, "status.hm");
-        InstallLocationPath = Path.Combine(localAppData, "HaloMeister", "ue4ss-main-path.txt");
-        BackupRoot = Path.Combine(localAppData, "HaloMeister", "UE4SSBackups");
+        InstallLocationPath = Path.Combine(localAppData, AppPaths.DataFolderName, "ue4ss-main-path.txt");
+        BackupRoot = Path.Combine(localAppData, AppPaths.DataFolderName, "UE4SSBackups");
         BridgeAssetPath = Path.Combine(AppContext.BaseDirectory, "Assets", "UE4SS", "bridge.lua");
         NativeBridgeAssetPath =
             Path.Combine(AppContext.BaseDirectory, "Assets", "UE4SS", "halomeister_blam_v45.dll");
@@ -159,7 +159,7 @@ public sealed class ScriptingBridgeService
     public string NativeBridgeAssetPath { get; }
 
     /// <summary>
-    /// The bridge SemVer this build of Halo Meister ships. It is the application
+    /// The bridge SemVer this build of Cartographer Toolkit ships. It is the application
     /// version, so it cannot change while the app runs.
     /// </summary>
     public BridgeVersion PackagedVersion => BridgeVersion.Application;
@@ -471,14 +471,10 @@ public sealed class ScriptingBridgeService
         if (!bridge.Contains(MarkerStart, StringComparison.Ordinal) ||
             !bridge.Contains(MarkerEnd, StringComparison.Ordinal))
             throw new InvalidDataException("The packaged bridge asset has invalid installation markers.");
-        BridgeVersion? bridgeVersion = ReadBridgeVersion(bridgeAssetPath);
-        BridgeVersion appVersion = BridgeVersion.Application;
-        if (bridgeVersion != appVersion ||
-            !bridge.Contains(
-                $"local bridge_version = \"{appVersion}\"",
-                StringComparison.Ordinal))
-            throw new InvalidDataException(
-                $"The packaged bridge must report {appVersion}, matching this Halo Meister version.");
+        // Directory.Build.props is the source of truth. Stamp the Lua so a forgotten
+        // bridge.lua bump cannot refuse install — the game heartbeat must still
+        // match this running app after the write.
+        string stamped = StampPackagedBridgeVersion(bridge, BridgeVersion.Application);
 
         // Stage the versioned native module first. If this fails, leave main.lua
         // untouched so the installed Lua never points at a missing DLL. Old
@@ -487,7 +483,7 @@ public sealed class ScriptingBridgeService
         InstallNativeBridge(mainPath);
 
         string original = ReadLuaText(mainPath);
-        string updated = ReplaceMarkedBlock(original, bridge);
+        string updated = ReplaceMarkedBlock(original, stamped);
         if (!string.Equals(original, updated, StringComparison.Ordinal))
         {
             Directory.CreateDirectory(BackupRoot);
@@ -515,7 +511,7 @@ public sealed class ScriptingBridgeService
         => ResolveUninstallMainPath() is not null || File.Exists(InstallLocationPath);
 
     /// <summary>
-    /// Removes the Halo Meister UE4SS mod / bridge markers / native DLL and clears the
+    /// Removes the Cartographer Toolkit UE4SS mod / bridge markers / native DLL and clears the
     /// remembered install path so Setup can pick a folder and install again.
     /// </summary>
     public string UninstallBridge()
@@ -876,25 +872,108 @@ public sealed class ScriptingBridgeService
         }
     }
 
-    private static BridgeVersion? ReadBridgeVersion(string path)
+    /// <summary>
+    /// Rewrites the VERSION marker and <c>local bridge_version</c> assignment to
+    /// <paramref name="version"/>. Structural sites must exist; the numeric token
+    /// itself is not an install gate.
+    /// </summary>
+    private static string StampPackagedBridgeVersion(string lua, BridgeVersion version)
     {
-        try
+        string stamped = StampVersionMarker(lua, version);
+        stamped = StampVersionAssignment(stamped, version);
+        if (ReadBridgeVersionFromText(stamped) != version ||
+            !HasBridgeVersionAssignment(stamped, version))
         {
-            foreach (string line in File.ReadLines(path))
-            {
-                int marker = line.IndexOf(MarkerVersion, StringComparison.Ordinal);
-                if (marker < 0)
-                    continue;
-                string value = line[(marker + MarkerVersion.Length)..].Trim();
-                return BridgeVersion.TryParse(value, out BridgeVersion version)
-                    ? version
-                    : null;
-            }
+            throw new InvalidDataException(
+                "The packaged bridge asset is missing a version marker or bridge_version assignment.");
         }
-        catch
+
+        return stamped;
+    }
+
+    private static string StampVersionMarker(string lua, BridgeVersion version)
+    {
+        int marker = lua.IndexOf(MarkerVersion, StringComparison.Ordinal);
+        if (marker < 0)
+            return lua;
+
+        int valueStart = SkipHorizontalWhitespace(lua, marker + MarkerVersion.Length);
+        int valueEnd = valueStart;
+        while (valueEnd < lua.Length && !char.IsWhiteSpace(lua[valueEnd]))
+            valueEnd++;
+        if (valueStart == valueEnd)
+            return lua;
+
+        return lua[..valueStart] + version + lua[valueEnd..];
+    }
+
+    private static string StampVersionAssignment(string lua, BridgeVersion version)
+    {
+        if (!TryGetBridgeVersionAssignment(lua, out int valueStart, out int valueEnd, out _))
+            return lua;
+        return lua[..valueStart] + version + lua[valueEnd..];
+    }
+
+    private static bool HasBridgeVersionAssignment(string lua, BridgeVersion version) =>
+        TryGetBridgeVersionAssignment(lua, out _, out _, out BridgeVersion parsed) &&
+        parsed == version;
+
+    private static bool TryGetBridgeVersionAssignment(
+        string lua,
+        out int valueStart,
+        out int valueEnd,
+        out BridgeVersion parsed)
+    {
+        valueStart = 0;
+        valueEnd = 0;
+        parsed = default;
+        const string name = "local bridge_version";
+        int nameIndex = lua.IndexOf(name, StringComparison.Ordinal);
+        if (nameIndex < 0)
+            return false;
+
+        int cursor = SkipHorizontalWhitespace(lua, nameIndex + name.Length);
+        if (cursor >= lua.Length || lua[cursor] != '=')
+            return false;
+        cursor = SkipHorizontalWhitespace(lua, cursor + 1);
+        if (cursor >= lua.Length || (lua[cursor] != '"' && lua[cursor] != '\''))
+            return false;
+
+        char quote = lua[cursor];
+        valueStart = cursor + 1;
+        valueEnd = lua.IndexOf(quote, valueStart);
+        if (valueEnd < 0)
+            return false;
+
+        return BridgeVersion.TryParse(lua[valueStart..valueEnd], out parsed);
+    }
+
+    private static int SkipHorizontalWhitespace(string text, int index)
+    {
+        while (index < text.Length &&
+               char.IsWhiteSpace(text[index]) &&
+               text[index] is not '\r' and not '\n')
         {
-            // An unreadable or marker-less file just means "version unknown".
+            index++;
         }
+
+        return index;
+    }
+
+    private static BridgeVersion? ReadBridgeVersionFromText(string text)
+    {
+        using var reader = new StringReader(text);
+        while (reader.ReadLine() is { } line)
+        {
+            int marker = line.IndexOf(MarkerVersion, StringComparison.Ordinal);
+            if (marker < 0)
+                continue;
+            string value = line[(marker + MarkerVersion.Length)..].Trim();
+            return BridgeVersion.TryParse(value, out BridgeVersion version)
+                ? version
+                : null;
+        }
+
         return null;
     }
 

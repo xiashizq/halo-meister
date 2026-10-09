@@ -1,6 +1,6 @@
 # Game update playbook
 
-Halo Meister treats every `HaloSimulation_tag_release.dll` update as an unknown
+Cartographer Toolkit treats every `HaloSimulation_tag_release.dll` update as an unknown
 build until its fingerprint and memory anchors have been verified. Unknown builds
 are read/write blocked; do not bypass that guard by changing only the timestamp.
 
@@ -30,7 +30,7 @@ prefix clones were rejected.
 
 The supplied community mappings for the pulse hook, pool/heap globals, tag and
 segment tables, and string-ID globals are retained in
-`Assets/GameBuildProfiles.json`. Halo Meister currently consumes the tag-table and
+`Assets/GameBuildProfiles.json`. Cartographer Toolkit currently consumes the tag-table and
 arena-table values; the other mappings are research anchors for later features.
 The complete multiplayer, Survival, Sandbox, Megalo, cinematic, object, tag, and
 allocator old-to-new migration table—including provisional entries and their

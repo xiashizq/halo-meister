@@ -86,7 +86,7 @@ public sealed partial class ConfigPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -915,14 +915,14 @@ public sealed partial class ConfigPage : Page, IActivatablePage
         {
             Header = L.Get("config.axis_x"),
             Value = double.Parse(parts[0], CultureInfo.InvariantCulture),
-            Width = 112,
+            Width = 148,
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
         };
         var y = new NumberBox
         {
             Header = L.Get("config.axis_y"),
             Value = double.Parse(parts[1], CultureInfo.InvariantCulture),
-            Width = 112,
+            Width = 148,
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
         };
 
@@ -1171,7 +1171,7 @@ public sealed partial class ConfigPage : Page, IActivatablePage
             catch (Exception ex)
             {
                 Report(
-                    L.Format("config.saved_live_reload_failed", ex.Message),
+                    L.Format("config.saved_live_reload_failed", UserFacingErrors.Format(ex)),
                     InfoBarSeverity.Warning);
                 return;
             }
@@ -1184,13 +1184,13 @@ public sealed partial class ConfigPage : Page, IActivatablePage
             else
             {
                 Report(
-                    L.Format("config.saved_reload_not_confirmed", result.Message),
+                    L.Format("config.saved_reload_not_confirmed", UserFacingErrors.Sanitize(result.Message)),
                     InfoBarSeverity.Warning);
             }
         }
         catch (Exception ex)
         {
-            Report(ex.Message, ex is InvalidOperationException ? InfoBarSeverity.Warning : InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), ex is InvalidOperationException ? InfoBarSeverity.Warning : InfoBarSeverity.Error);
         }
         finally
         {
@@ -1266,7 +1266,7 @@ public sealed partial class ConfigPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1294,7 +1294,7 @@ public sealed partial class ConfigPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1307,7 +1307,7 @@ public sealed partial class ConfigPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1320,7 +1320,7 @@ public sealed partial class ConfigPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1339,18 +1339,7 @@ public sealed partial class ConfigPage : Page, IActivatablePage
     }
 
     private void Report(string message, InfoBarSeverity severity)
-    {
-        PageStatus.Title = severity switch
-        {
-            InfoBarSeverity.Error => L.Get("common.something_went_wrong"),
-            InfoBarSeverity.Warning => L.Get("common.careful"),
-            InfoBarSeverity.Success => L.Get("common.done"),
-            _ => L.Get("common.info"),
-        };
-        PageStatus.Message = message;
-        PageStatus.Severity = severity;
-        PageStatus.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private sealed record DocumentViewState(
         FrameworkElement Content,

@@ -1,17 +1,17 @@
-# Halo Meister
+# Cartographer Toolkit
 
-Halo Meister is a Windows companion and offline runtime modding toolbox for
+Cartographer Toolkit is a Windows companion and offline runtime modding toolbox for
 **Halo: Campaign Evolved**. It brings campaign progress, local game files,
 checkpoint backups, customization, live gameplay experiments, runtime tags, and
 a phone-friendly remote into one WinUI 3 app.
 
 > [!WARNING]
-> Halo Meister is intended for offline campaign use and modding research. Back
+> Cartographer Toolkit is intended for offline campaign use and modding research. Back
 > up important data, close the game before file or setup operations, and never
 > force a live action when build verification fails.
 
 
-## What Halo Meister can do
+## What Cartographer Toolkit can do
 
 ### Progress and profile
 
@@ -61,11 +61,11 @@ Do not port-forward the phone remote or expose it to an untrusted network.
 
 ## Download and first run
 
-1. Download `HaloMeister-<version>-win-x64.zip` and its `.sha256` file from
+1. Download `CartographerToolkit-<version>-win-x64.zip` and its `.sha256` file from
    [Releases](https://github.com/NicmeisteR/halo-meister/releases).
 2. Extract the complete ZIP. Keep `Assets` and the runtime files beside
-   `HaloMeister.exe`.
-3. Run `HaloMeister.exe`.
+   `CartographerToolkit.exe`.
+3. Run `CartographerToolkit.exe`.
 
 The release is self-contained; end users do not need Visual Studio, the .NET
 SDK, or a separate .NET runtime. Community releases are currently unsigned, so
@@ -76,27 +76,27 @@ Windows may show an unknown-publisher warning.
 For progress and local-file tools:
 
 - Windows 10 version 1809 or newer.
-- The complete extracted Halo Meister release folder.
+- The complete extracted Cartographer Toolkit release folder.
 
 For live tools:
 
 - Halo: Campaign Evolved on a supported x64 game build.
-- The Halo Meister bridge and pinned UE4SS loader installed through **Setup**.
+- The Cartographer Toolkit bridge and pinned UE4SS loader installed through **Setup**.
 - An offline campaign mission loaded before connecting.
 
 ## Set up live tools
 
 1. Close Campaign Evolved.
-2. Open **Setup** in Halo Meister and select the game installation folder.
+2. Open **Setup** in Cartographer Toolkit and select the game installation folder.
 3. Select **Install** or **Repair / update**.
-4. Halo Meister downloads the pinned official RE-UE4SS build, verifies its
+4. Cartographer Toolkit downloads the pinned official RE-UE4SS build, verifies its
    SHA-256 checksum, applies the supported settings and signatures, and installs
-   the Halo Meister bridge.
+   the Cartographer Toolkit bridge.
 5. Restart Campaign Evolved, load an offline campaign mission, and select
-   **Connect** in Halo Meister.
+   **Connect** in Cartographer Toolkit.
 
 Existing UE4SS installations are preserved where possible. Replaced files are
-backed up under `%LOCALAPPDATA%\HaloMeister\UE4SSBackups`.
+backed up under `%LOCALAPPDATA%\CartographerToolkit\UE4SSBackups`.
 
 Connecting and installing the bridge solve different parts of the live workflow:
 direct tag-memory tools need the game connection, while scripting, spawning,
@@ -132,7 +132,7 @@ Use a simple loop when experimenting:
 
 **Back up → make one focused change → verify it → test offline → restore or keep it.**
 
-Halo Meister creates targeted safety copies during destructive workflows:
+Cartographer Toolkit creates targeted safety copies during destructive workflows:
 
 - PlayFab reads and developer uploads preserve the current progress blob.
 - Config and customization writes snapshot the editable configuration set.
@@ -155,7 +155,7 @@ keep known addresses and layouts from being used after an incompatible update.
 | Live list is empty | Load an offline mission, reconnect, and scan again. Only resident mission data can be listed. |
 | PlayFab download unavailable | Select **Authenticate** and let Campaign Evolved make a fresh PlayFab request. |
 | Local save or restore blocked | Close Campaign Evolved so it cannot lock or overwrite the data. |
-| Build verification failed | Wait for a compatible Halo Meister update; do not force the action. |
+| Build verification failed | Wait for a compatible Cartographer Toolkit update; do not force the action. |
 
 The in-app **Help** page contains the current quick-start and recovery guidance.
 Use **Community & links** for releases, repository links, issue reporting,
@@ -217,7 +217,7 @@ Useful technical notes:
 Use [GitHub Issues](https://github.com/NicmeisteR/halo-meister/issues) for
 reproducible bugs and focused feature requests. A useful report includes:
 
-- Halo Meister version and whether it is a packaged or developer build.
+- Cartographer Toolkit version and whether it is a packaged or developer build.
 - Campaign Evolved platform and game build.
 - The page and action you used.
 - Exact error text and the smallest reliable reproduction sequence.
@@ -229,7 +229,8 @@ credentials, or private save data in an issue or contribution.
 
 ## Credits
 
-Halo Meister is created and maintained by **Nicolaas Nel**
+Cartographer Toolkit is built on [Halo Meister](https://github.com/NicmeisteR/halo-meister),
+created and maintained by **Nicolaas Nel**
 ([NicmeisteR on GitHub](https://github.com/NicmeisteR) ·
 [NicmeistaR on X](https://x.com/NicmeistaR)).
 
@@ -245,7 +246,7 @@ Special thanks to everyone who helped make the project possible:
 
 ## Disclaimer
 
-Halo Meister is an independent, community-built fan project. It is not
+Cartographer Toolkit is an independent, community-built fan project. It is not
 affiliated with, endorsed by, or supported by Microsoft, Xbox, Halo Studios, or
 the developers of Halo: Campaign Evolved. Halo and related names are trademarks
 of their respective owners.

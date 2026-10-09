@@ -37,7 +37,6 @@ public sealed partial class RuntimeTagsPage : Page, IActivatablePage
     private bool _busy;
     private bool _hasScanned;
     private bool _changingOpenTagSelection;
-    private int _statusVersion;
     private readonly Dictionary<string, RuntimeTagModTag> _pendingModTags =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RuntimeTagEditSession> _tagEditSessions =
@@ -1425,24 +1424,13 @@ public sealed partial class RuntimeTagsPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        int version = ++_statusVersion;
-        PageStatus.Title = severity == InfoBarSeverity.Error
-            ? L.Get("runtime_tags.live_tag_error")
-            : L.Get("runtime_tags.realtime_tags");
-        PageStatus.Message = message;
-        PageStatus.Severity = severity;
-        PageStatus.IsOpen = true;
-        if (severity == InfoBarSeverity.Success)
-            _ = DismissSuccessAsync(version);
-    }
-
-    private async Task DismissSuccessAsync(int version)
-    {
-        await Task.Delay(TimeSpan.FromSeconds(5));
-        if (version == _statusVersion && PageStatus.Severity == InfoBarSeverity.Success)
-            PageStatus.IsOpen = false;
-    }
+        => MainWindow.Instance?.Report(
+            message,
+            severity,
+            severity == InfoBarSeverity.Error
+                ? L.Get("runtime_tags.live_tag_error")
+                : L.Get("runtime_tags.realtime_tags"),
+            sanitize: false);
 
     private static string FormatHex(byte[] bytes)
     {

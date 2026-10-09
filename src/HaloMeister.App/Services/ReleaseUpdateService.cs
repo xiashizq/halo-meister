@@ -69,8 +69,8 @@ public sealed class ReleaseUpdateService
                 releaseUri,
                 available,
                 available
-                    ? $"Halo Meister {latest} is available. You have {CurrentVersion}."
-                    : $"Halo Meister {CurrentVersion} is up to date.");
+                    ? $"Cartographer Toolkit {latest} is available. You have {CurrentVersion}."
+                    : $"Cartographer Toolkit {CurrentVersion} is up to date.");
             return _cachedResult;
         }
         finally
@@ -85,7 +85,7 @@ public sealed class ReleaseUpdateService
         client.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         client.DefaultRequestHeaders.UserAgent.ParseAdd(
-            $"HaloMeister/{ReadCurrentVersion()} (+https://github.com/NicmeisteR/halo-meister)");
+            $"CartographerToolkit/{ReadCurrentVersion()} (+https://github.com/NicmeisteR/halo-meister)");
         client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
         return client;
     }

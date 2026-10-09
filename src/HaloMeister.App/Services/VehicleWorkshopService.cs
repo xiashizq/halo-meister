@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using HaloMeister.App.Models;
 using HaloMeister.App.Localization;
 
@@ -6,49 +6,64 @@ namespace HaloMeister.App.Services;
 
 public sealed record LoadableVehicle(string Name, RuntimeTagEntry Tag)
 {
-    public string DisplayName => Name;
+    /// <summary>
+    /// Localized vehicle name (official / community terminology), resolved from
+    /// <c>vehicle_workshop.name.&lt;tag leaf&gt;</c>. Falls back to the tag-derived name.
+    /// </summary>
+    public string DisplayName
+    {
+        get
+        {
+            string leaf = Tag.LeafName.ToLowerInvariant();
+            if (leaf.EndsWith("-vehicle", StringComparison.Ordinal))
+                leaf = leaf[..^"-vehicle".Length];
+            string key = "vehicle_workshop.name." + leaf;
+            return LocalizationService.Current.Has(key) ? L.Get(key) : Name;
+        }
+    }
+
+    /// <summary>Original tag-derived name, shown as a subtitle when it differs.</summary>
+    public string SecondaryName =>
+        string.Equals(DisplayName, Name, StringComparison.OrdinalIgnoreCase) ? "" : Name;
+
+    public Microsoft.UI.Xaml.Visibility SecondaryNameVisibility =>
+        SecondaryName.Length == 0
+            ? Microsoft.UI.Xaml.Visibility.Collapsed
+            : Microsoft.UI.Xaml.Visibility.Visible;
     public string TagPath => Tag.Name;
     public string ImageUri => VehicleIconUri(Tag.Name);
     public string Category => Categorize(Tag.Name);
     public string VariantSummary => "Loaded vehicle";
-    public string SearchText => $"{DisplayName} {TagPath} {Category}";
+    public string SearchText => $"{DisplayName} {Name} {TagPath} {Category}";
     public string Detail => $"[vehi] 0x{RuntimeTagMemoryService.BuildRuntimeDatum(Tag):X8}";
 
     /// <summary>
-    /// Local wiki / concept preview for known vehicle families; otherwise the
-    /// shared missing.png placeholder (never a wrong sibling vehicle).
+    /// In-game HUD cradle icon for vehicle families that have one. Anything
+    /// without a matching cradle texture uses the Warthog HUD icon.
     /// </summary>
     public static string VehicleIconUri(string tagPath)
     {
         string path = tagPath.Replace('\\', '/').ToLowerInvariant();
         string icon =
-            path.Contains("warthog", StringComparison.Ordinal) ? "warthog.png" :
-            path.Contains("ghost", StringComparison.Ordinal) ? "ghost.png" :
-            path.Contains("banshee", StringComparison.Ordinal) ? "banshee.png" :
-            path.Contains("scorpion", StringComparison.Ordinal) ? "scorpion.png" :
-            path.Contains("wraith", StringComparison.Ordinal) ? "wraith.png" :
-            path.Contains("pelican", StringComparison.Ordinal) ? "pelican.png" :
-            path.Contains("mongoose", StringComparison.Ordinal) ? "mongoose.png" :
-            path.Contains("chopper", StringComparison.Ordinal) ? "chopper.png" :
-            path.Contains("hornet", StringComparison.Ordinal) ? "hornet.png" :
-            path.Contains("falcon", StringComparison.Ordinal) ? "falcon.png" :
-            path.Contains("phantom", StringComparison.Ordinal) ? "phantom.png" :
-            path.Contains("seraph", StringComparison.Ordinal) ? "seraph.png" :
-            path.Contains("sabre", StringComparison.Ordinal) ? "sabre.png" :
-            path.Contains("longsword", StringComparison.Ordinal) ? "longsword.png" :
-            path.Contains("scarab", StringComparison.Ordinal) ? "scarab.png" :
-            path.Contains("revenant", StringComparison.Ordinal) ? "revenant.png" :
-            path.Contains("shade", StringComparison.Ordinal) ? "shade.png" :
-            path.Contains("ag_turret", StringComparison.Ordinal) ||
-            path.Contains("burden_of_proof", StringComparison.Ordinal) ? "ag_turret.png" :
-            path.Contains("watchtower", StringComparison.Ordinal) ? "watchtower.png" :
-            path.Contains("weevil", StringComparison.Ordinal) ||
-            path.Contains("guntower", StringComparison.Ordinal) ||
-            path.Contains("gun_tower", StringComparison.Ordinal) ? "weevil.png" :
-            path.Contains("tuning_fork", StringComparison.Ordinal) ||
-            path.Contains("spirit", StringComparison.Ordinal) ? "spirit.png" :
-            "missing.png";
-        return $"ms-appx:///Assets/VehicleIcons/{icon}";
+            path.Contains("banshee", StringComparison.Ordinal) &&
+            (path.Contains("bomb", StringComparison.Ordinal) ||
+             path.Contains("fuel", StringComparison.Ordinal)) ? "T_UI_BansheeBomb_WeaponIcon.png" :
+            path.Contains("banshee", StringComparison.Ordinal) ? "T_UI_BansheeDualCannon_WeaponIcon.png" :
+            path.Contains("wraith", StringComparison.Ordinal) &&
+            (path.Contains("mortar", StringComparison.Ordinal) ||
+             path.Contains("main", StringComparison.Ordinal)) ? "T_UI_WraithMainGun_Icon.png" :
+            path.Contains("wraith", StringComparison.Ordinal) ? "T_UI_WraithTurret_Icon.png" :
+            path.Contains("scorpion", StringComparison.Ordinal) &&
+            (path.Contains("cannon", StringComparison.Ordinal) ||
+             path.Contains("main", StringComparison.Ordinal)) ? "T_IU_ScorpionMainGun_Icon.png" :
+            path.Contains("scorpion", StringComparison.Ordinal) ? "T_UI_ScorpionTurret_Icon.png" :
+            path.Contains("seraph", StringComparison.Ordinal) &&
+            path.Contains("missile", StringComparison.Ordinal) ? "T_UI_SeraphMissiles_Icons.png" :
+            path.Contains("seraph", StringComparison.Ordinal) ? "T_UI_SeraphTurret_Icon.png" :
+            path.Contains("ghost", StringComparison.Ordinal) ? "T_UI_Ghost_WeaponIcon.png" :
+            path.Contains("shade", StringComparison.Ordinal) ? "T_UI_ShadeTurret_Icon.png" :
+            "T_UI_WarthogTurret_Icon.png";
+        return $"ms-appx:///Assets/WeaponIcons/{icon}";
     }
 
     private static string Categorize(string path)
@@ -92,6 +107,16 @@ public sealed record VehiclePlayerControlResult(
     public string Message => WasAlreadyEnabled
         ? L.Format("vehicle_workshop.player_control_already_enabled", VehicleName)
         : L.Format("vehicle_workshop.player_control_enabled", VehicleName);
+}
+
+public sealed record VehicleThirdPersonResult(
+    int ChangedSeatCount,
+    bool WasAlreadyEnabled,
+    string VehicleName)
+{
+    public string Message => WasAlreadyEnabled
+        ? L.Format("vehicle_workshop.third_person_already_enabled", VehicleName)
+        : L.Format("vehicle_workshop.third_person_enabled", VehicleName);
 }
 
 public sealed record VehicleSeatExitResult(
@@ -299,7 +324,7 @@ public sealed class VehicleWorkshopService : IDisposable
                 TimeSpan.FromSeconds(15),
                 cancellationToken);
             if (plain.Outcome != ScriptOutcome.Confirmed)
-                throw new InvalidOperationException(plain.Message);
+                throw new BridgeFailureException(plain.Message);
             return plain;
         }
 
@@ -336,7 +361,7 @@ public sealed class VehicleWorkshopService : IDisposable
                 TimeSpan.FromSeconds(15),
                 cancellationToken);
             if (result.Outcome != ScriptOutcome.Confirmed)
-                throw new InvalidOperationException(result.Message);
+                throw new BridgeFailureException(result.Message);
             return result;
         }
         finally
@@ -514,6 +539,72 @@ public sealed class VehicleWorkshopService : IDisposable
 
         return new VehiclePlayerControlResult(
             needingWork.Length, false, remappedLabel, selected.Name);
+    }
+
+    /// <summary>
+    /// Sets the unit_seat_flags "third person camera" bit on every seat of the
+    /// loaded vehicle tag so the player gets a chase camera while seated.
+    /// </summary>
+    public VehicleThirdPersonResult EnableThirdPersonCamera(LoadableVehicle selected)
+    {
+        if (!_memory.IsConnected)
+            throw new InvalidOperationException(
+                L.Get("vehicle_workshop.error_connect_game_first"));
+
+        EnsureDefinitions();
+        _tags = _memory.ReadTags();
+        RuntimeTagEntry live = FindLive(selected)
+            ?? throw new InvalidOperationException(
+                L.Format("vehicle_workshop.error_player_control_unloaded", selected.DisplayName));
+
+        IReadOnlyList<SeatPatchField> seats = ReadSeats(live);
+        if (seats.Count == 0)
+            throw new InvalidDataException(
+                L.Format("vehicle_workshop.error_third_person_no_seats", selected.DisplayName));
+
+        SeatPatchField[] needingWork = seats
+            .Where(seat => (seat.Flags & ThirdPersonCamera) == 0)
+            .ToArray();
+        if (needingWork.Length == 0)
+            return new VehicleThirdPersonResult(0, true, selected.DisplayName);
+
+        var completed = new List<(long Address, byte[] Original)>();
+        try
+        {
+            foreach (SeatPatchField seat in needingWork)
+            {
+                byte[] currentFlags = _memory.ReadBytes(seat.FlagsAddress, sizeof(uint));
+                uint flags = BinaryPrimitives.ReadUInt32LittleEndian(currentFlags);
+                if (flags != seat.Flags)
+                    throw new InvalidOperationException(
+                        L.Format(
+                            "vehicle_workshop.error_player_control_flags_changed",
+                            selected.DisplayName,
+                            seat.Index));
+
+                byte[] replacement = new byte[sizeof(uint)];
+                BinaryPrimitives.WriteUInt32LittleEndian(replacement, flags | ThirdPersonCamera);
+                _memory.WriteVerified(seat.FlagsAddress, replacement);
+                completed.Add((seat.FlagsAddress, currentFlags));
+            }
+
+            if (ReadSeats(live).Any(seat => (seat.Flags & ThirdPersonCamera) == 0))
+                throw new InvalidDataException(
+                    L.Format(
+                        "vehicle_workshop.error_player_control_verify_failed",
+                        selected.DisplayName));
+        }
+        catch
+        {
+            foreach ((long address, byte[] original) in completed.AsEnumerable().Reverse())
+            {
+                try { _memory.WriteVerified(address, original); }
+                catch { }
+            }
+            throw;
+        }
+
+        return new VehicleThirdPersonResult(needingWork.Length, false, selected.DisplayName);
     }
 
     public VehicleSeatExitResult AllowSeraphPlayerExit(LoadableVehicle selected)

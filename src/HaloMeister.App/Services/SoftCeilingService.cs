@@ -40,7 +40,7 @@ public sealed class SoftCeilingService
     private static bool Parse(ScriptExecutionResult result)
     {
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
         return result.Message switch
         {
             "soft_ceilings_disable=0" => false,

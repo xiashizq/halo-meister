@@ -173,7 +173,7 @@ public sealed partial class CustomizationPage : Page, IActivatablePage
         {
             SlotList.ItemsSource = null;
             SaveButton.IsEnabled = false;
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -211,7 +211,7 @@ public sealed partial class CustomizationPage : Page, IActivatablePage
         catch (Exception ex)
         {
             MarkDirty();
-            Report(ex.Message, ex is InvalidOperationException
+            Report(UserFacingErrors.Format(ex), ex is InvalidOperationException
                 ? InfoBarSeverity.Warning
                 : InfoBarSeverity.Error);
         }
@@ -341,7 +341,7 @@ public sealed partial class CustomizationPage : Page, IActivatablePage
                             selected.Name,
                             _profileId,
                             slot.Name)
-                        : ex.Message,
+                        : UserFacingErrors.Format(ex),
                     unavailable
                         ? InfoBarSeverity.Informational
                         : InfoBarSeverity.Error);
@@ -486,16 +486,5 @@ public sealed partial class CustomizationPage : Page, IActivatablePage
     }
 
     private void Report(string message, InfoBarSeverity severity)
-    {
-        PageStatus.Title = severity switch
-        {
-            InfoBarSeverity.Error => L.Get("common.something_went_wrong"),
-            InfoBarSeverity.Warning => L.Get("common.careful"),
-            InfoBarSeverity.Success => L.Get("common.done"),
-            _ => L.Get("common.info"),
-        };
-        PageStatus.Message = message;
-        PageStatus.Severity = severity;
-        PageStatus.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 }

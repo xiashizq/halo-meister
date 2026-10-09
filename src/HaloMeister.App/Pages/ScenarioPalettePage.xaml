@@ -182,70 +182,11 @@
         </Pivot>
 
         <StackPanel Grid.Row="3" Spacing="10">
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock
-                    x:Name="PoseText"
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextWrapping="Wrap" />
-                <Button
-                    x:Name="RefreshPoseButton"
-                    Grid.Column="1"
-                    Click="OnRefreshPose"
-                    Content="{i18n:Loc Key='scenario_palette.pose_refresh'}" />
-            </Grid>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <NumberBox
-                    x:Name="PlaceXBox"
-                    Width="108"
-                    Header="{i18n:Loc Key='scenario_palette.pose_x'}"
-                    SmallChange="0.1"
-                    SpinButtonPlacementMode="Compact" />
-                <NumberBox
-                    x:Name="PlaceYBox"
-                    Width="108"
-                    Header="{i18n:Loc Key='scenario_palette.pose_y'}"
-                    SmallChange="0.1"
-                    SpinButtonPlacementMode="Compact" />
-                <NumberBox
-                    x:Name="PlaceZBox"
-                    Width="108"
-                    Header="{i18n:Loc Key='scenario_palette.pose_z'}"
-                    SmallChange="0.1"
-                    SpinButtonPlacementMode="Compact" />
-                <NumberBox
-                    x:Name="PlaceYawBox"
-                    Width="96"
-                    Header="{i18n:Loc Key='scenario_palette.pose_yaw'}"
-                    SmallChange="1"
-                    SpinButtonPlacementMode="Compact" />
-                <NumberBox
-                    x:Name="PlacePitchBox"
-                    Width="96"
-                    Header="{i18n:Loc Key='scenario_palette.pose_pitch'}"
-                    SmallChange="1"
-                    SpinButtonPlacementMode="Compact" />
-                <Button
-                    x:Name="UsePoseButton"
-                    VerticalAlignment="Bottom"
-                    Click="OnUsePose"
-                    Content="{i18n:Loc Key='scenario_palette.pose_use'}"
-                    IsEnabled="False" />
-            </StackPanel>
             <TextBlock
                 x:Name="LevelText"
                 FontSize="12"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextWrapping="Wrap" />
-            <InfoBar
-                x:Name="StatusBar"
-                IsClosable="True"
-                IsOpen="False" />
         </StackPanel>
     </Grid>
 </Page>

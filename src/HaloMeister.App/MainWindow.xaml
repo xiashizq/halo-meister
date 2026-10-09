@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization"
-    Title="Halo Meister">
+    Title="Cartographer Toolkit">
 
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
@@ -33,7 +33,7 @@
                             Stretch="UniformToFill" />
                     </Border>
                     <StackPanel VerticalAlignment="Center" Spacing="0">
-                        <TextBlock FontSize="15" FontWeight="SemiBold" Text="Halo Meister" />
+                        <TextBlock FontSize="15" FontWeight="SemiBold" Text="Cartographer Toolkit" />
                         <TextBlock
                             x:Name="AppTaglineText"
                             FontSize="11"
@@ -103,9 +103,14 @@
                         <NavigationViewItem x:Name="CustomizationNavItem" Content="{i18n:Loc Key='shell.customization'}" Icon="Edit" Tag="customization" />
                         <NavigationViewItem x:Name="ConfigNavItem" Content="{i18n:Loc Key='shell.game_settings'}" Icon="Setting" Tag="config" />
                         <NavigationViewItem x:Name="GameSavesNavItem" Content="{i18n:Loc Key='shell.game_saves'}" Icon="SaveLocal" Tag="game-saves" />
-                        <NavigationViewItem x:Name="BuiltinModNavItem" Content="{i18n:Loc Key='shell.builtin_mod'}" Icon="Library" Tag="builtin-mod" />
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
+
+                <NavigationViewItem
+                    x:Name="BuiltinModNavItem"
+                    Content="{i18n:Loc Key='shell.builtin_mod'}"
+                    Icon="Library"
+                    Tag="builtin-mod" />
 
                 <NavigationViewItem
                     x:Name="LiveToolsNavItem"

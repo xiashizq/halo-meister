@@ -25,7 +25,7 @@ public static class RuntimeTagDefinitionLocator
 
             throw new DirectoryNotFoundException(
                 $"Campaign Evolved tag definitions were not found at {full}. " +
-                $"Remove or correct {EnvironmentVariable} to use Halo Meister's bundled definitions.");
+                $"Remove or correct {EnvironmentVariable} to use Cartographer Toolkit's bundled definitions.");
         }
 
         string bundled = Path.GetFullPath(BundledDirectory);
@@ -33,8 +33,8 @@ public static class RuntimeTagDefinitionLocator
             return bundled;
 
         throw new DirectoryNotFoundException(
-            "Halo Meister's bundled Campaign Evolved tag definitions are missing. " +
-            "Extract the complete release ZIP and keep the Assets folder next to HaloMeister.exe.");
+            "Cartographer Toolkit's bundled Campaign Evolved tag definitions are missing. " +
+            "Extract the complete release ZIP and keep the Assets folder next to CartographerToolkit.exe.");
     }
 
     private static bool IsDefinitionDirectory(string path) =>

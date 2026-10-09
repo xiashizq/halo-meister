@@ -4,7 +4,7 @@ This is the canonical research handoff for continuing Campaign Evolved checkpoin
 
 ## Product status (2026-07-29)
 
-Structured checkpoint editing has been removed from the Halo Meister Game saves UI.
+Structured checkpoint editing has been removed from the Cartographer Toolkit Game saves UI.
 Although the codec and individual field mutations passed offline structural and byte-level
 verification, in-game acceptance was not reliable. In particular, a class-only
 Assault-Rifle-to-Fuel-Rod weapon edit crashed during resume; the game later regenerated the
@@ -32,7 +32,7 @@ Launch URI:     ms-xbl-7c27bae7:
     <opaque-guid>          # WGS stream named Data
 ```
 
-Do not rename any of those files or directories. Halo Meister is unpackaged and cannot
+Do not rename any of those files or directories. Cartographer Toolkit is unpackaged and cannot
 impersonate the title to call its private `XGameSave` cloud API. The supported sync flow
 is: close game, full WGS backup, atomically replace only the existing Data stream, launch
 the game, and let Gaming Services reconcile it. Cloud-conflict UI must remain a user
@@ -133,7 +133,7 @@ This was proven with a locally installed licensed `oo2core_8_win64.dll`:
 - 97-, 99-, and 102-chunk live saves re-encode byte-for-byte with no changes;
 - modified payloads re-encode, decode again, and reproduce the intended payload exactly.
 
-Halo Meister does **not** redistribute Oodle. The UI asks the user to select an Oodle 2.8
+Cartographer Toolkit does **not** redistribute Oodle. The UI asks the user to select an Oodle 2.8
 DLL from software they are licensed to use and checks for both required exports. Do not
 silently bundle a proprietary DLL. Do not replace it with GPL code without a deliberate
 licensing decision.
@@ -229,7 +229,7 @@ User flow:
 4. Close Campaign Evolved and refresh the page.
 5. Edit Loaded and Reserve values, bounded by the reflected weapon maxima.
 6. Choose **Back up and apply**.
-7. Halo Meister reloads the current Data bytes, requires unique native records, patches
+7. Cartographer Toolkit reloads the current Data bytes, requires unique native records, patches
    only the two int32 values per changed weapon, recompresses/verifies all chunks, backs
    up the complete WGS title tree, and atomically replaces the selected Data stream.
 8. Launch the game and allow Gaming Services to sync.
@@ -243,7 +243,7 @@ invalidates apply eligibility. Writes remain disabled while the game is running.
 
 - discovers account/container directories rather than hard-coding them;
 - backs up the complete WGS tree under
-  `%LOCALAPPDATA%\HaloMeister\GameSaveBackups`;
+  `%LOCALAPPDATA%\CartographerToolkit\GameSaveBackups`;
 - exports `.halo-wgs` archives with Data, container metadata, and manifest;
 - validates checkpoint magic;
 - refuses all replacement while `HaloCampaignEvolved.exe` runs;
@@ -331,7 +331,7 @@ dotnet run --project src\HaloMeister.Cli -c Release --no-build -- `
   ambiguous.
 - Grenades, health, shields, position, and checkpoint metadata still need controlled
   before/after mapping.
-- The current live reader depends on UE4SS and the existing Halo Meister scripting
+- The current live reader depends on UE4SS and the existing Cartographer Toolkit scripting
   bridge. The game must be at a resumed campaign checkpoint.
 - The component offsets were validated for build `++Meteorite+Rel-i343--2606-CU2`.
   Add a build/version gate or signature-based reflection before claiming compatibility

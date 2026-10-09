@@ -1,13 +1,21 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Windows.ApplicationModel.DataTransfer;
+using Windows.UI;
 
 namespace HaloMeister.App.Pages;
 
 public sealed partial class PlayerToolsPage : Page, IActivatablePage
 {
+    private static readonly Regex CoordinateSeparators = new(@"[,，;；\s]+", RegexOptions.Compiled);
+    private static readonly SolidColorBrush ReadyBrush = new(Color.FromArgb(255, 108, 203, 95));
+    private static readonly SolidColorBrush NotReadyBrush = new(Color.FromArgb(255, 252, 225, 0));
     private readonly PlayerToolsService _tools = new();
     private readonly PlayerLocationStore _locations = new();
     private readonly PlayerCameraService _camera = PlayerCameraService.Current;
@@ -25,12 +33,14 @@ public sealed partial class PlayerToolsPage : Page, IActivatablePage
     {
         InitializeComponent();
         ReloadSavedLocations();
+        SyncWeaponInterruptionToggle();
         UpdateBridgeStatus();
         UpdateButtons();
     }
 
     public void OnActivated()
     {
+        SyncWeaponInterruptionToggle();
         UpdateBridgeStatus();
         UpdateButtons();
     }
@@ -84,8 +94,37 @@ public sealed partial class PlayerToolsPage : Page, IActivatablePage
 
     private async void OnTeleportSavedLocation(object sender, RoutedEventArgs e)
     {
-        if (SavedLocationBox.SelectedItem is not SavedPlayerLocation location)
+        if (sender is FrameworkElement { DataContext: SavedPlayerLocation location })
+            await TeleportToSavedLocationAsync(location);
+    }
+
+    private async void OnSavedLocationDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        // Ignore double-clicks that land on the row's own buttons.
+        if (e.OriginalSource is DependencyObject source && IsInsideButton(source))
             return;
+        if (e.OriginalSource is FrameworkElement { DataContext: SavedPlayerLocation location })
+            await TeleportToSavedLocationAsync(location);
+    }
+
+    private static bool IsInsideButton(DependencyObject? node)
+    {
+        while (node is not null)
+        {
+            if (node is Button) return true;
+            node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
+        }
+        return false;
+    }
+
+    private async Task TeleportToSavedLocationAsync(SavedPlayerLocation location)
+    {
+        if (_busy) return;
+        if (!IsBridgeReady())
+        {
+            ShowStatus(_tools.BridgeStatus.Summary, InfoBarSeverity.Warning);
+            return;
+        }
         await RunBusy(async () =>
         {
             await _tools.TeleportAsync(location.Position);
@@ -95,28 +134,130 @@ public sealed partial class PlayerToolsPage : Page, IActivatablePage
         });
     }
 
+    /// <summary>Deleting asks for an inline confirmation so a misclick cannot lose a location.</summary>
     private void OnDeleteSavedLocation(object sender, RoutedEventArgs e)
     {
-        if (_busy || SavedLocationBox.SelectedItem is not SavedPlayerLocation location)
+        if (_busy ||
+            sender is not FrameworkElement { DataContext: SavedPlayerLocation location } anchor)
+        {
             return;
-        try
-        {
-            _locations.Delete(location.Id);
-            ReloadSavedLocations();
-            ShowStatus(L.Format("player_tools.deleted_location", location.Name), InfoBarSeverity.Success);
         }
-        catch (Exception ex)
+
+        var confirm = new Button
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
-        }
+            Content = L.Get("player_tools.delete"),
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        var flyout = new Flyout
+        {
+            Content = new StackPanel
+            {
+                Spacing = 12,
+                MinWidth = 220,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = L.Format("player_tools.confirm_delete", location.Name),
+                        TextWrapping = TextWrapping.Wrap,
+                        MaxWidth = 300,
+                    },
+                    confirm,
+                },
+            },
+        };
+        confirm.Click += (_, _) =>
+        {
+            flyout.Hide();
+            try
+            {
+                _locations.Delete(location.Id);
+                ReloadSavedLocations();
+                ShowStatus(L.Format("player_tools.deleted_location", location.Name), InfoBarSeverity.Success);
+            }
+            catch (Exception ex)
+            {
+                ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
+            }
+        };
+        flyout.ShowAt(anchor);
     }
 
-    private void OnSavedLocationSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnLocationNameChanged(object sender, TextChangedEventArgs e) => UpdateButtons();
+
+    private void OnLocationNameKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
-        SavedLocationDetailText.Text =
-            (SavedLocationBox.SelectedItem as SavedPlayerLocation)?.Detail ??
-            L.Get("player_tools.no_saved_location_selected");
-        UpdateButtons();
+        if (e.Key != Windows.System.VirtualKey.Enter) return;
+        e.Handled = true;
+        if (SaveLocationButton.IsEnabled)
+            OnSaveLocation(sender, e);
+    }
+
+    private void OnBoxGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox box)
+            box.SelectAll();
+    }
+
+    private void OnCoordinateKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Enter) return;
+        e.Handled = true;
+        if (TeleportButton.IsEnabled)
+            OnTeleport(sender, e);
+    }
+
+    /// <summary>
+    /// Pasting "x, y, z" (the format shown elsewhere on this page) into any
+    /// coordinate box fills all three; anything else pastes as plain text.
+    /// </summary>
+    private async void OnCoordinatePaste(object sender, TextControlPasteEventArgs e)
+    {
+        if (sender is not TextBox box) return;
+        DataPackageView content = Clipboard.GetContent();
+        if (!content.Contains(StandardDataFormats.Text)) return;
+
+        e.Handled = true;
+        string text;
+        try
+        {
+            text = await content.GetTextAsync();
+        }
+        catch
+        {
+            return;
+        }
+
+        string[] parts = CoordinateSeparators.Split(text.Trim());
+        if (parts.Length == 3 &&
+            TryParseCoordinate(parts[0], out float x) &&
+            TryParseCoordinate(parts[1], out float y) &&
+            TryParseCoordinate(parts[2], out float z))
+        {
+            ShowCoordinates(new PlayerCoordinates(x, y, z));
+            return;
+        }
+
+        box.SelectedText = text.Trim();
+        box.SelectionStart += box.SelectionLength;
+        box.SelectionLength = 0;
+    }
+
+    private void OnCopyCoordinates(object sender, RoutedEventArgs e)
+    {
+        if (!TryParseCoordinate(XBox.Text, out float x) ||
+            !TryParseCoordinate(YBox.Text, out float y) ||
+            !TryParseCoordinate(ZBox.Text, out float z))
+        {
+            ShowStatus(L.Get("player_tools.enter_finite_xyz"), InfoBarSeverity.Error);
+            return;
+        }
+
+        var package = new DataPackage();
+        package.SetText(Format(new PlayerCoordinates(x, y, z)));
+        Clipboard.SetContent(package);
+        ShowStatus(L.Get("player_tools.coordinates_copied"), InfoBarSeverity.Success);
     }
 
     private async void OnReturn(object sender, RoutedEventArgs e)
@@ -401,7 +542,7 @@ public sealed partial class PlayerToolsPage : Page, IActivatablePage
             _updatingActionTimingToggle = true;
             toggle.IsOn = !requested;
             _updatingActionTimingToggle = false;
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -410,6 +551,13 @@ public sealed partial class PlayerToolsPage : Page, IActivatablePage
             UpdateBridgeStatus();
             UpdateButtons();
         }
+    }
+
+    private void SyncWeaponInterruptionToggle()
+    {
+        _updatingActionTimingToggle = true;
+        ImmediateWeaponInterruptionToggle.IsOn = _actionTiming.IsActive;
+        _updatingActionTimingToggle = false;
     }
 
     private float SelectedSuperPunchStrength()
@@ -466,7 +614,7 @@ public sealed partial class PlayerToolsPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -481,15 +629,24 @@ public sealed partial class PlayerToolsPage : Page, IActivatablePage
     {
         ScriptingBridgeStatus status = _tools.BridgeStatus;
         BridgeStatusText.Text = status.Summary;
+        BridgeDot.Fill = status.IsRuntimeReady && !status.IsStale ? ReadyBrush : NotReadyBrush;
+    }
+
+    private bool IsBridgeReady()
+    {
+        ScriptingBridgeStatus status = _tools.BridgeStatus;
+        return status.IsRuntimeReady && !status.IsStale;
     }
 
     private void ReloadSavedLocations(Guid? selectedId = null)
     {
         IReadOnlyList<SavedPlayerLocation> locations = _locations.Load();
-        SavedLocationBox.ItemsSource = locations;
-        SavedLocationBox.SelectedItem =
-            locations.FirstOrDefault(location => location.Id == selectedId) ??
-            locations.FirstOrDefault();
+        SavedLocationList.ItemsSource = locations;
+        bool any = locations.Count > 0;
+        SavedLocationList.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        SavedLocationsEmptyPanel.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
+        if (locations.FirstOrDefault(location => location.Id == selectedId) is { } selected)
+            SavedLocationList.ScrollIntoView(selected);
     }
 
     private void UpdateButtons()
@@ -522,19 +679,12 @@ public sealed partial class PlayerToolsPage : Page, IActivatablePage
         SavePositionButton.IsEnabled = ready;
         ReturnButton.IsEnabled = ready && _savedPosition is not null;
         LocationNameBox.IsEnabled = !_busy;
-        SaveLocationButton.IsEnabled = ready;
-        bool hasSavedLocation = SavedLocationBox.SelectedItem is SavedPlayerLocation;
-        SavedLocationBox.IsEnabled = !_busy && SavedLocationBox.Items.Count > 0;
-        TeleportSavedLocationButton.IsEnabled = ready && hasSavedLocation;
-        DeleteSavedLocationButton.IsEnabled = !_busy && hasSavedLocation;
+        SaveLocationButton.IsEnabled = ready && !string.IsNullOrWhiteSpace(LocationNameBox.Text);
+        SavedLocationList.IsEnabled = !_busy;
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private static string Format(PlayerCoordinates position) =>
         string.Create(

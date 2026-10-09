@@ -1,5 +1,5 @@
 -- HALOMEISTER SCRIPTING BRIDGE:BEGIN
--- HALOMEISTER SCRIPTING BRIDGE:VERSION 0.2.6
+-- HALOMEISTER SCRIPTING BRIDGE:VERSION 0.2.7
 do
     local hm_ok, hm_error = pcall(function()
         -- UE4SS can load a mod before its shared helper module becomes available.
@@ -11,10 +11,10 @@ do
             error("LOCALAPPDATA is unavailable")
         end
 
-        -- Keep in step with Directory.Build.props <Version> and the VERSION marker
-        -- above. Halo Meister compares this SemVer with the running app so it can
-        -- tell you when the game is still running a stale bridge.
-        local bridge_version = "0.2.6"
+        -- Install stamps this SemVer from Directory.Build.props so a forgotten
+        -- source bump cannot block live tools. Heartbeats still compare against
+        -- the running app to detect a stale in-game bridge.
+        local bridge_version = "0.2.7"
         -- User scripts execute in a dedicated environment. Expose the UE4SS
         -- helper module there while retaining normal access to global UE4SS
         -- APIs and preserving the historical global assignment behavior.

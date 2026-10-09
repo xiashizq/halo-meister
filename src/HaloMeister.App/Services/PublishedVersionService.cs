@@ -7,8 +7,7 @@ namespace HaloMeister.App.Services;
 public sealed record PublishedVersionManifest(
     string? App,
     string? Bridge,
-    string? CampaignMod,
-    string? CharactersMod);
+    IReadOnlyDictionary<string, string> Mods);
 
 public sealed record PublishedVersionReport(IReadOnlyList<string> Lines)
 {
@@ -92,7 +91,8 @@ public sealed class PublishedVersionService
         var lines = new List<string>();
         string localApp = ReleaseUpdateService.Current.CurrentVersion;
         string localBridge = BridgeVersion.Application.ToString();
-        if (IsNewerSemVer(manifest.App, localApp))
+        bool publishedAppIsNewer = IsNewerSemVer(manifest.App, localApp);
+        if (publishedAppIsNewer)
         {
             lines.Add(L.Format(
                 "version.manifest_app",
@@ -108,18 +108,23 @@ public sealed class PublishedVersionService
                 localBridge));
         }
 
-        AddModLine(
-            lines,
-            "builtin_mod.campaign.title",
-            manifest.CampaignMod,
-            FullPalettesOverlayService.VersionFromFingerprint(
-                FullPalettesOverlayService.ExpectedBundledFingerprint));
-        AddModLine(
-            lines,
-            "builtin_mod.characters.title",
-            manifest.CharactersMod,
-            FullPalettesOverlayService.VersionFromFingerprint(
-                FullPalettesOverlayService.ExpectedCharacterFingerprint));
+        // Mod codes are content hashes, not ordered versions. A mismatch against
+        // a stale published manifest is not an update — this build may already
+        // ship newer overlays. Only prompt when a newer Cartographer Toolkit exists.
+        if (publishedAppIsNewer)
+        {
+            foreach (BuiltinModDefinition definition in BuiltinModCatalog.All)
+            {
+                manifest.Mods.TryGetValue(definition.Id, out string? published);
+                AddModLine(
+                    lines,
+                    definition.TitleKey,
+                    published,
+                    FullPalettesOverlayService.VersionFromFingerprint(
+                        definition.ExpectedFingerprint));
+            }
+        }
+
         return new PublishedVersionReport(lines);
     }
 
@@ -172,14 +177,24 @@ public sealed class PublishedVersionService
                 !root.TryGetProperty("app", out _))
                 return null;
 
-            JsonElement mods = default;
-            bool hasMods = root.TryGetProperty("mods", out mods) &&
-                           mods.ValueKind == JsonValueKind.Object;
+            var mods = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("mods", out JsonElement modsElement) &&
+                modsElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in modsElement.EnumerateObject())
+                {
+                    if (property.Value.ValueKind != JsonValueKind.String)
+                        continue;
+                    string? text = property.Value.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text))
+                        mods[property.Name] = text;
+                }
+            }
+
             return new PublishedVersionManifest(
                 ReadString(root, "app"),
                 ReadString(root, "bridge"),
-                hasMods ? ReadString(mods, "campaign") : null,
-                hasMods ? ReadString(mods, "characters") : null);
+                mods);
         }
         catch
         {
@@ -202,7 +217,7 @@ public sealed class PublishedVersionService
         client.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/json"));
         client.DefaultRequestHeaders.UserAgent.ParseAdd(
-            $"HaloMeister/{ReleaseUpdateService.Current.CurrentVersion}");
+            $"CartographerToolkit/{ReleaseUpdateService.Current.CurrentVersion}");
         return client;
     }
 }

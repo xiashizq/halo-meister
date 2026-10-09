@@ -439,7 +439,7 @@ public sealed record HaloCevoVitalityState(
     float ShieldVitality);
 
 /// <summary>
-/// Uses a user-provided licensed Oodle 2.8 runtime. Halo Meister does not
+/// Uses a user-provided licensed Oodle 2.8 runtime. Cartographer Toolkit does not
 /// redistribute Epic's proprietary codec.
 /// </summary>
 public sealed class OodleRuntime : IDisposable
@@ -458,7 +458,7 @@ public sealed class OodleRuntime : IDisposable
         if (!File.Exists(LibraryPath))
             throw new FileNotFoundException("The selected Oodle runtime does not exist.", LibraryPath);
         if (!Environment.Is64BitProcess)
-            throw new PlatformNotSupportedException("HALOCEVO editing requires the 64-bit Halo Meister build.");
+            throw new PlatformNotSupportedException("HALOCEVO editing requires the 64-bit Cartographer Toolkit build.");
 
         _library = NativeLibrary.Load(LibraryPath);
         try

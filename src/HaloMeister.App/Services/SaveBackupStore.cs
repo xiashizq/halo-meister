@@ -12,7 +12,7 @@ public sealed class SaveBackupStore
     {
         DirectoryPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "Backups");
     }
 

@@ -346,17 +346,15 @@ public sealed partial class ChangeBipedPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Title = severity switch
-        {
-            InfoBarSeverity.Error => L.Get("change_biped.character_overlay_failed"),
-            InfoBarSeverity.Success => L.Get("change_biped.character_overlay_success"),
-            _ => L.Get("change_biped.change_character"),
-        };
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(
+            message,
+            severity,
+            severity switch
+            {
+                InfoBarSeverity.Error => L.Get("change_biped.character_overlay_failed"),
+                InfoBarSeverity.Success => L.Get("change_biped.character_overlay_success"),
+                _ => L.Get("change_biped.change_character"),
+            });
 
     private static string FormatUserFacingError(Exception ex)
     {
@@ -377,6 +375,7 @@ public sealed partial class ChangeBipedPage : Page, IActivatablePage
     }
 
     private static bool LooksTechnical(string message) =>
+        UserFacingErrors.ExposesInternals(message) ||
         message.Contains("[bipd]", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("[matg]", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("globals/globals", StringComparison.OrdinalIgnoreCase) ||

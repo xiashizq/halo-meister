@@ -1,7 +1,9 @@
 using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace HaloMeister.App.Pages;
 
@@ -12,6 +14,7 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
     private IReadOnlyList<ScenarioPaletteEntry> _scenery = [];
     private IReadOnlyList<ScenarioPaletteEntry> _machines = [];
     private ScenarioPlayerPose? _playerPose;
+    private ScenarioPlayerPose? _lastPlacement;
     private bool _scanned;
     private int _busy;
     private int _scanVersion;
@@ -20,12 +23,6 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
     {
         InitializeComponent();
         LevelText.Text = L.Get("scenario_palette.disconnected");
-        PoseText.Text = L.Get("scenario_palette.pose_unavailable");
-        PlaceXBox.Value = double.NaN;
-        PlaceYBox.Value = double.NaN;
-        PlaceZBox.Value = double.NaN;
-        PlaceYawBox.Value = double.NaN;
-        PlacePitchBox.Value = double.NaN;
     }
 
     public void OnActivated() => _ = ScanAsync();
@@ -45,7 +42,11 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
             ApplyFilter();
             if (placement.Execution.Outcome != ScriptOutcome.Confirmed)
             {
-                ShowStatus(placement.Execution.Message, InfoBarSeverity.Warning);
+                ShowStatus(
+                    placement.Execution.Outcome == ScriptOutcome.Failed
+                        ? UserFacingErrors.FromBridge(placement.Execution.Message)
+                        : placement.Execution.Message,
+                    InfoBarSeverity.Warning);
                 return;
             }
 
@@ -61,7 +62,7 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -71,80 +72,204 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
 
     private async void OnPlaceAt(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: ScenarioPaletteEntry entry } || !TryEnter())
+        if (sender is not Button { Tag: ScenarioPaletteEntry entry })
             return;
 
-        try
-        {
-            if (!TryReadPlacement(out ScenarioPlayerPose pose, out string? error))
-            {
-                ShowStatus(error ?? L.Get("scenario_palette.error_pose"), InfoBarSeverity.Warning);
-                return;
-            }
-
-            ScenarioPlacementResult placement = await _palettes.PlaceAtAsync(entry, pose);
-            ApplyFilter();
-            if (placement.Execution.Outcome != ScriptOutcome.Confirmed)
-            {
-                ShowStatus(placement.Execution.Message, InfoBarSeverity.Warning);
-                return;
-            }
-
-            if (placement.Placed is null)
-            {
-                ShowStatus(L.Get("scenario_palette.error_no_datum"), InfoBarSeverity.Warning);
-                return;
-            }
-
-            ShowStatus(
-                L.Format("scenario_palette.placed_at", entry.Title),
-                InfoBarSeverity.Success);
-        }
-        catch (Exception ex)
-        {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
-        }
-        finally
-        {
-            Exit();
-        }
+        await ShowPlaceAtDialogAsync(entry);
     }
 
-    private async void OnRefreshPose(object sender, RoutedEventArgs e)
+    private async Task ShowPlaceAtDialogAsync(ScenarioPaletteEntry entry)
     {
-        if (!TryEnter())
-            return;
+        TextBlock poseText = new()
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        if (Application.Current.Resources.TryGetValue(
+                "TextFillColorSecondaryBrush",
+                out object? brush))
+            poseText.Foreground = (Brush)brush;
 
-        try
+        Button refreshButton = new() { Content = L.Get("scenario_palette.pose_refresh") };
+        Button usePoseButton = new()
+        {
+            Content = L.Get("scenario_palette.pose_use"),
+            VerticalAlignment = VerticalAlignment.Bottom,
+            IsEnabled = false,
+        };
+        NumberBox xBox = CoordinateBox("scenario_palette.pose_x", 0.1);
+        NumberBox yBox = CoordinateBox("scenario_palette.pose_y", 0.1);
+        NumberBox zBox = CoordinateBox("scenario_palette.pose_z", 0.1);
+        NumberBox yawBox = CoordinateBox("scenario_palette.pose_yaw", 1);
+        NumberBox pitchBox = CoordinateBox("scenario_palette.pose_pitch", 1);
+        InfoBar dialogStatus = new() { IsClosable = true, IsOpen = false };
+
+        var poseHeader = new Grid { ColumnSpacing = 12 };
+        poseHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        poseHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var poseLabel = new TextBlock
+        {
+            Text = L.Get("scenario_palette.pose_player"),
+            FontWeight = FontWeights.SemiBold,
+        };
+        var poseBlock = new StackPanel { Spacing = 4 };
+        poseBlock.Children.Add(poseLabel);
+        poseBlock.Children.Add(poseText);
+        poseHeader.Children.Add(poseBlock);
+        Grid.SetColumn(refreshButton, 1);
+        refreshButton.VerticalAlignment = VerticalAlignment.Top;
+        poseHeader.Children.Add(refreshButton);
+
+        var boxes = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        boxes.Children.Add(xBox);
+        boxes.Children.Add(yBox);
+        boxes.Children.Add(zBox);
+        boxes.Children.Add(yawBox);
+        boxes.Children.Add(pitchBox);
+        boxes.Children.Add(usePoseButton);
+
+        var content = new StackPanel { Spacing = 12, MinWidth = 640 };
+        content.Children.Add(poseHeader);
+        content.Children.Add(boxes);
+        content.Children.Add(dialogStatus);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = L.Format("scenario_palette.place_at_title", entry.Title),
+            Content = content,
+            PrimaryButtonText = L.Get("scenario_palette.place_at_action"),
+            CloseButtonText = L.Get("common.cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        dialog.Resources["ContentDialogMaxWidth"] = 760;
+
+        void ApplyPoseText()
+        {
+            poseText.Text = FormatPose(_playerPose);
+            usePoseButton.IsEnabled = _playerPose is not null;
+        }
+
+        void FillBoxes(ScenarioPlayerPose pose)
+        {
+            xBox.Value = pose.X;
+            yBox.Value = pose.Y;
+            zBox.Value = pose.Z;
+            if (pose.HasView)
+            {
+                yawBox.Value = pose.YawDegrees!.Value;
+                pitchBox.Value = pose.PitchDegrees!.Value;
+            }
+        }
+
+        refreshButton.Click += async (_, _) =>
         {
             await RefreshPoseAsync();
-        }
-        finally
+            ApplyPoseText();
+        };
+        usePoseButton.Click += (_, _) =>
         {
-            Exit();
-        }
+            if (_playerPose is not ScenarioPlayerPose pose)
+            {
+                dialogStatus.Message = L.Get("scenario_palette.pose_unavailable");
+                dialogStatus.Severity = InfoBarSeverity.Warning;
+                dialogStatus.IsOpen = true;
+                return;
+            }
+
+            FillBoxes(pose);
+            if (!pose.HasView)
+            {
+                dialogStatus.Message = L.Get("scenario_palette.pose_no_view");
+                dialogStatus.Severity = InfoBarSeverity.Warning;
+                dialogStatus.IsOpen = true;
+            }
+        };
+
+        dialog.PrimaryButtonClick += async (_, args) =>
+        {
+            ContentDialogButtonClickDeferral deferral = args.GetDeferral();
+            try
+            {
+                if (!TryReadPlacement(xBox, yBox, zBox, yawBox, pitchBox, out ScenarioPlayerPose pose, out string? error))
+                {
+                    args.Cancel = true;
+                    dialogStatus.Message = error ?? L.Get("scenario_palette.error_pose");
+                    dialogStatus.Severity = InfoBarSeverity.Warning;
+                    dialogStatus.IsOpen = true;
+                    return;
+                }
+
+                if (!TryEnter())
+                {
+                    args.Cancel = true;
+                    return;
+                }
+
+                try
+                {
+                    ScenarioPlacementResult placement = await _palettes.PlaceAtAsync(entry, pose);
+                    ApplyFilter();
+                    if (placement.Execution.Outcome != ScriptOutcome.Confirmed)
+                    {
+                        args.Cancel = true;
+                        dialogStatus.Message = UserFacingErrors.FromBridge(placement.Execution.Message);
+                        dialogStatus.Severity = InfoBarSeverity.Warning;
+                        dialogStatus.IsOpen = true;
+                        return;
+                    }
+
+                    if (placement.Placed is null)
+                    {
+                        args.Cancel = true;
+                        dialogStatus.Message = L.Get("scenario_palette.error_no_datum");
+                        dialogStatus.Severity = InfoBarSeverity.Warning;
+                        dialogStatus.IsOpen = true;
+                        return;
+                    }
+
+                    _lastPlacement = pose;
+                    ShowStatus(
+                        L.Format("scenario_palette.placed_at", entry.Title),
+                        InfoBarSeverity.Success);
+                }
+                catch (Exception ex)
+                {
+                    args.Cancel = true;
+                    dialogStatus.Message = UserFacingErrors.Format(ex);
+                    dialogStatus.Severity = InfoBarSeverity.Error;
+                    dialogStatus.IsOpen = true;
+                }
+                finally
+                {
+                    Exit();
+                }
+            }
+            finally
+            {
+                deferral.Complete();
+            }
+        };
+
+        await RefreshPoseAsync();
+        ApplyPoseText();
+        if (_lastPlacement is ScenarioPlayerPose last)
+            FillBoxes(last);
+        else if (_playerPose is ScenarioPlayerPose current)
+            FillBoxes(current);
+
+        await dialog.ShowAsync();
     }
 
-    private void OnUsePose(object sender, RoutedEventArgs e)
-    {
-        if (_playerPose is not ScenarioPlayerPose pose)
+    private static NumberBox CoordinateBox(string headerKey, double smallChange) =>
+        new()
         {
-            ShowStatus(L.Get("scenario_palette.pose_unavailable"), InfoBarSeverity.Warning);
-            return;
-        }
-
-        PlaceXBox.Value = pose.X;
-        PlaceYBox.Value = pose.Y;
-        PlaceZBox.Value = pose.Z;
-        if (pose.HasView)
-        {
-            PlaceYawBox.Value = pose.YawDegrees!.Value;
-            PlacePitchBox.Value = pose.PitchDegrees!.Value;
-            return;
-        }
-
-        ShowStatus(L.Get("scenario_palette.pose_no_view"), InfoBarSeverity.Warning);
-    }
+            Width = 140,
+            Header = L.Get(headerKey),
+            SmallChange = smallChange,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Value = double.NaN,
+        };
 
     private async void OnDestroy(object sender, RoutedEventArgs e)
     {
@@ -162,7 +287,7 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
         catch (Exception ex)
         {
             ApplyFilter();
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -186,7 +311,7 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
         catch (Exception ex)
         {
             ApplyFilter();
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -211,7 +336,6 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
                 _palettes.NoteScenario(null);
                 ApplyFilter();
                 _playerPose = null;
-                PoseText.Text = L.Get("scenario_palette.disconnected");
                 LevelText.Text = L.Get("scenario_palette.disconnected");
                 ShowStatus(L.Get("scenario_palette.disconnected"), InfoBarSeverity.Informational);
                 return;
@@ -227,7 +351,7 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
             _palettes.NoteScenario(session.ScenarioName);
             ApplyFilter();
             LevelText.Text = L.Format("scenario_palette.level", session.ScenarioName);
-            StatusBar.IsOpen = false;
+            MainWindow.Instance?.DismissStatus();
         }
         catch (Exception ex)
         {
@@ -239,7 +363,7 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
             _machines = [];
             ApplyFilter();
             LevelText.Text = "";
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -256,38 +380,49 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
     {
         try
         {
-            ScenarioPlayerPose pose = await _palettes.ReadPlayerPoseAsync();
-            _playerPose = pose;
-            PoseText.Text = pose.HasView
-                ? L.Format(
-                    "scenario_palette.pose",
-                    pose.X,
-                    pose.Y,
-                    pose.Z,
-                    pose.YawDegrees!.Value,
-                    pose.PitchDegrees!.Value)
-                : L.Format(
-                    "scenario_palette.pose_position",
-                    pose.X,
-                    pose.Y,
-                    pose.Z);
+            _playerPose = await _palettes.ReadPlayerPoseAsync();
         }
-        catch (Exception ex)
+        catch
         {
             _playerPose = null;
-            PoseText.Text = ex.Message;
         }
     }
 
-    private bool TryReadPlacement(out ScenarioPlayerPose pose, out string? error)
+    private static string FormatPose(ScenarioPlayerPose? pose)
+    {
+        if (pose is not ScenarioPlayerPose value)
+            return L.Get("scenario_palette.pose_unavailable");
+        return value.HasView
+            ? L.Format(
+                "scenario_palette.pose",
+                value.X,
+                value.Y,
+                value.Z,
+                value.YawDegrees!.Value,
+                value.PitchDegrees!.Value)
+            : L.Format(
+                "scenario_palette.pose_position",
+                value.X,
+                value.Y,
+                value.Z);
+    }
+
+    private static bool TryReadPlacement(
+        NumberBox xBox,
+        NumberBox yBox,
+        NumberBox zBox,
+        NumberBox yawBox,
+        NumberBox pitchBox,
+        out ScenarioPlayerPose pose,
+        out string? error)
     {
         pose = default;
         error = null;
-        if (!TryBox(PlaceXBox, out float x) ||
-            !TryBox(PlaceYBox, out float y) ||
-            !TryBox(PlaceZBox, out float z) ||
-            !TryBox(PlaceYawBox, out float yaw) ||
-            !TryBox(PlacePitchBox, out float pitch))
+        if (!TryBox(xBox, out float x) ||
+            !TryBox(yBox, out float y) ||
+            !TryBox(zBox, out float z) ||
+            !TryBox(yawBox, out float yaw) ||
+            !TryBox(pitchBox, out float pitch))
         {
             error = L.Get("scenario_palette.error_pose");
             return false;
@@ -385,13 +520,6 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
         SceneryList.IsEnabled = !busy;
         MachineList.IsEnabled = !busy;
         PlacedList.IsEnabled = !busy;
-        RefreshPoseButton.IsEnabled = !busy;
-        UsePoseButton.IsEnabled = !busy && _playerPose is not null;
-        PlaceXBox.IsEnabled = !busy;
-        PlaceYBox.IsEnabled = !busy;
-        PlaceZBox.IsEnabled = !busy;
-        PlaceYawBox.IsEnabled = !busy;
-        PlacePitchBox.IsEnabled = !busy;
         SyncPlacedActions();
     }
 
@@ -402,9 +530,5 @@ public sealed partial class ScenarioPalettePage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 }

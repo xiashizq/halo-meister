@@ -335,7 +335,7 @@ public sealed class ArmorMixerService
                 TimeSpan.FromSeconds(15),
                 cancellationToken);
             if (runtime.Outcome != ScriptOutcome.Confirmed)
-                throw new InvalidOperationException(runtime.Message);
+                throw new BridgeFailureException(runtime.Message);
 
         }
         catch (Exception ex)

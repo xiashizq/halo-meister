@@ -14,44 +14,54 @@ struct BakedAiOverride {
     file_suffix: &'static str,
     bytes: &'static [u8],
     label: &'static str,
+    stem: &'static str,
 }
 
-/// Baked character AI for the marine trooper and the main covenant combatants.
+/// One combat-behavior overlay per character. These are optional and do not
+/// belong in the fuller character-palette pack.
 const CHARACTER_AI_TAGS: &[BakedAiOverride] = &[
     BakedAiOverride {
         file_suffix: "objects/characters/marine/ai/trooper-character.ubulk",
         bytes: include_bytes!("../assets/character-ai/trooper-character.ubulk"),
         label: "trooper",
+        stem: "MMYJ_CHAR_TROOPER_P",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/elite/ai/elite-character.ubulk",
         bytes: include_bytes!("../assets/character-ai/elite-character.ubulk"),
         label: "elite",
+        stem: "MMYJ_CHAR_ELITE_P",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/grunt/ai/grunt-character.ubulk",
         bytes: include_bytes!("../assets/character-ai/grunt-character.ubulk"),
         label: "grunt",
+        stem: "MMYJ_CHAR_GRUNT_P",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/jackal/ai/jackal-character.ubulk",
         bytes: include_bytes!("../assets/character-ai/jackal-character.ubulk"),
         label: "jackal",
+        stem: "MMYJ_CHAR_JACKAL_P",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/brute/ai/brute-character.ubulk",
         bytes: include_bytes!("../assets/character-ai/brute-character.ubulk"),
         label: "brute",
+        stem: "MMYJ_CHAR_BRUTE_P",
     },
     BakedAiOverride {
         file_suffix: "objects/characters/hunter/ai/hunter-character.ubulk",
         bytes: include_bytes!("../assets/character-ai/hunter-character.ubulk"),
         label: "hunter",
+        stem: "MMYJ_CHAR_HUNTER_P",
     },
 ];
 const BIPED_GROUP: u32 = u32::from_be_bytes(*b"bipd");
 const VEHICLE_GROUP: u32 = u32::from_be_bytes(*b"vehi");
 const WEAPON_GROUP: u32 = u32::from_be_bytes(*b"weap");
+const SCENERY_GROUP: u32 = u32::from_be_bytes(*b"scen");
+const MACHINE_GROUP: u32 = u32::from_be_bytes(*b"mach");
 const CHARACTER_GROUP: u32 = u32::from_be_bytes(*b"char");
 
 pub struct ExpandReport {
@@ -60,10 +70,16 @@ pub struct ExpandReport {
     pub biped_catalog: usize,
     pub vehicle_catalog: usize,
     pub weapon_catalog: usize,
+    pub scenery_catalog: usize,
+    pub machine_catalog: usize,
     pub character_catalog: usize,
     pub biped_added_total: usize,
     pub vehicle_added_total: usize,
     pub weapon_added_total: usize,
+    pub scenery_added_total: usize,
+    pub scenery_skipped_cap: usize,
+    pub machine_added_total: usize,
+    pub machine_skipped_cap: usize,
     pub character_added_total: usize,
     pub character_skipped_cap: usize,
     pub ally_added: usize,
@@ -72,14 +88,85 @@ pub struct ExpandReport {
     pub lines: Vec<String>,
 }
 
+/// Which scenario edits a palette overlay is allowed to contain.
+/// Character roster and object/scaffold edits share scenario tags, so
+/// the combined container is a separate file used only when both mods are on.
+#[derive(Clone, Copy)]
+pub struct ExpandParts {
+    pub objects: bool,
+    pub characters: bool,
+    pub squads: bool,
+}
+
+impl ExpandParts {
+    pub const CAMPAIGN: Self = Self {
+        objects: true,
+        characters: false,
+        squads: true,
+    };
+    pub const CHARACTERS: Self = Self {
+        objects: false,
+        characters: true,
+        squads: false,
+    };
+    pub const COMBINED: Self = Self {
+        objects: true,
+        characters: true,
+        squads: true,
+    };
+}
+
+pub struct SplitPalettePaths<'a> {
+    pub campaign: &'a Path,
+    pub characters: &'a Path,
+    pub combined_campaign: &'a Path,
+    pub combined_characters: &'a Path,
+}
+
+pub fn write_split_palette_overlays(
+    archives: &[IoStoreArchive],
+    paths: &SplitPalettePaths<'_>,
+    dry_run: bool,
+) -> Result<Vec<String>> {
+    let mut lines = Vec::new();
+    lines.extend(expand_all_mission_palettes(
+        archives,
+        paths.campaign,
+        dry_run,
+        ExpandParts::CAMPAIGN,
+    )?.lines);
+    lines.extend(expand_all_mission_palettes(
+        archives,
+        paths.characters,
+        dry_run,
+        ExpandParts::CHARACTERS,
+    )?.lines);
+    lines.extend(expand_all_mission_palettes(
+        archives,
+        paths.combined_campaign,
+        dry_run,
+        ExpandParts::COMBINED,
+    )?.lines);
+    lines.extend(expand_all_mission_palettes(
+        archives,
+        paths.combined_characters,
+        dry_run,
+        ExpandParts::COMBINED,
+    )?.lines);
+    Ok(lines)
+}
+
 pub fn expand_all_mission_palettes(
     archives: &[IoStoreArchive],
     output: &Path,
     dry_run: bool,
+    parts: ExpandParts,
 ) -> Result<ExpandReport> {
     let bipeds = collect_tag_paths(archives, "biped")?;
     let vehicles = collect_tag_paths(archives, "vehicle")?;
     let weapons = collect_tag_paths(archives, "weapon")?;
+    let scenery_all = collect_tag_paths(archives, "scenery")?;
+    let machine_all = collect_tag_paths(archives, "device_machine")?;
     let characters = collect_ai_character_paths(archives)?;
     let scenarios = collect_scenario_entries(archives)?;
     if bipeds.is_empty() {
@@ -91,6 +178,12 @@ pub fn expand_all_mission_palettes(
     if weapons.is_empty() {
         bail!("no weapon tags found under Meteorite/Content/Tags");
     }
+    if scenery_all.is_empty() {
+        bail!("no scenery tags found under Meteorite/Content/Tags");
+    }
+    if machine_all.is_empty() {
+        bail!("no device_machine tags found under Meteorite/Content/Tags");
+    }
     if characters.is_empty() {
         bail!("no AI character tags found under Meteorite/Content/Tags");
     }
@@ -98,16 +191,26 @@ pub fn expand_all_mission_palettes(
         bail!("no scenario tags found under Meteorite/Content/Tags");
     }
 
+    let (scenery_union, machine_union) = collect_palette_unions(archives, &scenarios)?;
+    let scenery = prioritize_object_paths(&scenery_all, &scenery_union, scenery_priority);
+    let machines = prioritize_object_paths(&machine_all, &machine_union, machine_priority);
+
     let mut report = ExpandReport {
         scenarios_seen: scenarios.len(),
         scenarios_changed: 0,
         biped_catalog: bipeds.len(),
         vehicle_catalog: vehicles.len(),
         weapon_catalog: weapons.len(),
+        scenery_catalog: scenery.len(),
+        machine_catalog: machines.len(),
         character_catalog: characters.len(),
         biped_added_total: 0,
         vehicle_added_total: 0,
         weapon_added_total: 0,
+        scenery_added_total: 0,
+        scenery_skipped_cap: 0,
+        machine_added_total: 0,
+        machine_skipped_cap: 0,
         character_added_total: 0,
         character_skipped_cap: 0,
         ally_added: 0,
@@ -116,10 +219,14 @@ pub fn expand_all_mission_palettes(
         lines: Vec::new(),
     };
     report.lines.push(format!(
-        "Catalog: {} biped(s), {} vehicle(s), {} weapon(s), {} safe AI character(s) (fill to {}); {} scenario(s) (palettes + hm_ally/hm_hostile)",
+        "Catalog: {} biped(s), {} vehicle(s), {} weapon(s), {} scenery ({} already in a mission palette), {} machine(s) ({} already in a mission palette), {} safe AI character(s) (fill to {}); {} scenario(s) (palettes + hm_ally/hm_hostile)",
         bipeds.len(),
         vehicles.len(),
         weapons.len(),
+        scenery.len(),
+        scenery_union.len(),
+        machines.len(),
+        machine_union.len(),
         characters.len(),
         MAX_CHARACTER_PALETTE_ENTRIES,
         scenarios.len()
@@ -132,35 +239,81 @@ pub fn expand_all_mission_palettes(
             .with_context(|| format!("could not read {rel_path}"))?;
         let mut tag = TagFile::read_from_bytes(&bytes)
             .with_context(|| format!("could not parse {rel_path}"))?;
-        let biped_added = ensure_palette(
-            &mut tag,
-            "biped palette",
-            BIPED_GROUP,
-            &bipeds,
-            "name",
-            MAX_OBJECT_PALETTE_ENTRIES,
-        )?;
-        let vehicle_added = ensure_palette(
-            &mut tag,
-            "vehicle palette",
-            VEHICLE_GROUP,
-            &vehicles,
-            "name",
-            MAX_OBJECT_PALETTE_ENTRIES,
-        )?;
-        let weapon_added = ensure_palette(
-            &mut tag,
-            "weapon palette",
-            WEAPON_GROUP,
-            &weapons,
-            "name",
-            MAX_OBJECT_PALETTE_ENTRIES,
-        )?;
-        let character_fill = ensure_character_palette(&mut tag, &characters)?;
-        let squads = ensure_demo_squads::ensure_demo_squads_on_tag(&mut tag, tag_path)?;
+        let biped_added = if parts.objects {
+            ensure_palette(
+                &mut tag,
+                "biped palette",
+                BIPED_GROUP,
+                &bipeds,
+                "name",
+                MAX_OBJECT_PALETTE_ENTRIES,
+            )?
+        } else {
+            0
+        };
+        let vehicle_added = if parts.objects {
+            ensure_palette(
+                &mut tag,
+                "vehicle palette",
+                VEHICLE_GROUP,
+                &vehicles,
+                "name",
+                MAX_OBJECT_PALETTE_ENTRIES,
+            )?
+        } else {
+            0
+        };
+        let weapon_added = if parts.objects {
+            ensure_palette(
+                &mut tag,
+                "weapon palette",
+                WEAPON_GROUP,
+                &weapons,
+                "name",
+                MAX_OBJECT_PALETTE_ENTRIES,
+            )?
+        } else {
+            0
+        };
+        let scenery_fill = if parts.objects {
+            fill_palette(
+                &mut tag,
+                "scenery palette",
+                SCENERY_GROUP,
+                &scenery,
+                "name",
+                MAX_OBJECT_PALETTE_ENTRIES,
+            )?
+        } else {
+            PaletteFill::ZERO
+        };
+        let machine_fill = if parts.objects {
+            fill_palette(
+                &mut tag,
+                "machine palette",
+                MACHINE_GROUP,
+                &machines,
+                "name",
+                MAX_OBJECT_PALETTE_ENTRIES,
+            )?
+        } else {
+            PaletteFill::ZERO
+        };
+        let character_fill = if parts.characters {
+            ensure_character_palette(&mut tag, &characters)?
+        } else {
+            PaletteFill::ZERO
+        };
+        let squads = if parts.squads {
+            ensure_demo_squads::ensure_demo_squads_on_tag(&mut tag, tag_path)?
+        } else {
+            ensure_demo_squads::SquadEnsureDelta::default()
+        };
         if biped_added == 0
             && vehicle_added == 0
             && weapon_added == 0
+            && scenery_fill.added == 0
+            && machine_fill.added == 0
             && character_fill.added == 0
             && !squads.changed
         {
@@ -170,13 +323,21 @@ pub fn expand_all_mission_palettes(
         report.biped_added_total += biped_added;
         report.vehicle_added_total += vehicle_added;
         report.weapon_added_total += weapon_added;
+        report.scenery_added_total += scenery_fill.added;
+        report.scenery_skipped_cap += scenery_fill.skipped_cap;
+        report.machine_added_total += machine_fill.added;
+        report.machine_skipped_cap += machine_fill.skipped_cap;
         report.character_added_total += character_fill.added;
         report.character_skipped_cap += character_fill.skipped_cap;
         report.ally_added += squads.ally_added;
         report.ally_from_hostile_fallback += squads.ally_from_hostile_fallback;
         report.hostile_added += squads.hostile_added;
         report.lines.push(format!(
-            "{tag_path}: +{biped_added} biped(s), +{vehicle_added} vehicle(s), +{weapon_added} weapon(s), +{} character(s) (cap-skip {})",
+            "{tag_path}: +{biped_added} biped(s), +{vehicle_added} vehicle(s), +{weapon_added} weapon(s), +{} scenery (cap-skip {}), +{} machine(s) (cap-skip {}), +{} character(s) (cap-skip {})",
+            scenery_fill.added,
+            scenery_fill.skipped_cap,
+            machine_fill.added,
+            machine_fill.skipped_cap,
             character_fill.added,
             character_fill.skipped_cap,
         ));
@@ -222,9 +383,28 @@ pub struct CharacterOverlayReport {
     pub lines: Vec<String>,
 }
 
-/// Character `[char]` AI as an independent overlay.
-pub fn write_character_ai_overlay(
+/// One optional combat-behavior overlay per character.
+pub fn write_character_ai_packs(
     archives: &[IoStoreArchive],
+    output_dir: &Path,
+    dry_run: bool,
+) -> Result<CharacterOverlayReport> {
+    let mut report = CharacterOverlayReport {
+        written: 0,
+        lines: Vec::new(),
+    };
+    for baked in CHARACTER_AI_TAGS {
+        let output = output_dir.join(format!("{}.utoc", baked.stem));
+        let one = write_character_ai_overlay(archives, baked, &output, dry_run)?;
+        report.lines.extend(one.lines);
+        report.written += one.written;
+    }
+    Ok(report)
+}
+
+fn write_character_ai_overlay(
+    archives: &[IoStoreArchive],
+    baked: &BakedAiOverride,
     output: &Path,
     dry_run: bool,
 ) -> Result<CharacterOverlayReport> {
@@ -232,80 +412,91 @@ pub fn write_character_ai_overlay(
         written: 0,
         lines: Vec::new(),
     };
-    let mut overrides = Vec::new();
-    for baked in CHARACTER_AI_TAGS {
-        let bytes = if baked.file_suffix.contains("trooper-character") {
-            let (tuned, lines) = tune_marine_ai::apply_aggressive_trooper(baked.bytes)?;
-            report.lines.extend(lines);
-            tuned
-        } else {
-            TagFile::read_from_bytes(baked.bytes).with_context(|| {
-                format!(
-                    "bundled {} ({}) is not a readable tag",
-                    baked.label, baked.file_suffix
-                )
-            })?;
-            baked.bytes.to_vec()
-        };
-        let (archive_index, rel_path) = find_first_ubulk(archives, baked.file_suffix)
-            .with_context(|| format!("could not find vanilla {}", baked.file_suffix))?;
-        report.lines.push(format!(
-            "{}: overlay {rel_path} ({} bytes)",
-            baked.label,
-            bytes.len()
-        ));
-        overrides.push((archive_index, rel_path, bytes));
-    }
+    let bytes = if baked.file_suffix.contains("trooper-character") {
+        let (tuned, lines) = tune_marine_ai::apply_aggressive_trooper(baked.bytes)?;
+        report.lines.extend(lines);
+        tuned
+    } else {
+        TagFile::read_from_bytes(baked.bytes).with_context(|| {
+            format!(
+                "bundled {} ({}) is not a readable tag",
+                baked.label, baked.file_suffix
+            )
+        })?;
+        baked.bytes.to_vec()
+    };
+    let (archive_index, rel_path) = find_first_ubulk(archives, baked.file_suffix)
+        .with_context(|| format!("could not find vanilla {}", baked.file_suffix))?;
+    report.lines.push(format!(
+        "{}: overlay {rel_path} ({} bytes) -> {}",
+        baked.label,
+        bytes.len(),
+        output.display()
+    ));
 
     if dry_run {
-        report.lines.push("Dry run: no character overlay files written.".to_owned());
         return Ok(report);
     }
 
-    let write_args: Vec<(&IoStoreArchive, &str, &[u8])> = overrides
-        .iter()
-        .map(|(archive, path, bytes)| (&archives[*archive], path.as_str(), bytes.as_slice()))
-        .collect();
+    let write_args: Vec<(&IoStoreArchive, &str, &[u8])> =
+        vec![(&archives[archive_index], rel_path.as_str(), bytes.as_slice())];
     blam_tags::iostore::writer::write_mod_container_ex(&write_args, &[], output)
         .with_context(|| format!("could not write {}", output.display()))?;
-    report.written = overrides.len();
-    report.lines.push(format!(
-        "Wrote {} character AI tag(s) to {}",
-        overrides.len(),
-        output.display()
-    ));
+    report.written = 1;
     Ok(report)
 }
 
-struct CharacterFill {
+struct PaletteFill {
     added: usize,
     skipped_cap: usize,
+}
+
+impl PaletteFill {
+    const ZERO: Self = Self {
+        added: 0,
+        skipped_cap: 0,
+    };
 }
 
 fn ensure_character_palette(
     tag: &mut TagFile,
     catalog: &BTreeSet<String>,
-) -> Result<CharacterFill> {
-    let existing = read_palette_paths(tag, "character palette", "reference")?;
+) -> Result<PaletteFill> {
     let prioritized = prioritize_characters(catalog);
-    let missing: Vec<&String> = prioritized
+    fill_palette(
+        tag,
+        "character palette",
+        CHARACTER_GROUP,
+        &prioritized,
+        "reference",
+        MAX_CHARACTER_PALETTE_ENTRIES,
+    )
+}
+
+fn fill_palette(
+    tag: &mut TagFile,
+    block_name: &str,
+    group_tag: u32,
+    catalog: &[String],
+    reference_field: &str,
+    max_entries: usize,
+) -> Result<PaletteFill> {
+    let existing = read_palette_paths(tag, block_name, reference_field)?;
+    let missing: Vec<&String> = catalog
         .iter()
         .filter(|path| !existing.contains(path.as_str()))
         .collect();
-    let room = MAX_CHARACTER_PALETTE_ENTRIES.saturating_sub(existing.len());
+    let room = max_entries.saturating_sub(existing.len());
     let (take, skipped_cap) = if missing.len() > room {
         (&missing[..room], missing.len() - room)
     } else {
         (missing.as_slice(), 0)
     };
-    let added = append_palette_entries(
-        tag,
-        "character palette",
-        CHARACTER_GROUP,
-        take,
-        "reference",
-    )?;
-    Ok(CharacterFill { added, skipped_cap })
+    let added = append_palette_entries(tag, block_name, group_tag, take, reference_field)?;
+    Ok(PaletteFill {
+        added,
+        skipped_cap,
+    })
 }
 
 fn ensure_palette(
@@ -591,6 +782,117 @@ fn find_first_ubulk(archives: &[IoStoreArchive], file_suffix: &str) -> Option<(u
         }
     }
     None
+}
+
+fn collect_palette_unions(
+    archives: &[IoStoreArchive],
+    scenarios: &[(usize, String, String)],
+) -> Result<(HashSet<String>, HashSet<String>)> {
+    let mut scenery = HashSet::new();
+    let mut machines = HashSet::new();
+    for (archive_index, rel_path, tag_path) in scenarios {
+        let bytes = archives[*archive_index]
+            .read(rel_path)
+            .with_context(|| format!("could not read {rel_path}"))?;
+        let tag = TagFile::read_from_bytes(&bytes)
+            .with_context(|| format!("could not parse {rel_path}"))?;
+        scenery.extend(
+            try_read_palette_paths(&tag, "scenery palette", "name").with_context(|| {
+                format!("{tag_path}: could not read scenery palette")
+            })?,
+        );
+        machines.extend(
+            try_read_palette_paths(&tag, "machine palette", "name").with_context(|| {
+                format!("{tag_path}: could not read machine palette")
+            })?,
+        );
+    }
+    Ok((scenery, machines))
+}
+
+fn try_read_palette_paths(
+    tag: &TagFile,
+    block_name: &str,
+    reference_field: &str,
+) -> Result<HashSet<String>> {
+    if tag.root().field_path(block_name).is_none() {
+        return Ok(HashSet::new());
+    }
+    read_palette_paths(tag, block_name, reference_field)
+}
+
+fn prioritize_object_paths(
+    catalog: &BTreeSet<String>,
+    palette_union: &HashSet<String>,
+    score: fn(&str) -> i32,
+) -> Vec<String> {
+    let mut scored: Vec<(i32, String)> = catalog
+        .iter()
+        .filter(|path| !is_hard_rejected_prop(path) || palette_union.contains(path.as_str()))
+        .cloned()
+        .map(|path| {
+            let mut points = score(&path);
+            if palette_union.contains(&path) {
+                points += 1_000;
+            }
+            (points, path)
+        })
+        .collect();
+    scored.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    scored.into_iter().map(|(_, path)| path).collect()
+}
+
+fn scenery_priority(path: &str) -> i32 {
+    let lower = path.to_ascii_lowercase();
+    if lower.contains("\\props\\") {
+        100
+    } else if lower.contains("\\gear\\") {
+        80
+    } else if lower.contains("\\scenery\\") {
+        60
+    } else if lower.contains("\\crate") {
+        50
+    } else if lower.contains("\\levels\\") {
+        20
+    } else {
+        40
+    }
+}
+
+fn machine_priority(path: &str) -> i32 {
+    let lower = path.to_ascii_lowercase();
+    let leaf = tag_leaf_name(&lower);
+    if leaf.contains("door")
+        || leaf.contains("lift")
+        || leaf.contains("elevator")
+        || leaf.contains("bridge")
+        || leaf.contains("shield")
+        || leaf.contains("gate")
+    {
+        90
+    } else if lower.contains("\\props\\") || lower.contains("\\gear\\") || lower.contains("\\devices\\")
+    {
+        80
+    } else if lower.contains("\\levels\\") {
+        40
+    } else {
+        50
+    }
+}
+
+fn is_hard_rejected_prop(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    const REJECT_SUBSTRINGS: &[&str] = &[
+        "\\cinematics\\",
+        "\\unused\\",
+        "\\debug\\",
+        "\\null\\",
+        "\\garbage\\",
+        "_dummy",
+    ];
+    REJECT_SUBSTRINGS
+        .iter()
+        .any(|needle| lower.contains(needle))
 }
 
 fn collect_tag_paths(archives: &[IoStoreArchive], group_name: &str) -> Result<BTreeSet<String>> {

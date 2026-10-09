@@ -1,4 +1,4 @@
-using HaloMeister.App.Localization;
+﻿using HaloMeister.App.Localization;
 using HaloMeister.App.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -10,7 +10,6 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
 {
     private readonly RuntimeTagMemoryService _game = RuntimeTagMemoryService.Current;
     private readonly VehicleWorkshopService _vehicles = new();
-    private readonly FullPalettesOverlayService _fullPalettes = new();
     private IReadOnlyList<LoadableVehicle> _all = [];
     private IReadOnlyList<VehicleModelVariant> _variants = [];
     private LoadableVehicle? _selected;
@@ -18,19 +17,16 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
     private int _variantRequestVersion;
     private bool _busy;
     private bool _hasScanned;
-    private bool _fullPalettesInstalled;
 
     public VehicleWorkshopPage()
     {
         InitializeComponent();
         _game.ConnectionChanged += OnConnectionChanged;
-        RefreshFullPalettesState();
         UpdateControls();
     }
 
     public void OnActivated()
     {
-        RefreshFullPalettesState();
         UpdateControls();
     }
 
@@ -47,43 +43,6 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
             ShowStatus(
                 L.Format("vehicle_workshop.found_vehicles", _all.Count),
                 InfoBarSeverity.Success);
-        });
-    }
-
-    private async void OnToggleFullPalettes(object sender, RoutedEventArgs e)
-    {
-        await RunBusy(async () =>
-        {
-            if (_fullPalettes.IsGameRunning)
-            {
-                ShowStatus(
-                    L.Get("builtin_mod.close_game"),
-                    InfoBarSeverity.Warning);
-                return;
-            }
-
-            bool installing = !_fullPalettesInstalled;
-            string actionLabel = installing
-                ? L.Get("vehicle_workshop.add_all_vehicles_weapons")
-                : L.Get("vehicle_workshop.remove_all_vehicles_weapons");
-            var confirm = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = actionLabel,
-                Content = installing
-                    ? L.Get("builtin_mod.install_confirm")
-                    : L.Get("builtin_mod.remove_confirm"),
-                PrimaryButtonText = actionLabel,
-                CloseButtonText = L.Get("common.cancel"),
-                DefaultButton = ContentDialogButton.Close,
-            };
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-                return;
-
-            FullPalettesOverlayResult result = await Task.Run(() =>
-                installing ? _fullPalettes.Install() : _fullPalettes.Remove());
-            RefreshFullPalettesState();
-            ShowStatus(result.Message, InfoBarSeverity.Success);
         });
     }
 
@@ -108,6 +67,7 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
             .Where(vehicle =>
                 query.Length == 0 ||
                 vehicle.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                vehicle.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 vehicle.TagPath.Contains(query, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         VehicleList.ItemsSource = filtered;
@@ -129,7 +89,11 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
         bool selected = _selected is not null;
         EmptyState.Visibility = selected ? Visibility.Collapsed : Visibility.Visible;
         SelectionDetails.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-        SelectedVehicleText.Text = _selected?.Name ?? "";
+        SelectedVehicleText.Text = _selected?.DisplayName ?? "";
+        SelectedVehicleSubText.Text = _selected?.SecondaryName ?? "";
+        SelectedVehicleSubText.Visibility = string.IsNullOrEmpty(SelectedVehicleSubText.Text)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
         SelectedPathText.Text = _selected?.TagPath ?? "";
         SelectedDatumText.Text = _selected?.Detail ?? "";
         SelectedVehicleImage.Source = _selected is null
@@ -212,13 +176,13 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
             string message = _selectedVariant is null
                 ? L.Format(
                     "vehicle_workshop.spawned_ahead",
-                    vehicle.Name,
-                    result.Message)
+                    vehicle.DisplayName,
+                    string.Empty)
                 : L.Format(
                     "vehicle_workshop.spawned_ahead_variant",
-                    vehicle.Name,
+                    vehicle.DisplayName,
                     _selectedVariant.Name,
-                    result.Message);
+                    string.Empty);
             ShowStatus(message, InfoBarSeverity.Success);
         });
     }
@@ -230,6 +194,17 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
         {
             VehiclePlayerControlResult result = await Task.Run(
                 () => _vehicles.EnablePlayerControl(vehicle));
+            ShowStatus(result.Message, InfoBarSeverity.Success);
+        });
+    }
+
+    private async void OnEnableThirdPerson(object sender, RoutedEventArgs e)
+    {
+        if (_selected is not { } vehicle) return;
+        await RunBusy(async () =>
+        {
+            VehicleThirdPersonResult result = await Task.Run(
+                () => _vehicles.EnableThirdPersonCamera(vehicle));
             ShowStatus(result.Message, InfoBarSeverity.Success);
         });
     }
@@ -251,11 +226,10 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
         _busy = true;
         UpdateControls();
         try { await action(); }
-        catch (Exception ex) { ShowStatus(ex.Message, InfoBarSeverity.Error); }
+        catch (Exception ex) { ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error); }
         finally
         {
             _busy = false;
-            RefreshFullPalettesState();
             UpdateControls();
         }
     }
@@ -263,27 +237,11 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
     private void OnConnectionChanged(object? sender, EventArgs e)
         => DispatcherQueue.TryEnqueue(UpdateControls);
 
-    private void RefreshFullPalettesState()
-    {
-        try
-        {
-            _fullPalettesInstalled = _fullPalettes.IsInstalled();
-        }
-        catch
-        {
-            _fullPalettesInstalled = false;
-        }
-    }
-
     private void UpdateControls()
     {
         ScriptingBridgeStatus bridge = _vehicles.BridgeStatus;
         bool connected = !_busy && _game.IsConnected;
         ScanButton.IsEnabled = connected;
-        FullPalettesButton.IsEnabled = !_busy;
-        FullPalettesButton.Content = _fullPalettesInstalled
-            ? L.Get("vehicle_workshop.remove_all_vehicles_weapons")
-            : L.Get("vehicle_workshop.add_all_vehicles_weapons");
         RefreshButton.IsEnabled = connected && _hasScanned;
         BusyRing.IsActive = _busy;
         SpawnButton.IsEnabled =
@@ -292,6 +250,8 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
         EnablePlayerControlButton.IsEnabled =
             !_busy && _game.IsConnected &&
             VehicleWorkshopService.SupportsPlayerControl(_selected);
+        EnableThirdPersonButton.IsEnabled =
+            !_busy && _selected is not null && _game.IsConnected;
         AllowSeraphExitButton.IsEnabled =
             !_busy && _game.IsConnected &&
             VehicleWorkshopService.IsSeraph(_selected);
@@ -310,9 +270,5 @@ public sealed partial class VehicleWorkshopPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 }

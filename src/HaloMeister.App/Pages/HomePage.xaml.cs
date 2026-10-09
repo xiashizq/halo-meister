@@ -24,6 +24,118 @@ public sealed partial class HomePage : Page, IActivatablePage
         InitializeComponent();
         _refreshTimer.Tick += OnRefreshTick;
         _platform.Changed += OnPlatformPreferenceChanged;
+        ApplyCustomBackground();
+    }
+
+    // ───────── 首页背景图(可由用户自选,保存在用户数据目录) ─────────
+    private const string BackgroundFileStem = "home-background";
+    private static readonly string[] BackgroundExtensions = [".jpg", ".jpeg", ".png", ".bmp", ".webp"];
+
+    private static string? FindCustomBackground()
+    {
+        foreach (string ext in BackgroundExtensions)
+        {
+            string path = Path.Combine(AppPaths.DataRoot, BackgroundFileStem + ext);
+            if (File.Exists(path))
+                return path;
+        }
+
+        return null;
+    }
+
+    private void ApplyCustomBackground()
+    {
+        string source = FindCustomBackground() ?? Path.Combine(
+            AppContext.BaseDirectory, "Assets", "Backgrounds", "home_hero.jpg");
+        if (!File.Exists(source))
+            return;
+
+        try
+        {
+            HeroBackgroundBrush.ImageSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage
+            {
+                UriSource = new Uri(source),
+                CreateOptions = Microsoft.UI.Xaml.Media.Imaging.BitmapCreateOptions.IgnoreImageCache,
+            };
+        }
+        catch
+        {
+            // 图片损坏时保留 XAML 中的内置默认背景。
+        }
+    }
+
+    private async void OnPickBackground(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker
+            {
+                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary,
+            };
+            nint hwnd = MainWindow.Instance is { } window
+                ? WinRT.Interop.WindowNative.GetWindowHandle(window)
+                : 0;
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+            foreach (string ext in BackgroundExtensions)
+                picker.FileTypeFilter.Add(ext);
+
+            Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
+            if (file is null)
+                return;
+
+            Directory.CreateDirectory(AppPaths.DataRoot);
+            foreach (string ext in BackgroundExtensions)
+            {
+                string old = Path.Combine(AppPaths.DataRoot, BackgroundFileStem + ext);
+                if (File.Exists(old))
+                    File.Delete(old);
+            }
+
+            string destination = Path.Combine(
+                AppPaths.DataRoot,
+                BackgroundFileStem + Path.GetExtension(file.Name).ToLowerInvariant());
+            File.Copy(file.Path, destination, overwrite: true);
+            ApplyCustomBackground();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Could not set home background: {ex.Message}");
+        }
+    }
+
+    private void OnResetBackground(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            foreach (string ext in BackgroundExtensions)
+            {
+                string path = Path.Combine(AppPaths.DataRoot, BackgroundFileStem + ext);
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Could not reset home background: {ex.Message}");
+        }
+
+        ApplyCustomBackground();
+    }
+
+    // 快捷入口卡片悬停时轻微上浮,配合 XAML 中的 TranslationTransition 产生平滑动画。
+    private void OnActionCardPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement element)
+        {
+            element.TranslationTransition ??= new Vector3Transition { Duration = TimeSpan.FromMilliseconds(150) };
+            element.Translation = new System.Numerics.Vector3(0, -3, 0);
+        }
+    }
+
+    private void OnActionCardPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement element)
+            element.Translation = System.Numerics.Vector3.Zero;
     }
 
     public void OnActivated()
@@ -104,7 +216,7 @@ public sealed partial class HomePage : Page, IActivatablePage
                     GameSessionPhase.WaitingForMission => L.Get("home.game_waiting"),
                     GameSessionPhase.Failed => L.Format(
                         "home.game_connect_failed",
-                        GameSessionWatcher.Current?.Detail ?? L.Get("shell.game_connect_failed")),
+                        UserFacingErrors.Sanitize(GameSessionWatcher.Current?.Detail ?? L.Get("shell.game_connect_failed"))),
                     _ => L.Get("home.game_not_connected"),
                 };
 
@@ -156,7 +268,9 @@ public sealed partial class HomePage : Page, IActivatablePage
     }
 
     private static Brush StatusBrush(bool ready) => new SolidColorBrush(
-        ready ? Colors.LimeGreen : Colors.Gray);
+        ready
+            ? Windows.UI.Color.FromArgb(255, 74, 222, 128)
+            : Windows.UI.Color.FromArgb(255, 120, 120, 120));
 
     private async void OnLaunchGame(object sender, RoutedEventArgs e)
         => await (MainWindow.Instance?.LaunchGameAsync() ?? Task.CompletedTask);

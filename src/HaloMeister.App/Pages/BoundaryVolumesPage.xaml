@@ -10,7 +10,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <StackPanel Spacing="6">
@@ -147,7 +146,5 @@
                 </ListView>
             </Grid>
         </Border>
-
-        <InfoBar x:Name="StatusBar" Grid.Row="4" IsClosable="True" IsOpen="False" />
     </Grid>
 </Page>

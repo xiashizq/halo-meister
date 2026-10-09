@@ -120,7 +120,7 @@ public sealed class ScenarioSquadsService : IDisposable
         CancellationToken cancellationToken = default) =>
         await RunHaloScriptAsync(
             squad,
-            "ai_place",
+            $"ai_place {squad.ScriptName}",
             cancellationToken);
 
     public async Task<ScriptExecutionResult> EraseAsync(
@@ -128,12 +128,39 @@ public sealed class ScenarioSquadsService : IDisposable
         CancellationToken cancellationToken = default) =>
         await RunHaloScriptAsync(
             squad,
-            "ai_erase",
+            $"ai_erase {squad.ScriptName}",
             cancellationToken);
+
+    public async Task<ScriptExecutionResult> SetInvincibleAsync(
+        ScenarioSquadInfo squad,
+        bool invincible,
+        CancellationToken cancellationToken = default) =>
+        await RunHaloScriptAsync(
+            squad,
+            $"ai_cannot_die {squad.ScriptName} {(invincible ? "true" : "false")}",
+            cancellationToken);
+
+    public async Task<ScriptExecutionResult> SetAllegianceAsync(
+        ScenarioSquadInfo squad,
+        bool allied,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(squad);
+        string name = squad.ScriptName;
+        string script = allied
+            ? $"ai_set_team {name} player"
+            : string.Join(
+                '\n',
+                $"ai_set_team {name} covenant",
+                $"ai_force_active {name} true",
+                "ai_prefer_target (players) true",
+                $"ai_magically_see_object {name} (player_get 0)");
+        return await RunHaloScriptAsync(squad, script, cancellationToken);
+    }
 
     private async Task<ScriptExecutionResult> RunHaloScriptAsync(
         ScenarioSquadInfo squad,
-        string command,
+        string script,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(squad);
@@ -147,10 +174,9 @@ public sealed class ScenarioSquadsService : IDisposable
         ScriptingBridgeStatus status = _bridge.GetStatus();
         status.EnsureRuntimeReady();
 
-        string expression = $"{command} {squad.ScriptName}";
         return await _bridge.ExecuteAsync(
             ScriptLanguage.HaloScript,
-            expression,
+            script,
             TimeSpan.FromSeconds(15),
             cancellationToken);
     }

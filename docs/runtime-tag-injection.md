@@ -1,7 +1,7 @@
 # Campaign Evolved runtime tag injection
 
 This documents the live layout for the profiled July 29, 2026
-`HaloSimulation_tag_release.dll` build and the implementation behind Halo Meister's
+`HaloSimulation_tag_release.dll` build and the implementation behind Cartographer Toolkit's
 **Realtime tags** page.
 
 ## Confirmed runtime layout
@@ -42,7 +42,7 @@ opened for writes. See `game-update-playbook.md`.
 
 ## Schema layout
 
-Halo Meister loads Campaign Evolved's Baboon definitions from:
+Cartographer Toolkit loads Campaign Evolved's Baboon definitions from:
 
 ```text
 G:\Mods\baboon-windows-x86_64\definitions\haloce_evolved
@@ -75,7 +75,7 @@ A 16-byte runtime tag reference contains:
 - `+0x0C`: datum, with the tag-entry salt in the high 16 bits and table slot in
   the low 16 bits.
 
-Halo Meister creates a replacement reference from the selected live tag entry,
+Cartographer Toolkit creates a replacement reference from the selected live tag entry,
 including inverse-mapping its direct name pointer into a segmented offset. The
 builder was validated byte-for-byte against the running Magnum's
 `magnum_bullet` projectile reference:
@@ -125,7 +125,7 @@ Implemented:
   function. It supports same-session restoration and does not require or fabricate a
   player `[char]`.
 - profile-specific armor and weapon auto-application through **Customization**. Selecting
-  a choice records a Halo Meister runtime preference and applies it without an extra
+  a choice records a Cartographer Toolkit runtime preference and applies it without an extra
   button. The bridge resolves matching carried weapons through the controlled
   `BlamUnitInventoryComponent`, obtains each weapon's native object datum, and invokes
   `object_set_variant`; unavailable configured weapons are retried when they appear.
@@ -192,7 +192,7 @@ This path is deliberately restricted:
 - if pickup is rejected, the temporary object is deleted through the verified
   object lifecycle function.
 
-Use **Install / repair bridge** after updating Halo Meister, restart the game, load
+Use **Install / repair bridge** after updating Cartographer Toolkit, restart the game, load
 an offline campaign mission, select a weapon tag, acknowledge the warning, and
 choose **Pick up and equip** in **Weapon workshop**.
 
@@ -216,9 +216,9 @@ UE4SS to load that exact asset on the game thread and keeps the returned
 `BlamWeaponTagDataAsset` rooted for the rest of the mission. Bridge v14 performs
 this operation; arbitrary asset paths and non-weapon tag assets are rejected.
 
-After loading, Halo Meister waits for the game's cooked-tag subsystem to publish a
+After loading, Cartographer Toolkit waits for the game's cooked-tag subsystem to publish a
 live Stanchion entry. If it does not appear, the operation stops without writing
-the runtime table. Halo Meister does not fabricate an entry, copy arena pointers
+the runtime table. Cartographer Toolkit does not fabricate an entry, copy arena pointers
 from another mission, or inject an unrelocated binary blob.
 
 When the entry appears, the importer recursively checks its non-null tag references
@@ -291,7 +291,7 @@ primary spawn control.
 
 The supported simulation binary registers the built-in `cheat_bump_possession`
 boolean in its global command table. Its writable one-byte value is at module RVA
-`0x9A92F0` in the exact build identified above. Halo Meister does not replace the
+`0x9A92F0` in the exact build identified above. Cartographer Toolkit does not replace the
 controlled unit datum directly. Instead, bridge v32 resolves the controlled player's
 native Blam object datum through the same Unreal synchronization component used by
 live Customization, enables the engine-owned possession path, and creates the selected
@@ -354,7 +354,7 @@ The same screen also exposes the loaded `[matg]` default-player-trait blocks as
 selectable **Player modifiers**. Damage, health/damage resistance, movement speed,
 jump height, shield strength and recharge, melee damage, gravity, double jump,
 vampirism, and active camouflage are written through their typed tag fields. Each
-write is read back, and Halo Meister retains the original bytes so **Restore changes**
+write is read back, and Cartographer Toolkit retains the original bytes so **Restore changes**
 can safely put back only values that still match the tool's last write. Most traits
 are consumed immediately; a respawn or checkpoint reload can be required when the
 current player body already holds a copied trait value.
@@ -371,7 +371,7 @@ the controlled body as friendly, while relationships with other factions follow
 the normal campaign allegiance table. Campaign synchronization periodically
 republishes the authored Player team, so the simulation hook maintains the
 selected unit-team byte and object override on eligible ticks instead of relying
-on a one-shot write. Halo Meister snapshots both original values and restores
+on a one-shot write. Cartographer Toolkit snapshots both original values and restores
 them only while the same controlled unit datum is alive. A respawn or mission
 unload replaces the player object, so apply the selection again after respawning.
 

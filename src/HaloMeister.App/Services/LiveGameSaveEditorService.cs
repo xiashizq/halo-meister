@@ -70,7 +70,7 @@ public sealed partial class LiveGameSaveEditorService
             cancellationToken: cancellationToken);
         // Lua is the one language the bridge can genuinely confirm, so require that here.
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
 
         const string marker = "Return value: ";
         int markerOffset = result.Message.IndexOf(marker, StringComparison.Ordinal);

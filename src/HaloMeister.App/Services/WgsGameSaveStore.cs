@@ -96,7 +96,7 @@ public sealed class WgsGameSaveStore : IGameSaveStore
         WgsRoot = Path.Combine(PackageRoot, "SystemAppData", "wgs");
         BackupRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "GameSaveBackups");
     }
 

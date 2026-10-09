@@ -82,17 +82,11 @@ public sealed partial class LiveToolsHubPage : Page, IActivatablePage
                     typeof(CheatGlobalsPage),
                     Parameter: "quick-cheats"),
                 new(
-                    "cheat_globals.player_traits",
-                    Symbol.Contact,
-                    typeof(CheatGlobalsPage),
-                    Parameter: "player-traits"),
-                new(
                     "cheat_globals.allegiance",
                     Symbol.People,
                     typeof(CheatGlobalsPage),
                     Parameter: "allegiance"),
                 new("live_hub.live_skulls", Symbol.Emoji, typeof(LiveSkullsPage)),
-                new("live_hub.other", Symbol.AllApps, typeof(OtherGameplayPage)),
             ],
         };
 

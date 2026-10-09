@@ -72,7 +72,7 @@ public sealed partial class CharacterModelPreviewWindow : UserControl
             }
             catch (Exception ex)
             {
-                MessageText.Text = ex.Message;
+                MessageText.Text = UserFacingErrors.Format(ex);
                 MessageText.Visibility = Visibility.Visible;
             }
         };
@@ -132,7 +132,7 @@ public sealed partial class CharacterModelPreviewWindow : UserControl
         {
             if (generation != _generation || _closed)
                 return;
-            MessageText.Text = ex.Message;
+            MessageText.Text = UserFacingErrors.Format(ex);
             MessageText.Visibility = Visibility.Visible;
             _positions = [];
             _gpu.SetMesh([], [], [], _albedo, [], []);
@@ -374,7 +374,7 @@ public sealed partial class CharacterModelPreviewWindow : UserControl
         {
             if (generation != _poseGeneration || _closed)
                 return;
-            MessageText.Text = ex.Message;
+            MessageText.Text = UserFacingErrors.Format(ex);
             MessageText.Visibility = Visibility.Visible;
         }
         finally

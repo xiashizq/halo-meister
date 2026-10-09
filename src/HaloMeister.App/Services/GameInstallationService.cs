@@ -27,7 +27,7 @@ public sealed class GameInstallationService
     {
         _rememberedPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "game-binary-directory.txt");
         Refresh();
     }

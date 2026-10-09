@@ -150,7 +150,6 @@
         <Grid RowSpacing="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <StackPanel
                 x:Name="TagEmptyState"
@@ -552,11 +551,6 @@
             </Grid>
 
         </Grid>
-            <InfoBar
-                x:Name="PageStatus"
-                Grid.Row="1"
-                IsClosable="True"
-                IsOpen="False" />
         </Grid>
         </Border>
     </Grid>

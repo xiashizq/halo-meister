@@ -13,9 +13,9 @@ public sealed record RemoteFirewallStatus(
 public sealed class RemoteControlFirewallService
 {
     private const string RuleName = "HaloMeister.PhoneRemote";
-    private const string DisplayName = "Halo Meister Phone Remote";
+    private const string DisplayName = "Cartographer Toolkit Phone Remote";
     private const string Description =
-        "Allows the Halo Meister phone remote from LocalSubnet and Tailscale on private networks.";
+        "Allows the Cartographer Toolkit phone remote from LocalSubnet and Tailscale on private networks.";
 
     public async Task<RemoteFirewallStatus> GetStatusAsync(
         CancellationToken cancellationToken = default)
@@ -91,7 +91,7 @@ public sealed class RemoteControlFirewallService
                 current,
                 current
                     ? $"Private-network and Tailscale inbound rule is ready on TCP {RemoteControlService.Port}."
-                    : "A Halo Meister firewall rule exists, but it does not match this executable and secure LAN scope. Configure it again.");
+                    : "A Cartographer Toolkit firewall rule exists, but it does not match this executable and secure LAN scope. Configure it again.");
         }
         catch
         {
@@ -136,7 +136,7 @@ public sealed class RemoteControlFirewallService
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                "Windows could not configure the Halo Meister firewall rule.");
+                "Windows could not configure the Cartographer Toolkit firewall rule.");
         }
     }
 
@@ -161,7 +161,7 @@ public sealed class RemoteControlFirewallService
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                "Windows could not remove the Halo Meister firewall rule.");
+                "Windows could not remove the Cartographer Toolkit firewall rule.");
         }
     }
 
@@ -236,7 +236,7 @@ public sealed class RemoteControlFirewallService
     private static string ResolveExecutablePath() =>
         Environment.ProcessPath
         ?? throw new InvalidOperationException(
-            "Halo Meister could not determine its executable path.");
+            "Cartographer Toolkit could not determine its executable path.");
 
     private static string PowerShellLiteral(string value) =>
         value.Replace("'", "''", StringComparison.Ordinal);

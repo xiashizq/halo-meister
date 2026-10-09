@@ -74,7 +74,7 @@ public sealed partial class CharacterModelsPage : Page, IActivatablePage
             _modelsInFolder.Clear();
             _current = null;
             EmptyTitle.Text = L.Get("character_model.empty_title");
-            EmptyHint.Text = ex.Message;
+            EmptyHint.Text = UserFacingErrors.Format(ex);
             EmptyState.Visibility = Visibility.Visible;
             Preview.Visibility = Visibility.Collapsed;
             ModelBox.Visibility = Visibility.Collapsed;

@@ -182,7 +182,7 @@ public sealed partial class ArmorMixerPage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -226,20 +226,17 @@ public sealed partial class ArmorMixerPage : Page, IActivatablePage
     {
         if (severity == InfoBarSeverity.Success)
         {
-            StatusBar.IsOpen = false;
+            MainWindow.Instance?.DismissStatus();
             SummaryText.Text = message;
             return;
         }
 
-        StatusBar.Title = severity switch
-        {
-            InfoBarSeverity.Error => L.Get("armor_mixer.failed"),
-            InfoBarSeverity.Success => L.Get("armor_mixer.armor_mixer"),
-            _ => L.Get("armor_mixer.armor_mixer"),
-        };
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
+        MainWindow.Instance?.Report(
+            message,
+            severity,
+            severity == InfoBarSeverity.Error
+                ? L.Get("armor_mixer.failed")
+                : L.Get("armor_mixer.armor_mixer"));
     }
 
     private bool CanUsePlayerVariant(ArmorMixerVariant variant)

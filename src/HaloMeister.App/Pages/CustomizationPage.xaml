@@ -257,10 +257,6 @@
                         </StackPanel>
                     </Border>
 
-                    <InfoBar
-                        x:Name="PageStatus"
-                        IsClosable="True"
-                        IsOpen="False" />
                     <TextBlock
                         x:Name="ConfigPathText"
                         FontFamily="Consolas"

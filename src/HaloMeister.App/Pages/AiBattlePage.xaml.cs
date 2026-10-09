@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using HaloMeister.App.Localization;
 using HaloMeister.App.Models;
@@ -123,7 +123,7 @@ public sealed partial class AiBattlePage : Page, IActivatablePage
     [
         WeaponOption.Default,
         .. (_demo.GetCompatibleWeapons(character)
-            .Select(weapon => new WeaponOption(weapon.DisplayName, weapon))),
+            .Select(weapon => new WeaponOption(weapon.ListName, weapon))),
     ];
 
     private void ReloadWeapons(BattleRosterItem item)
@@ -174,7 +174,7 @@ public sealed partial class AiBattlePage : Page, IActivatablePage
             string label = hint.Replace('_', ' ');
             AiWeaponChoice? match = all.FirstOrDefault(weapon =>
                 weapon.TagPath.Contains(hint, StringComparison.OrdinalIgnoreCase) ||
-                weapon.DisplayName.Contains(label, StringComparison.OrdinalIgnoreCase));
+                weapon.EnglishName.Contains(label, StringComparison.OrdinalIgnoreCase));
             if (match is not null)
                 return match;
         }
@@ -279,7 +279,7 @@ public sealed partial class AiBattlePage : Page, IActivatablePage
                 {
                     string detail = string.IsNullOrWhiteSpace(spawn.SpawnResult.Message)
                         ? L.Get("allegiance_demo.batch_failed_unknown")
-                        : spawn.SpawnResult.Message.Trim();
+                        : UserFacingErrors.FromBridge(spawn.SpawnResult.Message);
                     throw new InvalidOperationException(
                         L.Format("allegiance_demo.batch_failed", created, detail));
                 }
@@ -357,7 +357,7 @@ public sealed partial class AiBattlePage : Page, IActivatablePage
             ]);
             if (result.Outcome == ScriptOutcome.Failed)
             {
-                ShowStatus(result.Message, InfoBarSeverity.Error);
+                ShowStatus(UserFacingErrors.FromBridge(result.Message), InfoBarSeverity.Error);
                 return;
             }
 
@@ -383,7 +383,7 @@ public sealed partial class AiBattlePage : Page, IActivatablePage
             throw new InvalidOperationException(
                 string.IsNullOrWhiteSpace(result.Message)
                     ? L.Get("ai_battle.allegiance_failed")
-                    : result.Message.Trim());
+                    : UserFacingErrors.FromBridge(result.Message));
         }
     }
 
@@ -455,7 +455,7 @@ public sealed partial class AiBattlePage : Page, IActivatablePage
         }
         catch (Exception ex)
         {
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
+            ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -536,11 +536,7 @@ public sealed partial class AiBattlePage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private void OnConnectionChanged(object? sender, EventArgs e)
     {
@@ -583,14 +579,14 @@ public sealed partial class AiBattlePage : Page, IActivatablePage
         string leaf = choice.LeafName;
         if (leaf.Equals(keyword, StringComparison.OrdinalIgnoreCase))
             return 0;
-        if (choice.DisplayName.Equals(keyword, StringComparison.OrdinalIgnoreCase))
+        if (choice.EnglishName.Equals(keyword, StringComparison.OrdinalIgnoreCase))
             return 1;
         if (leaf.StartsWith(keyword + "_", StringComparison.OrdinalIgnoreCase) ||
             leaf.StartsWith(keyword + " ", StringComparison.OrdinalIgnoreCase))
             return 2;
         if (leaf.Contains(keyword, StringComparison.OrdinalIgnoreCase))
             return 3;
-        if (choice.DisplayName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+        if (choice.EnglishName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
             return 4;
         if (choice.TagPath.Contains(keyword, StringComparison.OrdinalIgnoreCase))
             return 5;

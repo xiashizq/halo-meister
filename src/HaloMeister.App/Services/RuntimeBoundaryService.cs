@@ -54,7 +54,7 @@ public sealed class RuntimeBoundaryService
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
 
         var values = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (string line in result.Message.Split(

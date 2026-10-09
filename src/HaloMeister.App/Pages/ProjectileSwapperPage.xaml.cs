@@ -182,7 +182,7 @@ public sealed partial class ProjectileSwapperPage : Page, IActivatablePage
         ProjectilePicker.IsEnabled = false;
         SwapButton.IsEnabled = false;
         try { await action(); }
-        catch (Exception ex) { ShowStatus(ex.Message, InfoBarSeverity.Error); }
+        catch (Exception ex) { ShowStatus(UserFacingErrors.Format(ex), InfoBarSeverity.Error); }
         finally
         {
             _busy = false;
@@ -213,11 +213,7 @@ public sealed partial class ProjectileSwapperPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        StatusBar.Message = message;
-        StatusBar.Severity = severity;
-        StatusBar.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(message, severity);
 
     private static bool IsExactProjectileText(RuntimeTagEntry projectile, string text) =>
         projectile.Name.Equals(text, StringComparison.OrdinalIgnoreCase) ||

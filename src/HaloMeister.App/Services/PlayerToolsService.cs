@@ -26,7 +26,7 @@ public sealed class PlayerToolsService
             "current",
             cancellationToken: cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
 
         const string marker = "Return value: ";
         int offset = result.Message.IndexOf(marker, StringComparison.Ordinal);
@@ -72,7 +72,7 @@ public sealed class PlayerToolsService
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
     }
 
     public async Task SetNoClipAsync(
@@ -86,7 +86,7 @@ public sealed class PlayerToolsService
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
     }
 
     public async Task SetInputSuppressedAsync(
@@ -100,7 +100,7 @@ public sealed class PlayerToolsService
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
     }
 
     public async Task<int> ReadActivePlayerTagIndexAsync(
@@ -112,7 +112,7 @@ public sealed class PlayerToolsService
             "read",
             cancellationToken: cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
 
         const string marker = "Return value: ";
         int offset = result.Message.IndexOf(marker, StringComparison.Ordinal);

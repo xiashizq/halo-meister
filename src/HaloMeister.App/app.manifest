@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="1.0.0.0" name="HaloMeister.App" />
+  <assemblyIdentity version="1.0.0.0" name="CartographerToolkit.App" />
 
   <!-- The game often runs elevated. A medium-integrity process cannot open it. -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">

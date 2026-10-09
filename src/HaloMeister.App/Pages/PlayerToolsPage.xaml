@@ -4,14 +4,34 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
+    <Page.Resources>
+        <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="CardIconBadgeStyle" TargetType="Border">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+        </Style>
+
+        <Style x:Key="SectionLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Page.Resources>
+
     <Grid Padding="24" RowSpacing="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- Header -->
         <Grid ColumnSpacing="20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -23,91 +43,274 @@
                     Style="{StaticResource LivePageDescriptionStyle}"
                     Text="{i18n:Loc Key='player_tools.move_the_player_control_the_camera_and_te_5b26bf'}" />
             </StackPanel>
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="10">
-                <StackPanel VerticalAlignment="Center" Spacing="1">
-                    <TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{i18n:Loc Key='player_tools.live_session'}" />
-                    <TextBlock
-                        x:Name="BridgeStatusText"
-                        MaxWidth="360"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-                <Button x:Name="RefreshButton" Click="OnRefresh" Content="{i18n:Loc Key='player_tools.refresh_position'}" />
-            </StackPanel>
+
+            <Border
+                Grid.Column="1"
+                MaxWidth="420"
+                Padding="12,8"
+                VerticalAlignment="Center"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Ellipse
+                        x:Name="BridgeDot"
+                        Width="10"
+                        Height="10"
+                        VerticalAlignment="Center"
+                        Fill="Gray" />
+                    <StackPanel Grid.Column="1" Spacing="1">
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Text="{i18n:Loc Key='player_tools.live_session'}" />
+                        <TextBlock
+                            x:Name="BridgeStatusText"
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
 
         <Pivot Grid.Row="1">
+            <!-- Movement -->
             <PivotItem Header="{i18n:Loc Key='player_tools.movement'}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Grid Padding="0,12,0,8" ColumnSpacing="14">
+                    <Grid Padding="0,12,12,8" ColumnSpacing="14">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="0.9*" />
-                            <ColumnDefinition Width="1.35*" />
+                            <ColumnDefinition Width="*" MinWidth="280" />
+                            <ColumnDefinition Width="1.4*" />
                         </Grid.ColumnDefinitions>
 
-                        <Border Style="{StaticResource LiveToolCardStyle}" VerticalAlignment="Top">
-                            <StackPanel Spacing="14">
-                                <StackPanel Spacing="4">
-                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='player_tools.no_clip'}" />
-                                    <TextBlock
-                                        Style="{StaticResource LivePageDescriptionStyle}"
-                                        Text="{i18n:Loc Key='player_tools.fly_while_keeping_the_camera_and_controll_8fd3c1'}" />
+                        <StackPanel Spacing="14">
+                            <!-- No-clip -->
+                            <Border Style="{StaticResource LiveToolCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Style="{StaticResource CardIconBadgeStyle}">
+                                            <FontIcon FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE709;" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="3">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.no_clip'}" />
+                                            <TextBlock
+                                                Style="{StaticResource CompactSafetyTextStyle}"
+                                                Text="{i18n:Loc Key='player_tools.fly_while_keeping_the_camera_and_controll_8fd3c1'}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <Border Style="{StaticResource LiveToolInsetStyle}">
+                                        <Grid ColumnSpacing="9">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon
+                                                Margin="0,2,0,0"
+                                                VerticalAlignment="Top"
+                                                FontSize="13"
+                                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                Glyph="&#xE7BA;" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Style="{StaticResource CompactSafetyTextStyle}"
+                                                Text="{i18n:Loc Key='player_tools.restore_normal_physics_before_saving_relo_bc48df'}" />
+                                        </Grid>
+                                    </Border>
+                                    <Grid ColumnSpacing="9">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button
+                                            x:Name="EnableNoClipButton"
+                                            HorizontalAlignment="Stretch"
+                                            Click="OnEnableNoClip"
+                                            Style="{StaticResource AccentButtonStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="14" Glyph="&#xE709;" />
+                                                <TextBlock Text="{i18n:Loc Key='player_tools.enable_no_clip'}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button
+                                            x:Name="DisableNoClipButton"
+                                            Grid.Column="1"
+                                            HorizontalAlignment="Stretch"
+                                            Click="OnDisableNoClip">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="14" Glyph="&#xE7A7;" />
+                                                <TextBlock Text="{i18n:Loc Key='player_tools.restore_physics'}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
                                 </StackPanel>
-                                <Border Style="{StaticResource LiveToolInsetStyle}">
-                                    <StackPanel Orientation="Horizontal" Spacing="9">
-                                        <FontIcon FontSize="13" Glyph="&#xE7BA;" />
-                                        <TextBlock
-                                            Style="{StaticResource CompactSafetyTextStyle}"
-                                            Text="{i18n:Loc Key='player_tools.restore_normal_physics_before_saving_relo_bc48df'}" />
-                                    </StackPanel>
-                                </Border>
-                                <StackPanel Orientation="Horizontal" Spacing="9">
-                                    <Button
-                                        x:Name="EnableNoClipButton"
-                                        Click="OnEnableNoClip"
-                                        Content="{i18n:Loc Key='player_tools.enable_no_clip'}"
-                                        Style="{StaticResource AccentButtonStyle}" />
-                                    <Button
-                                        x:Name="DisableNoClipButton"
-                                        Click="OnDisableNoClip"
-                                        Content="{i18n:Loc Key='player_tools.restore_physics'}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
+                            </Border>
 
-                        <Border Grid.Column="1" Style="{StaticResource LiveToolCardStyle}" VerticalAlignment="Top">
-                            <StackPanel Spacing="14">
-                                <StackPanel Spacing="4">
-                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='player_tools.teleport'}" />
-                                    <TextBlock
-                                        Style="{StaticResource LivePageDescriptionStyle}"
-                                        Text="{i18n:Loc Key='player_tools.edit_the_current_blam_world_coordinates_k_c925d3'}" />
+                            <!-- Return point -->
+                            <Border Style="{StaticResource LiveToolCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Style="{StaticResource CardIconBadgeStyle}">
+                                            <FontIcon FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE7C1;" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="3">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.return_point'}" />
+                                            <TextBlock
+                                                Style="{StaticResource CompactSafetyTextStyle}"
+                                                Text="{i18n:Loc Key='player_tools.return_point_desc'}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <Border Style="{StaticResource LiveToolInsetStyle}">
+                                        <TextBlock
+                                            x:Name="SavedPositionText"
+                                            FontFamily="Consolas"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            IsTextSelectionEnabled="True"
+                                            Text="{i18n:Loc Key='player_tools.no_return_point_saved'}"
+                                            TextWrapping="Wrap" />
+                                    </Border>
+                                    <Grid ColumnSpacing="9">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button
+                                            x:Name="SavePositionButton"
+                                            HorizontalAlignment="Stretch"
+                                            Click="OnSavePosition">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="14" Glyph="&#xE7C1;" />
+                                                <TextBlock Text="{i18n:Loc Key='player_tools.save_return_point'}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button
+                                            x:Name="ReturnButton"
+                                            Grid.Column="1"
+                                            HorizontalAlignment="Stretch"
+                                            Click="OnReturn"
+                                            IsEnabled="False">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="14" Glyph="&#xE7A7;" />
+                                                <TextBlock Text="{i18n:Loc Key='player_tools.return'}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
                                 </StackPanel>
-                                <Grid ColumnSpacing="10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="XBox" Header="{i18n:Loc Key='player_tools.x_coordinate'}" PlaceholderText="0" />
-                                    <TextBox x:Name="YBox" Grid.Column="1" Header="{i18n:Loc Key='player_tools.y_coordinate'}" PlaceholderText="0" />
-                                    <TextBox x:Name="ZBox" Grid.Column="2" Header="{i18n:Loc Key='player_tools.z_coordinate'}" PlaceholderText="0" />
-                                </Grid>
-                                <StackPanel Orientation="Horizontal" Spacing="9">
-                                    <Button x:Name="TeleportButton" Click="OnTeleport" Content="{i18n:Loc Key='player_tools.teleport'}" Style="{StaticResource AccentButtonStyle}" />
-                                    <Button x:Name="SavePositionButton" Click="OnSavePosition" Content="{i18n:Loc Key='player_tools.save_return_point'}" />
-                                    <Button x:Name="ReturnButton" Click="OnReturn" Content="{i18n:Loc Key='player_tools.return'}" IsEnabled="False" />
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Spacing="14">
+                            <!-- Teleport -->
+                            <Border Style="{StaticResource LiveToolCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Style="{StaticResource CardIconBadgeStyle}">
+                                            <FontIcon FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE81D;" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="3">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.teleport'}" />
+                                            <TextBlock
+                                                Style="{StaticResource CompactSafetyTextStyle}"
+                                                Text="{i18n:Loc Key='player_tools.edit_the_current_blam_world_coordinates_k_c925d3'}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox
+                                            x:Name="XBox"
+                                            GotFocus="OnBoxGotFocus"
+                                            Header="{i18n:Loc Key='player_tools.x_coordinate'}"
+                                            KeyDown="OnCoordinateKeyDown"
+                                            Paste="OnCoordinatePaste"
+                                            PlaceholderText="0" />
+                                        <TextBox
+                                            x:Name="YBox"
+                                            Grid.Column="1"
+                                            GotFocus="OnBoxGotFocus"
+                                            Header="{i18n:Loc Key='player_tools.y_coordinate'}"
+                                            KeyDown="OnCoordinateKeyDown"
+                                            Paste="OnCoordinatePaste"
+                                            PlaceholderText="0" />
+                                        <TextBox
+                                            x:Name="ZBox"
+                                            Grid.Column="2"
+                                            GotFocus="OnBoxGotFocus"
+                                            Header="{i18n:Loc Key='player_tools.z_coordinate'}"
+                                            KeyDown="OnCoordinateKeyDown"
+                                            Paste="OnCoordinatePaste"
+                                            PlaceholderText="0" />
+                                    </Grid>
+
+                                    <StackPanel Orientation="Horizontal" Spacing="9">
+                                        <Button
+                                            x:Name="TeleportButton"
+                                            Click="OnTeleport"
+                                            Style="{StaticResource AccentButtonStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="14" Glyph="&#xE81D;" />
+                                                <TextBlock Text="{i18n:Loc Key='player_tools.teleport'}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="RefreshButton" Click="OnRefresh">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="14" Glyph="&#xE72C;" />
+                                                <TextBlock Text="{i18n:Loc Key='player_tools.read_current_position'}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button
+                                            x:Name="CopyCoordinatesButton"
+                                            Click="OnCopyCoordinates"
+                                            ToolTipService.ToolTip="{i18n:Loc Key='player_tools.copy_coordinates'}"
+                                            AutomationProperties.Name="{i18n:Loc Key='player_tools.copy_coordinates'}">
+                                            <FontIcon FontSize="14" Glyph="&#xE8C8;" />
+                                        </Button>
+                                    </StackPanel>
+
+                                    <TextBlock Style="{StaticResource CompactSafetyTextStyle}" Text="{i18n:Loc Key='player_tools.paste_hint'}" />
                                 </StackPanel>
-                                <TextBlock
-                                    x:Name="SavedPositionText"
-                                    Style="{StaticResource CompactSafetyTextStyle}"
-                                    Text="{i18n:Loc Key='player_tools.no_return_point_saved'}" />
-                                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                                <StackPanel Spacing="9">
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='player_tools.saved_locations'}" />
-                                    <TextBlock
-                                        Style="{StaticResource CompactSafetyTextStyle}"
-                                        Text="{i18n:Loc Key='player_tools.named_locations_persist_between_halo_meis_4b4caa'}" />
+                            </Border>
+
+                            <!-- Saved locations -->
+                            <Border Style="{StaticResource LiveToolCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Style="{StaticResource CardIconBadgeStyle}">
+                                            <FontIcon FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE728;" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="3">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.saved_locations'}" />
+                                            <TextBlock
+                                                Style="{StaticResource CompactSafetyTextStyle}"
+                                                Text="{i18n:Loc Key='player_tools.named_locations_persist_between_halo_meis_4b4caa'}" />
+                                        </StackPanel>
+                                    </Grid>
+
                                     <Grid ColumnSpacing="10">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -115,73 +318,147 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBox
                                             x:Name="LocationNameBox"
-                                            Header="{i18n:Loc Key='player_tools.location_name'}"
-                                            PlaceholderText="{i18n:Loc Key='player_tools.bridge_overlook'}" />
+                                            KeyDown="OnLocationNameKeyDown"
+                                            MaxLength="80"
+                                            PlaceholderText="{i18n:Loc Key='player_tools.bridge_overlook'}"
+                                            TextChanged="OnLocationNameChanged" />
                                         <Button
                                             x:Name="SaveLocationButton"
                                             Grid.Column="1"
-                                            VerticalAlignment="Bottom"
                                             Click="OnSaveLocation"
-                                            Content="{i18n:Loc Key='player_tools.save_current'}" />
+                                            Style="{StaticResource AccentButtonStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="14" Glyph="&#xE74E;" />
+                                                <TextBlock Text="{i18n:Loc Key='player_tools.save_current'}" />
+                                            </StackPanel>
+                                        </Button>
                                     </Grid>
-                                    <ComboBox
-                                        x:Name="SavedLocationBox"
-                                        DisplayMemberPath="Name"
-                                        Header="{i18n:Loc Key='player_tools.saved_location'}"
-                                        HorizontalAlignment="Stretch"
-                                        PlaceholderText="{i18n:Loc Key='player_tools.no_saved_locations'}"
-                                        SelectionChanged="OnSavedLocationSelectionChanged" />
-                                    <TextBlock
-                                        x:Name="SavedLocationDetailText"
-                                        Style="{StaticResource CompactSafetyTextStyle}"
-                                        Text="{i18n:Loc Key='player_tools.no_saved_location_selected'}" />
-                                    <StackPanel Orientation="Horizontal" Spacing="9">
-                                        <Button
-                                            x:Name="TeleportSavedLocationButton"
-                                            Click="OnTeleportSavedLocation"
-                                            Content="{i18n:Loc Key='player_tools.teleport_here'}"
-                                            Style="{StaticResource AccentButtonStyle}" />
-                                        <Button
-                                            x:Name="DeleteSavedLocationButton"
-                                            Click="OnDeleteSavedLocation"
-                                            Content="{i18n:Loc Key='player_tools.delete'}" />
-                                    </StackPanel>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
 
+                                    <Border
+                                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8">
+                                        <Grid>
+                                            <StackPanel
+                                                x:Name="SavedLocationsEmptyPanel"
+                                                Padding="16,22"
+                                                HorizontalAlignment="Center"
+                                                Spacing="6">
+                                                <FontIcon
+                                                    FontSize="22"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Glyph="&#xE707;" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{i18n:Loc Key='player_tools.no_saved_locations'}" />
+                                            </StackPanel>
+                                            <ListView
+                                                x:Name="SavedLocationList"
+                                                MaxHeight="260"
+                                                DoubleTapped="OnSavedLocationDoubleTapped"
+                                                SelectionMode="None">
+                                                <ListView.ItemContainerStyle>
+                                                    <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                        <Setter Property="MinHeight" Value="52" />
+                                                    </Style>
+                                                </ListView.ItemContainerStyle>
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid ColumnSpacing="6">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                                <TextBlock
+                                                                    FontWeight="SemiBold"
+                                                                    Text="{Binding Name}"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock
+                                                                    FontFamily="Consolas"
+                                                                    FontSize="12"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Text="{Binding Detail}" />
+                                                            </StackPanel>
+                                                            <Button
+                                                                Grid.Column="1"
+                                                                Padding="10,6"
+                                                                Click="OnTeleportSavedLocation"
+                                                                Style="{StaticResource AccentButtonStyle}"
+                                                                ToolTipService.ToolTip="{i18n:Loc Key='player_tools.teleport_here'}">
+                                                                <FontIcon FontSize="14" Glyph="&#xE81D;" />
+                                                            </Button>
+                                                            <Button
+                                                                Grid.Column="2"
+                                                                Padding="10,6"
+                                                                Click="OnDeleteSavedLocation"
+                                                                ToolTipService.ToolTip="{i18n:Loc Key='player_tools.delete'}">
+                                                                <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                                                            </Button>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Style="{StaticResource CompactSafetyTextStyle}" Text="{i18n:Loc Key='player_tools.double_click_hint'}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </ScrollViewer>
             </PivotItem>
 
+            <!-- Camera -->
             <PivotItem Header="{i18n:Loc Key='player_tools.camera'}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Grid Padding="0,12,0,8" ColumnSpacing="14">
+                    <Grid Padding="0,12,12,8" ColumnSpacing="14">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="320" />
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" MinWidth="280" />
+                            <ColumnDefinition Width="1.8*" />
                         </Grid.ColumnDefinitions>
 
                         <Border Style="{StaticResource LiveToolCardStyle}" VerticalAlignment="Top">
                             <StackPanel Spacing="14">
-                                <StackPanel Spacing="4">
-                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='player_tools.camera_input'}" />
-                                    <TextBlock
-                                        Style="{StaticResource LivePageDescriptionStyle}"
-                                        Text="{i18n:Loc Key='player_tools.freeze_player_movement_and_actions_while_509a91'}" />
-                                </StackPanel>
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource CardIconBadgeStyle}">
+                                        <FontIcon FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE765;" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="3">
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.camera_input'}" />
+                                        <TextBlock
+                                            Style="{StaticResource CompactSafetyTextStyle}"
+                                            Text="{i18n:Loc Key='player_tools.freeze_player_movement_and_actions_while_509a91'}" />
+                                    </StackPanel>
+                                </Grid>
                                 <StackPanel Spacing="9">
                                     <Button
                                         x:Name="SuppressPlayerInputButton"
                                         HorizontalAlignment="Stretch"
                                         Click="OnSuppressPlayerInput"
-                                        Content="{i18n:Loc Key='player_tools.suppress_player_input'}"
-                                        Style="{StaticResource AccentButtonStyle}" />
+                                        Style="{StaticResource AccentButtonStyle}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="14" Glyph="&#xE72E;" />
+                                            <TextBlock Text="{i18n:Loc Key='player_tools.suppress_player_input'}" />
+                                        </StackPanel>
+                                    </Button>
                                     <Button
                                         x:Name="RestorePlayerInputButton"
                                         HorizontalAlignment="Stretch"
-                                        Click="OnRestorePlayerInput"
-                                        Content="{i18n:Loc Key='player_tools.restore_player_input'}" />
+                                        Click="OnRestorePlayerInput">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="14" Glyph="&#xE785;" />
+                                            <TextBlock Text="{i18n:Loc Key='player_tools.restore_player_input'}" />
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                                 <TextBlock
                                     Style="{StaticResource CompactSafetyTextStyle}"
@@ -189,21 +466,40 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Grid.Column="1" Style="{StaticResource LiveToolCardStyle}">
+                        <Border Grid.Column="1" Style="{StaticResource LiveToolCardStyle}" VerticalAlignment="Top">
                             <StackPanel Spacing="14">
-                                <StackPanel Spacing="4">
-                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='player_tools.third_person_camera'}" />
-                                    <TextBlock
-                                        Style="{StaticResource LivePageDescriptionStyle}"
-                                        Text="{i18n:Loc Key='player_tools.borrow_an_authored_unit_camera_or_define_393fda'}" />
-                                </StackPanel>
-                                <Border Style="{StaticResource LiveToolInsetStyle}">
-                                    <StackPanel Orientation="Horizontal" Spacing="9">
-                                        <FontIcon FontSize="13" Glyph="&#xE7BA;" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource CardIconBadgeStyle}">
+                                        <FontIcon FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE722;" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="3">
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.third_person_camera'}" />
                                         <TextBlock
                                             Style="{StaticResource CompactSafetyTextStyle}"
-                                            Text="{i18n:Loc Key='player_tools.applying_a_camera_enables_the_third_perso_227bb6'}" />
+                                            Text="{i18n:Loc Key='player_tools.borrow_an_authored_unit_camera_or_define_393fda'}" />
                                     </StackPanel>
+                                </Grid>
+                                <Border Style="{StaticResource LiveToolInsetStyle}">
+                                    <Grid ColumnSpacing="9">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon
+                                            Margin="0,2,0,0"
+                                            VerticalAlignment="Top"
+                                            FontSize="13"
+                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                            Glyph="&#xE7BA;" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Style="{StaticResource CompactSafetyTextStyle}"
+                                            Text="{i18n:Loc Key='player_tools.applying_a_camera_enables_the_third_perso_227bb6'}" />
+                                    </Grid>
                                 </Border>
 
                                 <Grid ColumnSpacing="10">
@@ -214,24 +510,32 @@
                                     </Grid.ColumnDefinitions>
                                     <ComboBox
                                         x:Name="CameraPresetBox"
+                                        HorizontalAlignment="Stretch"
                                         DisplayMemberPath="Name"
                                         Header="{i18n:Loc Key='player_tools.loaded_camera_preset'}"
-                                        HorizontalAlignment="Stretch"
                                         PlaceholderText="{i18n:Loc Key='player_tools.refresh_to_find_loaded_unit_cameras'}"
                                         SelectionChanged="OnCameraPresetSelectionChanged" />
                                     <Button
                                         x:Name="RefreshCamerasButton"
                                         Grid.Column="1"
                                         VerticalAlignment="Bottom"
-                                        Click="OnRefreshCameras"
-                                        Content="{i18n:Loc Key='player_tools.find_cameras'}" />
+                                        Click="OnRefreshCameras">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="14" Glyph="&#xE721;" />
+                                            <TextBlock Text="{i18n:Loc Key='player_tools.find_cameras'}" />
+                                        </StackPanel>
+                                    </Button>
                                     <Button
                                         x:Name="ApplyCameraPresetButton"
                                         Grid.Column="2"
                                         VerticalAlignment="Bottom"
                                         Click="OnApplyCameraPreset"
-                                        Content="{i18n:Loc Key='player_tools.apply_preset'}"
-                                        Style="{StaticResource AccentButtonStyle}" />
+                                        Style="{StaticResource AccentButtonStyle}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="14" Glyph="&#xE73E;" />
+                                            <TextBlock Text="{i18n:Loc Key='player_tools.apply_preset'}" />
+                                        </StackPanel>
+                                    </Button>
                                 </Grid>
                                 <TextBlock
                                     x:Name="CameraPresetDetailText"
@@ -241,7 +545,7 @@
                                 <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
                                 <StackPanel Spacing="4">
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:Loc Key='player_tools.custom_camera'}" />
+                                    <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.custom_camera'}" />
                                     <TextBlock
                                         Style="{StaticResource CompactSafetyTextStyle}"
                                         Text="{i18n:Loc Key='player_tools.offsets_are_local_to_the_player_s_authore_f9a36b'}" />
@@ -253,21 +557,27 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="CameraXBox" Header="{i18n:Loc Key='player_tools.local_x'}" PlaceholderText="0" />
-                                    <TextBox x:Name="CameraYBox" Grid.Column="1" Header="{i18n:Loc Key='player_tools.local_y'}" PlaceholderText="0" />
-                                    <TextBox x:Name="CameraZBox" Grid.Column="2" Header="{i18n:Loc Key='player_tools.local_z'}" PlaceholderText="0" />
-                                    <TextBox x:Name="CameraFovBox" Grid.Column="3" Header="{i18n:Loc Key='player_tools.fov'}" PlaceholderText="70" />
+                                    <TextBox x:Name="CameraXBox" GotFocus="OnBoxGotFocus" Header="{i18n:Loc Key='player_tools.local_x'}" PlaceholderText="0" />
+                                    <TextBox x:Name="CameraYBox" Grid.Column="1" GotFocus="OnBoxGotFocus" Header="{i18n:Loc Key='player_tools.local_y'}" PlaceholderText="0" />
+                                    <TextBox x:Name="CameraZBox" Grid.Column="2" GotFocus="OnBoxGotFocus" Header="{i18n:Loc Key='player_tools.local_z'}" PlaceholderText="0" />
+                                    <TextBox x:Name="CameraFovBox" Grid.Column="3" GotFocus="OnBoxGotFocus" Header="{i18n:Loc Key='player_tools.fov'}" PlaceholderText="70" />
                                 </Grid>
                                 <StackPanel Orientation="Horizontal" Spacing="9">
                                     <Button
                                         x:Name="ApplyCustomCameraButton"
                                         Click="OnApplyCustomCamera"
-                                        Content="{i18n:Loc Key='player_tools.apply_custom_camera'}"
-                                        Style="{StaticResource AccentButtonStyle}" />
-                                    <Button
-                                        x:Name="RestoreCameraButton"
-                                        Click="OnRestoreCamera"
-                                        Content="{i18n:Loc Key='player_tools.restore_authored_camera'}" />
+                                        Style="{StaticResource AccentButtonStyle}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="14" Glyph="&#xE73E;" />
+                                            <TextBlock Text="{i18n:Loc Key='player_tools.apply_custom_camera'}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="RestoreCameraButton" Click="OnRestoreCamera">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="14" Glyph="&#xE7A7;" />
+                                            <TextBlock Text="{i18n:Loc Key='player_tools.restore_authored_camera'}" />
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -275,19 +585,32 @@
                 </ScrollViewer>
             </PivotItem>
 
+            <!-- Combat -->
             <PivotItem Header="{i18n:Loc Key='player_tools.combat'}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Padding="0,12,0,8" Spacing="14">
-                        <Border
-                            HorizontalAlignment="Stretch"
-                            Style="{StaticResource LiveToolCardStyle}">
+                    <Grid Padding="0,12,12,8" ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource LiveToolCardStyle}" VerticalAlignment="Top">
                             <StackPanel Spacing="14">
-                                <StackPanel Spacing="4">
-                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='player_tools.immediate_weapon_actions'}" />
-                                    <TextBlock
-                                        Style="{StaticResource LivePageDescriptionStyle}"
-                                        Text="{i18n:Loc Key='player_tools.move_existing_weapon_animation_interrupti_cf983e'}" />
-                                </StackPanel>
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource CardIconBadgeStyle}">
+                                        <FontIcon FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE768;" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="3">
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.immediate_weapon_actions'}" />
+                                        <TextBlock
+                                            Style="{StaticResource CompactSafetyTextStyle}"
+                                            Text="{i18n:Loc Key='player_tools.move_existing_weapon_animation_interrupti_cf983e'}" />
+                                    </StackPanel>
+                                </Grid>
                                 <ToggleSwitch
                                     x:Name="ImmediateWeaponInterruptionToggle"
                                     Header="{i18n:Loc Key='player_tools.weapon_animation_interruption'}"
@@ -295,46 +618,102 @@
                                     OffContent="{i18n:Loc Key='player_tools.authored_timing'}"
                                     OnContent="{i18n:Loc Key='player_tools.immediate'}"
                                     Toggled="OnWeaponInterruptionToggled" />
-                                <TextBlock
-                                    Style="{StaticResource CompactSafetyTextStyle}"
-                                    Text="{i18n:Loc Key='player_tools.turn_this_off_before_reloading_a_checkpoi_c653df'}" />
+                                <Border Style="{StaticResource LiveToolInsetStyle}">
+                                    <Grid ColumnSpacing="9">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon
+                                            Margin="0,2,0,0"
+                                            VerticalAlignment="Top"
+                                            FontSize="13"
+                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                            Glyph="&#xE7BA;" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Style="{StaticResource CompactSafetyTextStyle}"
+                                            Text="{i18n:Loc Key='player_tools.turn_this_off_before_reloading_a_checkpoi_c653df'}" />
+                                    </Grid>
+                                </Border>
                             </StackPanel>
                         </Border>
 
-                        <Border
-                            HorizontalAlignment="Stretch"
-                            Style="{StaticResource LiveToolCardStyle}">
+                        <Border Grid.Column="1" Style="{StaticResource LiveToolCardStyle}" VerticalAlignment="Top">
                             <StackPanel Spacing="14">
-                                <StackPanel Spacing="4">
-                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{i18n:Loc Key='player_tools.super_punch'}" />
-                                    <TextBlock
-                                        Style="{StaticResource LivePageDescriptionStyle}"
-                                        Text="{i18n:Loc Key='player_tools.multiply_melee_acceleration_so_movable_ob_275450'}" />
-                                </StackPanel>
-                                <ComboBox x:Name="SuperPunchStrengthBox" Header="{i18n:Loc Key='player_tools.punch_strength'}" SelectedIndex="2">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource CardIconBadgeStyle}">
+                                        <FontIcon FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE945;" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="3">
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="{i18n:Loc Key='player_tools.super_punch'}" />
+                                        <TextBlock
+                                            Style="{StaticResource CompactSafetyTextStyle}"
+                                            Text="{i18n:Loc Key='player_tools.multiply_melee_acceleration_so_movable_ob_275450'}" />
+                                    </StackPanel>
+                                </Grid>
+                                <ComboBox
+                                    x:Name="SuperPunchStrengthBox"
+                                    HorizontalAlignment="Stretch"
+                                    Header="{i18n:Loc Key='player_tools.punch_strength'}"
+                                    SelectedIndex="2">
                                     <ComboBoxItem Content="{i18n:Loc Key='player_tools.10_strong'}" Tag="10" />
                                     <ComboBoxItem Content="{i18n:Loc Key='player_tools.25_huge'}" Tag="25" />
                                     <ComboBoxItem Content="{i18n:Loc Key='player_tools.50_across_the_map'}" Tag="50" />
                                     <ComboBoxItem Content="{i18n:Loc Key='player_tools.100_ridiculous'}" Tag="100" />
                                 </ComboBox>
-                                <StackPanel Orientation="Horizontal" Spacing="9">
+                                <Grid ColumnSpacing="9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
                                     <Button
                                         x:Name="EnableSuperPunchButton"
+                                        HorizontalAlignment="Stretch"
                                         Click="OnEnableSuperPunch"
-                                        Content="{i18n:Loc Key='player_tools.enable_super_punch'}"
-                                        Style="{StaticResource AccentButtonStyle}" />
+                                        Style="{StaticResource AccentButtonStyle}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="14" Glyph="&#xE945;" />
+                                            <TextBlock Text="{i18n:Loc Key='player_tools.enable_super_punch'}" />
+                                        </StackPanel>
+                                    </Button>
                                     <Button
                                         x:Name="RestoreSuperPunchButton"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
                                         Click="OnRestoreSuperPunch"
-                                        Content="{i18n:Loc Key='player_tools.restore_normal_punch'}"
-                                        IsEnabled="False" />
-                                </StackPanel>
-                                <TextBlock
-                                    Style="{StaticResource CompactSafetyTextStyle}"
-                                    Text="{i18n:Loc Key='player_tools.shared_melee_effects_used_by_enemies_or_o_c949cd'}" />
+                                        IsEnabled="False">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="14" Glyph="&#xE7A7;" />
+                                            <TextBlock Text="{i18n:Loc Key='player_tools.restore_normal_punch'}" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                                <Border Style="{StaticResource LiveToolInsetStyle}">
+                                    <Grid ColumnSpacing="9">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon
+                                            Margin="0,2,0,0"
+                                            VerticalAlignment="Top"
+                                            FontSize="13"
+                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                            Glyph="&#xE7BA;" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Style="{StaticResource CompactSafetyTextStyle}"
+                                            Text="{i18n:Loc Key='player_tools.shared_melee_effects_used_by_enemies_or_o_c949cd'}" />
+                                    </Grid>
+                                </Border>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    </Grid>
                 </ScrollViewer>
             </PivotItem>
         </Pivot>
@@ -349,9 +728,8 @@
                 x:Name="SummaryText"
                 Grid.Column="1"
                 VerticalAlignment="Center"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
         </Grid>
-
-        <InfoBar x:Name="StatusBar" Grid.Row="3" IsOpen="False" />
     </Grid>
 </Page>

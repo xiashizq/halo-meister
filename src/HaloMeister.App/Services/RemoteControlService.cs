@@ -107,7 +107,7 @@ public sealed class RemoteControlService : IAsyncDisposable
                 if (IsAddressInUse(ex))
                 {
                     throw new InvalidOperationException(
-                        $"TCP port {_listenPort} is already in use. Stop the phone remote in another Halo Meister instance, then try again.",
+                        $"TCP port {_listenPort} is already in use. Stop the phone remote in another Cartographer Toolkit instance, then try again.",
                         ex);
                 }
                 throw;
@@ -189,7 +189,7 @@ public sealed class RemoteControlService : IAsyncDisposable
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 await context.Response.WriteAsJsonAsync(new
                 {
-                    error = "Halo Meister phone remote accepts local-network devices only.",
+                    error = "Cartographer Toolkit phone remote accepts local-network devices only.",
                 });
                 return;
             }
@@ -200,7 +200,7 @@ public sealed class RemoteControlService : IAsyncDisposable
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(new
                 {
-                    error = "This phone is not paired with Halo Meister.",
+                    error = "This phone is not paired with Cartographer Toolkit.",
                 });
                 return;
             }

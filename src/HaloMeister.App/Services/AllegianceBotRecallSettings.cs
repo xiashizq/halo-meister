@@ -18,7 +18,7 @@ public sealed class AllegianceBotRecallSettings
 
     private static readonly string StorePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "HaloMeister",
+        AppPaths.DataFolderName,
         "AllegianceDemo",
         "bot-recall-settings.json");
 

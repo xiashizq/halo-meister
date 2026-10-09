@@ -12,7 +12,7 @@ public sealed class RuntimeCustomizationPreferenceStore
             Environment.SpecialFolder.LocalApplicationData);
         _path = Path.Combine(
             local,
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "runtime-customization.json");
     }
 

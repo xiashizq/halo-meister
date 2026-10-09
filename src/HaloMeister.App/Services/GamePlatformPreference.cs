@@ -22,7 +22,7 @@ public sealed class GamePlatformPreference
     {
         _path = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "game-platform.txt");
         _platform = GamePlatformKind.Steam;
     }

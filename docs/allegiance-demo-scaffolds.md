@@ -15,7 +15,7 @@ spawner falls back to a hostile encounter squad.
 
 ## Bridge requirement
 
-Allegiance Demo needs the scripting bridge shipped with this Halo Meister version (SemVer, the same `major.minor.patch` as the app). A squad spawns in one native wave, with companion setup that survives a full AI-object-state table. Integer bridges older than 110 are not enough. Install/repair the bridge and restart the game.
+Allegiance Demo needs the scripting bridge shipped with this Cartographer Toolkit version (SemVer, the same `major.minor.patch` as the app). A squad spawns in one native wave, with companion setup that survives a full AI-object-state table. Integer bridges older than 110 are not enough. Install/repair the bridge and restart the game.
 
 ## Built-in mod (MMYJ_FULL_VEHI_WAP_P)
 

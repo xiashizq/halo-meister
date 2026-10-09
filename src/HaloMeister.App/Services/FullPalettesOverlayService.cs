@@ -7,11 +7,11 @@ namespace HaloMeister.App.Services;
 
 /// <summary>
 /// Installs a bundled IoStore overlay triplet into the game Paks folder.
-/// The default instance is campaign extras <c>MMYJ_FULL_VEHI_WAP_P</c>
-/// (vehicle/weapon/biped palettes, character-palette fill, dedicated
-/// <c>hm_ally</c>/<c>hm_hostile</c> scaffolds). Character AI
-/// (<c>MMYJ_FULL_CHAR_P</c>) is a separate package in
-/// <see cref="BuiltinModCatalog"/>.
+/// Campaign extras (<c>MMYJ_FULL_VEHI_WAP_P</c>) carry vehicle, weapon, scenery,
+/// machine, and biped palettes plus <c>hm_ally</c>/<c>hm_hostile</c> scaffolds. The fuller
+/// character roster (<c>MMYJ_FULL_CHAR_P</c>) is separate. Combat behavior is
+/// one pack per character. Roster and campaign edits share scenario tags, so
+/// installing both writes a merged copy of each pack.
 /// </summary>
 public sealed class FullPalettesOverlayService
 {
@@ -26,14 +26,38 @@ public sealed class FullPalettesOverlayService
     /// <c>expand-palettes.ps1 -UpdateBundledAssets</c>.
     /// </summary>
     public const string ExpectedBundledFingerprint =
-        "16736:5CA055837686C7B783599317D47BD1593ABD9FB4081CD1F48D251E495F86F3D3|83061758:46A131D44D9C0B3138ED20FF7F54A2793619C1E83FE19C4599059B6F112CE81D|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+        "16736:27E6B11CAA0C226647245DD2CDC5D166979E25656F7DD6AA20523291B608BFFE|83114491:80051E3975F8D1862B320C482A7198007ACFB33FE2537AC5CCB06ECDD0315649|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
 
     /// <summary>
-    /// Trusted fingerprint of the character AI triplet. Empty until
-    /// <c>expand-palettes.ps1 -UpdateBundledAssets</c> ships the split pack.
+    /// Trusted fingerprint of the fuller character-roster triplet.
     /// </summary>
     public const string ExpectedCharacterFingerprint =
-        "840:595AF479BA6BADD491675F7F8C32EE1E6B498F82460B30FE42E0F7B32AEC33D5|277141:4092B92371E4FAACC961A2F3D815DD754435F7EE0B40A242705E28533F56A746|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+        "16736:E374A3C6BC1A31A4D0CD8D55DDE68408121708BA195C918FC03910E4F2009244|82859683:905EBF4D4AA72D20A0E53C4ABA2371C756425D124E4BE24B116BA67A43C5AA92|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+
+    /// <summary>
+    /// Merged campaign file used only while the character roster is also installed.
+    /// </summary>
+    public const string ExpectedCombinedCampaignFingerprint =
+        "16748:BA0E60930BA3011636E75CB1269DBDCEDA1E3006D33DDC191C1213244B53BDFA|83169829:4491D004D514A349D2745A84892AB5E90F3B62CA2267FA8831260CA6CFD6C0C0|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+
+    /// <summary>
+    /// Merged character-roster file used only while campaign extras are also installed.
+    /// </summary>
+    public const string ExpectedCombinedCharacterFingerprint =
+        "16748:9E4D58928FF79935464F0F2CA155A228902B079368DC96261222209C11167DA2|83169829:4491D004D514A349D2745A84892AB5E90F3B62CA2267FA8831260CA6CFD6C0C0|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+
+    public const string ExpectedTrooperFingerprint =
+        "260:AC2D740263025CCA4AE2D69566FF7E66F8ADD2078759D421D1446830B3CF7E1F|49276:194AE4A1B30CCC741F88E63265A9C0793CB4AB3932E7C2DABC43657191D4C2CF|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+    public const string ExpectedEliteFingerprint =
+        "260:B99850DE8D96F2AE69ADCA1183AC655377A9CBCBFF441D10E460513AF9C043E0|50410:567F4181B4A59EFF3BC3D60E3357D9292D7EFC79C81AA5F96DF79382E84251B5|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+    public const string ExpectedGruntFingerprint =
+        "260:68E765A6C23D645BB07B6B448C432564C2DA79452BDC62B2D5529406E72D8207|47007:B6158C4F2F1C90B9083936C324E906060D30BE66C10E7C46DF73B577A90D1208|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+    public const string ExpectedJackalFingerprint =
+        "260:41EB07C84B489F1961FDABB583F51FD51F9C9EBD05303F97A5AAD19FED0A7D48|45252:4AF95C0370A5591DFD6B997FFD2185F9FFC1F33E0EBDC8FD9164E524DCA2878F|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+    public const string ExpectedBruteFingerprint =
+        "260:5DBD38C1AE1C0B1500EBB371913438335E10754F1C86D762912245F558C92929|44290:08D15A29E6CD876BA393514132C5D841383E7FDEA84DEB1AD3D0A22E5F605D79|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
+    public const string ExpectedHunterFingerprint =
+        "260:5413CF8E8625830FE29558752AF2C6B314DFF92881A1C02406728AFFE1D8FAFC|40906:FCDCDA5CA1C6CBFC4347A9FEF4941D2EC2D14E5874E75150D3DCC20F6A2C590F|339:B712C03A695E34CD522446B73C4F71644A402FF141EB19CE66C269FD5676AD8C";
 
     private static readonly object FingerprintCacheGate = new();
     private static string? _fingerprintCacheKey;
@@ -196,6 +220,10 @@ public sealed class FullPalettesOverlayService
         string? bundledVersion = VersionFromFingerprint(bundledFingerprint);
         if (shippingInstalled)
         {
+            BuiltinModSyncStatus? pairStatus = TryScenarioPairStatus(paks, bundledVersion);
+            if (pairStatus is not null)
+                return pairStatus;
+
             string? installedFingerprint = TryFingerprintTriplet(paks, _mod.Stem);
             string? installedVersion = VersionFromFingerprint(installedFingerprint);
             if (installedFingerprint is not null &&
@@ -418,22 +446,210 @@ public sealed class FullPalettesOverlayService
     public FullPalettesOverlayResult Install()
     {
         EnsureGameClosed();
-        string[] sources = ResolveBundledSources();
-        string? bundledFingerprint = TryFingerprintFiles(sources);
-        if (!IsTrustedFingerprint(bundledFingerprint))
+        string paks = ResolvePaksDirectory();
+        if (_mod.Id == BuiltinModCatalog.CampaignId)
+            return InstallCampaign(paks);
+        if (_mod.Id == BuiltinModCatalog.CharactersId)
+            return InstallCharacterRoster(paks);
+
+        return InstallSources(ResolveBundledSources(), _mod.ExpectedFingerprint, paks, _mod.Stem);
+    }
+
+    public FullPalettesOverlayResult Remove()
+    {
+        EnsureGameClosed();
+        string paks = ResolvePaksDirectory();
+        if (_mod.Id == BuiltinModCatalog.CampaignId)
+            return RemoveCampaign(paks);
+        if (_mod.Id == BuiltinModCatalog.CharactersId)
+            return RemoveCharacterRoster(paks);
+
+        var removed = new List<string>();
+        removed.AddRange(RemoveStem(paks, _mod.Stem));
+        foreach (string stem in _mod.LegacyStems)
+            removed.AddRange(RemoveStem(paks, stem));
+
+        if (removed.Count == 0)
+            throw new FileNotFoundException(
+                L.Get("builtin_mod.status_not_installed"));
+
+        return Removed(paks, removed);
+    }
+
+    private bool IsCampaignMod => _mod.Id == BuiltinModCatalog.CampaignId;
+
+    private bool IsCharacterRosterMod => _mod.Id == BuiltinModCatalog.CharactersId;
+
+    private BuiltinModSyncStatus? TryScenarioPairStatus(string paks, string? bundledVersion)
+    {
+        if (!IsCampaignMod && !IsCharacterRosterMod)
+            return null;
+
+        if (IsCombinedPairInstalled(paks))
         {
-            throw new InvalidOperationException(
-                L.Get("builtin_mod.bundle_tampered"));
+            return Status(
+                BuiltinModSyncState.UpToDate,
+                canInstall: false,
+                canRemove: true,
+                needsUpdatePrompt: false,
+                L.Format("builtin_mod.status_ready", bundledVersion),
+                bundledVersion,
+                bundledVersion,
+                sameVersion: true);
         }
 
-        string paks = ResolvePaksDirectory();
+        bool inconsistent;
+        if (IsCampaignMod)
+        {
+            inconsistent = IsPaletteOnlyInstalled(paks) ||
+                FingerprintEquals(paks, OverlayStem, ExpectedCombinedCampaignFingerprint);
+        }
+        else
+        {
+            inconsistent =
+                FingerprintEquals(paks, CharacterOverlayStem, ExpectedCombinedCharacterFingerprint) ||
+                (HasCompleteTriplet(paks, OverlayStem) &&
+                 FingerprintEquals(paks, CharacterOverlayStem, ExpectedCharacterFingerprint));
+        }
+
+        if (!inconsistent)
+            return null;
+
+        string stem = IsCampaignMod ? OverlayStem : CharacterOverlayStem;
+        string? installedVersion = VersionFromFingerprint(TryFingerprintTriplet(paks, stem));
+        return Status(
+            BuiltinModSyncState.Outdated,
+            canInstall: true,
+            canRemove: true,
+            needsUpdatePrompt: true,
+            L.Format(
+                "builtin_mod.status_outdated",
+                installedVersion ?? L.Get("builtin_mod.version_unreadable"),
+                bundledVersion ?? L.Get("builtin_mod.version_unreadable")),
+            installedVersion,
+            bundledVersion,
+            sameVersion: false);
+    }
+
+    private FullPalettesOverlayResult InstallCampaign(string paks)
+    {
         foreach (string stem in _mod.LegacyStems)
             RemoveStem(paks, stem);
-        RemoveStem(paks, _mod.Stem);
-        string[] destinations = sources
-            .Select(source => Path.Combine(paks, Path.GetFileName(source)))
-            .ToArray();
+        bool merge = HasCompleteTriplet(paks, CharacterOverlayStem) &&
+                     (FingerprintEquals(paks, CharacterOverlayStem, ExpectedCharacterFingerprint) ||
+                      FingerprintEquals(paks, CharacterOverlayStem, ExpectedCombinedCharacterFingerprint));
+        if (merge)
+            return InstallCombinedPair(paks);
 
+        return InstallSources(
+            ResolveBundledSources(),
+            ExpectedBundledFingerprint,
+            paks,
+            OverlayStem);
+    }
+
+    private FullPalettesOverlayResult InstallCharacterRoster(string paks)
+    {
+        if (HasCompleteTriplet(paks, OverlayStem))
+            return InstallCombinedPair(paks);
+
+        return InstallSources(
+            ResolveBundledSources(),
+            ExpectedCharacterFingerprint,
+            paks,
+            CharacterOverlayStem);
+    }
+
+    private FullPalettesOverlayResult InstallCombinedPair(string paks)
+    {
+        List<string> files = [];
+        files.AddRange(InstallSources(
+            ResolveCombinedSources(OverlayStem),
+            ExpectedCombinedCampaignFingerprint,
+            paks,
+            OverlayStem).Files);
+        files.AddRange(InstallSources(
+            ResolveCombinedSources(CharacterOverlayStem),
+            ExpectedCombinedCharacterFingerprint,
+            paks,
+            CharacterOverlayStem).Files);
+        return new FullPalettesOverlayResult(
+            Installed: true,
+            PaksDirectory: paks,
+            Files: files,
+            Message: L.Get("builtin_mod.installed_restart"));
+    }
+
+    private FullPalettesOverlayResult RemoveCampaign(string paks)
+    {
+        bool restoreRoster = FingerprintEquals(
+            paks,
+            CharacterOverlayStem,
+            ExpectedCombinedCharacterFingerprint);
+        var removed = new List<string>();
+        removed.AddRange(RemoveStem(paks, OverlayStem));
+        foreach (string stem in _mod.LegacyStems)
+            removed.AddRange(RemoveStem(paks, stem));
+        if (removed.Count == 0)
+            throw new FileNotFoundException(L.Get("builtin_mod.status_not_installed"));
+
+        if (restoreRoster)
+        {
+            InstallSources(
+                ResolveBundledTriplet(CharacterOverlayStem),
+                ExpectedCharacterFingerprint,
+                paks,
+                CharacterOverlayStem);
+        }
+
+        return Removed(paks, removed);
+    }
+
+    private FullPalettesOverlayResult RemoveCharacterRoster(string paks)
+    {
+        bool restoreCampaign = FingerprintEquals(
+            paks,
+            OverlayStem,
+            ExpectedCombinedCampaignFingerprint);
+        List<string> removed = RemoveStem(paks, CharacterOverlayStem);
+        if (removed.Count == 0)
+            throw new FileNotFoundException(L.Get("builtin_mod.status_not_installed"));
+
+        if (restoreCampaign)
+        {
+            InstallSources(
+                ResolveBundledTriplet(OverlayStem),
+                ExpectedBundledFingerprint,
+                paks,
+                OverlayStem);
+        }
+
+        return Removed(paks, removed);
+    }
+
+    private static FullPalettesOverlayResult Removed(string paks, IReadOnlyList<string> files) =>
+        new(
+            Installed: false,
+            PaksDirectory: paks,
+            Files: files,
+            Message: L.Get("builtin_mod.removed_restart"));
+
+    private FullPalettesOverlayResult InstallSources(
+        string[] sources,
+        string expectedFingerprint,
+        string paks,
+        string stem)
+    {
+        string? fingerprint = TryFingerprintFiles(sources);
+        if (!string.Equals(fingerprint, expectedFingerprint, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(L.Get("builtin_mod.bundle_tampered"));
+        }
+
+        RemoveStem(paks, stem);
+        string[] destinations = Extensions
+            .Select(extension => Path.Combine(paks, stem + extension))
+            .ToArray();
         var copied = new List<string>();
         try
         {
@@ -462,24 +678,47 @@ public sealed class FullPalettesOverlayService
             Message: L.Get("builtin_mod.installed_restart"));
     }
 
-    public FullPalettesOverlayResult Remove()
+    private static bool IsCombinedPairInstalled(string paks) =>
+        FingerprintEquals(paks, OverlayStem, ExpectedCombinedCampaignFingerprint) &&
+        FingerprintEquals(paks, CharacterOverlayStem, ExpectedCombinedCharacterFingerprint);
+
+    private static bool IsPaletteOnlyInstalled(string paks) =>
+        FingerprintEquals(paks, CharacterOverlayStem, ExpectedCharacterFingerprint);
+
+    private static bool FingerprintEquals(string paks, string stem, string expected) =>
+        HasCompleteTriplet(paks, stem) &&
+        string.Equals(
+            TryFingerprintTriplet(paks, stem),
+            expected,
+            StringComparison.Ordinal);
+
+    private string[] ResolveBundledTriplet(string stem) =>
+        ResolveOverlayTriplet("", stem);
+
+    private string[] ResolveCombinedSources(string stem) =>
+        ResolveOverlayTriplet("Combined", stem);
+
+    private string[] ResolveOverlayTriplet(string relativeDirectory, string stem)
     {
-        EnsureGameClosed();
-        string paks = ResolvePaksDirectory();
-        var removed = new List<string>();
-        removed.AddRange(RemoveStem(paks, _mod.Stem));
-        foreach (string stem in _mod.LegacyStems)
-            removed.AddRange(RemoveStem(paks, stem));
+        foreach (string root in OverlayRoots())
+        {
+            string directory = string.IsNullOrEmpty(relativeDirectory)
+                ? root
+                : Path.Combine(root, relativeDirectory);
+            string[] candidates = Extensions
+                .Select(extension => Path.Combine(directory, stem + extension))
+                .ToArray();
+            if (candidates.All(File.Exists))
+                return candidates;
+        }
 
-        if (removed.Count == 0)
-            throw new FileNotFoundException(
-                L.Get("builtin_mod.status_not_installed"));
+        throw new FileNotFoundException(L.Get("builtin_mod.bundle_missing"));
+    }
 
-        return new FullPalettesOverlayResult(
-            Installed: false,
-            PaksDirectory: paks,
-            Files: removed,
-            Message: L.Get("builtin_mod.removed_restart"));
+    private static IEnumerable<string> OverlayRoots()
+    {
+        yield return Path.Combine(AppContext.BaseDirectory, "Assets", "Overlays");
+        yield return Path.Combine(AppContext.BaseDirectory, "Overlays");
     }
 
     private void EnsureGameClosed()

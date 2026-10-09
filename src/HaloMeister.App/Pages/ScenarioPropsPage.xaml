@@ -215,10 +215,6 @@
                 x:Name="ConnectionText"
                 FontSize="12"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            <InfoBar
-                x:Name="StatusBar"
-                IsClosable="True"
-                IsOpen="False" />
         </StackPanel>
     </Grid>
 </Page>

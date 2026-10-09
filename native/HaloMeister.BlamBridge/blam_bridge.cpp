@@ -2357,7 +2357,7 @@ std::string delete_spawned_object(const SpawnRequest& request)
         module,
         request.unit_datum,
         &exception_address);
-    if (exception_code != 0)
+    if (exception_code != 0 && exception_code != EXCEPTION_ACCESS_VIOLATION)
     {
         char message[224]{};
         std::snprintf(

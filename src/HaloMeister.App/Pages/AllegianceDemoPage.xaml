@@ -4,15 +4,52 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:i18n="using:HaloMeister.App.Localization">
 
-    <Grid Padding="24,20,24,16" RowSpacing="10">
+    <Page.Resources>
+        <SolidColorBrush x:Key="FriendlyBrush" Color="#4CAF78" />
+        <SolidColorBrush x:Key="HostileBrush" Color="#E05656" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#E0A83C" />
+        <SolidColorBrush x:Key="IdleBrush" Color="#808080" />
+        <SolidColorBrush x:Key="FriendlyChipBrush" Color="#334CAF78" />
+        <SolidColorBrush x:Key="HostileChipBrush" Color="#33E05656" />
+
+        <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="ChipBorderStyle" TargetType="Border">
+            <Setter Property="Padding" Value="9,2" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="RowButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="11,5" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style
+            x:Key="RowAccentButtonStyle"
+            BasedOn="{StaticResource AccentButtonStyle}"
+            TargetType="Button">
+            <Setter Property="Padding" Value="11,5" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+    </Page.Resources>
+
+    <Grid Padding="24,20,24,16" RowSpacing="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- Header -->
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -24,23 +61,36 @@
                     Style="{ThemeResource TitleTextBlockStyle}"
                     Text="{i18n:Loc Key='allegiance_demo.title'}" />
                 <TextBlock
+                    MaxLines="1"
                     Style="{StaticResource CompactSafetyTextStyle}"
                     Text="{i18n:Loc Key='allegiance_demo.description'}"
-                    TextTrimming="CharacterEllipsis"
-                    MaxLines="1" />
+                    TextTrimming="CharacterEllipsis" />
             </StackPanel>
             <StackPanel
                 Grid.Column="1"
+                VerticalAlignment="Center"
                 Orientation="Horizontal"
-                Spacing="8"
-                VerticalAlignment="Center">
-                <TextBlock
-                    x:Name="BridgeStatusText"
-                    MaxWidth="260"
-                    VerticalAlignment="Center"
-                    Style="{StaticResource CompactSafetyTextStyle}"
-                    TextTrimming="CharacterEllipsis"
-                    TextWrapping="NoWrap" />
+                Spacing="8">
+                <Border
+                    Padding="10,4"
+                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                    CornerRadius="12">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse
+                            x:Name="StatusDot"
+                            Width="8"
+                            Height="8"
+                            VerticalAlignment="Center"
+                            Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock
+                            x:Name="BridgeStatusText"
+                            MaxWidth="260"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource CompactSafetyTextStyle}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                    </StackPanel>
+                </Border>
                 <ProgressRing
                     x:Name="BusyRing"
                     Width="18"
@@ -52,8 +102,12 @@
                 Grid.Column="2"
                 VerticalAlignment="Center"
                 Click="OnScan"
-                Content="{i18n:Loc Key='allegiance_demo.scan'}"
-                Style="{StaticResource AccentButtonStyle}" />
+                Style="{StaticResource AccentButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <SymbolIcon Symbol="Refresh" />
+                    <TextBlock Text="{i18n:Loc Key='allegiance_demo.scan'}" />
+                </StackPanel>
+            </Button>
         </Grid>
 
         <InfoBar
@@ -61,9 +115,9 @@
             Grid.Row="1"
             IsClosable="False"
             IsOpen="False"
+            Message="{i18n:Loc Key='allegiance_demo.mod_required_body'}"
             Severity="Warning"
-            Title="{i18n:Loc Key='allegiance_demo.mod_required_title'}"
-            Message="{i18n:Loc Key='allegiance_demo.mod_required_body'}">
+            Title="{i18n:Loc Key='allegiance_demo.mod_required_title'}">
             <InfoBar.ActionButton>
                 <Button
                     Click="OnOpenBuiltinMod"
@@ -76,83 +130,165 @@
             Grid.Row="2"
             ColumnSpacing="14">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.1*" MinWidth="280" />
-                <ColumnDefinition Width="1.4*" MinWidth="360" />
+                <ColumnDefinition Width="1*" MinWidth="300" />
+                <ColumnDefinition Width="1.5*" MinWidth="420" />
             </Grid.ColumnDefinitions>
 
             <!-- Left: catalog -->
-            <Border Style="{StaticResource LiveToolCardStyle}">
-                <Grid RowSpacing="8">
+            <Border Padding="16,14" Style="{StaticResource LiveToolCardStyle}">
+                <Grid RowSpacing="10">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            FontWeight="SemiBold"
-                            Text="{i18n:Loc Key='allegiance_demo.catalog_title'}" />
-                        <TextBox
-                            x:Name="CharacterFilterBox"
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon
+                                VerticalAlignment="Center"
+                                FontSize="16"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                Glyph="&#xE716;" />
+                            <TextBlock
+                                Style="{StaticResource CardTitleStyle}"
+                                Text="{i18n:Loc Key='allegiance_demo.catalog_title'}" />
+                        </StackPanel>
+                        <Border
                             Grid.Column="1"
-                            PlaceholderText="{i18n:Loc Key='allegiance_demo.filter_characters'}"
-                            TextChanged="OnCharacterFilterChanged" />
+                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                            Style="{StaticResource ChipBorderStyle}">
+                            <TextBlock
+                                x:Name="CatalogCountText"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="0" />
+                        </Border>
                     </Grid>
 
-                    <ListView
-                        x:Name="CharacterList"
+                    <TextBox
+                        x:Name="CharacterFilterBox"
                         Grid.Row="1"
-                        SelectionMode="None">
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                <Setter Property="Padding" Value="8,6" />
-                                <Setter Property="MinHeight" Value="0" />
-                            </Style>
-                        </ListView.ItemContainerStyle>
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Grid ColumnSpacing="10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Spacing="2" VerticalAlignment="Center">
-                                        <TextBlock
-                                            FontWeight="SemiBold"
-                                            Text="{Binding DisplayName}"
-                                            TextTrimming="CharacterEllipsis"
-                                            ToolTipService.ToolTip="{Binding DisplayName}" />
-                                        <TextBlock
-                                            FontSize="11"
-                                            Opacity="0.62"
-                                            Text="{Binding Category}"
-                                            TextTrimming="CharacterEllipsis"
-                                            ToolTipService.ToolTip="{Binding Category}" />
-                                    </StackPanel>
-                                    <Button
-                                        Grid.Column="1"
-                                        MinWidth="64"
-                                        Padding="12,5"
-                                        VerticalAlignment="Center"
-                                        Click="OnAddCharacterRow"
-                                        Content="{i18n:Loc Key='allegiance_demo.add'}"
-                                        Style="{StaticResource AccentButtonStyle}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                        CornerRadius="6"
+                        PlaceholderText="{i18n:Loc Key='allegiance_demo.filter_characters'}"
+                        TextChanged="OnCharacterFilterChanged" />
+
+                    <Grid Grid.Row="2">
+                        <ListView
+                            x:Name="CharacterList"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            SelectionMode="None">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0,0,0,4" />
+                                    <Setter Property="MinHeight" Value="0" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Padding="10,7"
+                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                        CornerRadius="8">
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border
+                                                Width="32"
+                                                Height="32"
+                                                Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                                CornerRadius="16">
+                                                <FontIcon
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="14"
+                                                    Glyph="&#xE77B;" />
+                                            </Border>
+                                            <StackPanel
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Spacing="1">
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock
+                                                        FontWeight="SemiBold"
+                                                        Text="{Binding DisplayName}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        ToolTipService.ToolTip="{Binding DisplayName}" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="{Binding SecondaryName}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        Visibility="{Binding SecondaryNameVisibility}" />
+                                                </Grid>
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{Binding Category}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    ToolTipService.ToolTip="{Binding Category}" />
+                                            </StackPanel>
+                                            <StackPanel
+                                                Grid.Column="2"
+                                                VerticalAlignment="Center"
+                                                Orientation="Horizontal"
+                                                Spacing="6">
+                                                <Button
+                                                    Click="OnAddFriendly"
+                                                    Content="{i18n:Loc Key='allegiance_demo.add_friendly'}"
+                                                    Style="{StaticResource RowAccentButtonStyle}" />
+                                                <Button
+                                                    Click="OnAddHostile"
+                                                    Content="{i18n:Loc Key='allegiance_demo.add_hostile'}"
+                                                    Style="{StaticResource RowButtonStyle}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <StackPanel
+                            x:Name="EmptyCatalogPanel"
+                            Margin="20"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8">
+                            <FontIcon
+                                FontSize="32"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE721;" />
+                            <TextBlock
+                                x:Name="EmptyCatalogText"
+                                MaxWidth="280"
+                                HorizontalAlignment="Center"
+                                Style="{StaticResource CompactSafetyTextStyle}"
+                                TextAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
                 </Grid>
             </Border>
 
             <!-- Right: roster -->
-            <Border Grid.Column="1" Style="{StaticResource LiveToolCardStyle}">
-                <Grid RowSpacing="8">
+            <Border
+                Grid.Column="1"
+                Padding="16,14"
+                Style="{StaticResource LiveToolCardStyle}">
+                <Grid RowSpacing="10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
@@ -167,14 +303,36 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                            <TextBlock
-                                FontWeight="SemiBold"
-                                Text="{i18n:Loc Key='allegiance_demo.roster_title'}" />
-                            <TextBlock
-                                x:Name="RosterSummaryText"
+                        <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center">
+                            <FontIcon
                                 VerticalAlignment="Center"
-                                Style="{StaticResource CompactSafetyTextStyle}" />
+                                FontSize="16"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                Glyph="&#xE902;" />
+                            <TextBlock
+                                Style="{StaticResource CardTitleStyle}"
+                                Text="{i18n:Loc Key='allegiance_demo.roster_title'}" />
+                            <Border Background="{StaticResource FriendlyChipBrush}" Style="{StaticResource ChipBorderStyle}">
+                                <TextBlock
+                                    x:Name="FriendlyChipText"
+                                    FontSize="12"
+                                    Foreground="{StaticResource FriendlyBrush}" />
+                            </Border>
+                            <Border Background="{StaticResource HostileChipBrush}" Style="{StaticResource ChipBorderStyle}">
+                                <TextBlock
+                                    x:Name="HostileChipText"
+                                    FontSize="12"
+                                    Foreground="{StaticResource HostileBrush}" />
+                            </Border>
+                            <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" Style="{StaticResource ChipBorderStyle}">
+                                <TextBlock
+                                    x:Name="TotalChipText"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Border>
                         </StackPanel>
                         <Button
                             x:Name="RecallSettingsButton"
@@ -213,100 +371,157 @@
                     <Grid Grid.Row="1">
                         <ListView
                             x:Name="SquadList"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
                             SelectionMode="None">
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem">
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                    <Setter Property="Padding" Value="8,8" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0,0,0,6" />
                                     <Setter Property="MinHeight" Value="0" />
                                 </Style>
                             </ListView.ItemContainerStyle>
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid RowSpacing="8">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <StackPanel Spacing="2">
-                                            <TextBlock
-                                                FontWeight="SemiBold"
-                                                Text="{Binding DisplayName}"
-                                                TextTrimming="CharacterEllipsis"
-                                                ToolTipService.ToolTip="{Binding DisplayName}" />
-                                            <TextBlock
-                                                FontSize="11"
-                                                Opacity="0.62"
-                                                Text="{Binding CategoryLabel}"
-                                                TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                        <Grid Grid.Row="1" ColumnSpacing="8">
+                                    <Border
+                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                        CornerRadius="8">
+                                        <Grid ColumnSpacing="0">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="108" />
-                                                <ColumnDefinition Width="88" />
+                                                <ColumnDefinition Width="4" />
                                                 <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <ComboBox
-                                                Width="108"
-                                                Header="{i18n:Loc Key='allegiance_demo.choose_team'}"
-                                                DisplayMemberPath="Label"
-                                                ItemsSource="{Binding TeamChoices}"
-                                                SelectedItem="{Binding SelectedTeam, Mode=TwoWay}" />
-                                            <NumberBox
+                                            <Border
+                                                Background="{Binding TeamBrush}"
+                                                CornerRadius="8,0,0,8" />
+                                            <Grid
                                                 Grid.Column="1"
-                                                Header="{i18n:Loc Key='allegiance_demo.quantity'}"
-                                                LargeChange="5"
-                                                Maximum="50"
-                                                Minimum="1"
-                                                SmallChange="1"
-                                                SpinButtonPlacementMode="Compact"
-                                                Value="{Binding QuantityValue, Mode=TwoWay}" />
-                                            <ComboBox
-                                                Grid.Column="2"
-                                                Header="{i18n:Loc Key='allegiance_demo.weapon'}"
-                                                HorizontalAlignment="Stretch"
-                                                MinWidth="0"
-                                                DisplayMemberPath="Label"
-                                                ItemsSource="{Binding WeaponChoices}"
-                                                SelectedItem="{Binding SelectedWeapon, Mode=TwoWay}" />
-                                            <ComboBox
-                                                Grid.Column="3"
-                                                Header="{i18n:Loc Key='allegiance_demo.weapon_variant'}"
-                                                HorizontalAlignment="Stretch"
-                                                MinWidth="0"
-                                                DisplayMemberPath="Label"
-                                                IsEnabled="{Binding CanSelectWeaponVariant}"
-                                                ItemsSource="{Binding WeaponVariantChoices}"
-                                                SelectedItem="{Binding SelectedWeaponVariant, Mode=TwoWay}" />
-                                            <Button
-                                                Grid.Column="4"
-                                                Width="36"
-                                                Height="32"
-                                                Margin="0,0,0,2"
-                                                Padding="0"
-                                                VerticalAlignment="Bottom"
-                                                Click="OnRemoveRow"
-                                                ToolTipService.ToolTip="{i18n:Loc Key='allegiance_demo.remove_row'}">
-                                                <SymbolIcon Symbol="Delete" />
-                                            </Button>
+                                                Padding="12,8,10,10"
+                                                RowSpacing="8">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock
+                                                                FontWeight="SemiBold"
+                                                                Text="{Binding DisplayName}"
+                                                                TextTrimming="CharacterEllipsis"
+                                                                ToolTipService.ToolTip="{Binding DisplayName}" />
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                VerticalAlignment="Center"
+                                                                FontSize="11"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Text="{Binding SecondaryName}"
+                                                                TextTrimming="CharacterEllipsis"
+                                                                Visibility="{Binding SecondaryNameVisibility}" />
+                                                        </Grid>
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Text="{Binding Category}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                    <ComboBox
+                                                        Grid.Column="1"
+                                                        Width="96"
+                                                        VerticalAlignment="Center"
+                                                        DisplayMemberPath="Label"
+                                                        ItemsSource="{Binding TeamChoices}"
+                                                        SelectedItem="{Binding SelectedTeam, Mode=TwoWay}"
+                                                        ToolTipService.ToolTip="{i18n:Loc Key='allegiance_demo.choose_team'}" />
+                                                    <NumberBox
+                                                        Grid.Column="2"
+                                                        Width="148"
+                                                        MinWidth="148"
+                                                        VerticalAlignment="Center"
+                                                        LargeChange="5"
+                                                        Maximum="50"
+                                                        Minimum="1"
+                                                        SmallChange="1"
+                                                        SpinButtonPlacementMode="Inline"
+                                                        ToolTipService.ToolTip="{i18n:Loc Key='allegiance_demo.quantity'}"
+                                                        Value="{Binding QuantityValue, Mode=TwoWay}" />
+                                                    <Button
+                                                        Grid.Column="3"
+                                                        Width="34"
+                                                        Height="32"
+                                                        Padding="0"
+                                                        VerticalAlignment="Center"
+                                                        Click="OnRemoveRow"
+                                                        ToolTipService.ToolTip="{i18n:Loc Key='allegiance_demo.remove_row'}">
+                                                        <SymbolIcon Symbol="Delete" />
+                                                    </Button>
+                                                </Grid>
+
+                                                <Grid Grid.Row="1" ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox
+                                                        MinWidth="0"
+                                                        HorizontalAlignment="Stretch"
+                                                        DisplayMemberPath="Name"
+                                                        Header="{i18n:Loc Key='allegiance_demo.character_variant'}"
+                                                        IsEnabled="{Binding CanSelectVariant}"
+                                                        ItemsSource="{Binding VariantChoices}"
+                                                        SelectedItem="{Binding SelectedVariant, Mode=TwoWay}" />
+                                                    <ComboBox
+                                                        Grid.Column="1"
+                                                        MinWidth="0"
+                                                        HorizontalAlignment="Stretch"
+                                                        DisplayMemberPath="Label"
+                                                        Header="{i18n:Loc Key='allegiance_demo.weapon'}"
+                                                        ItemsSource="{Binding WeaponChoices}"
+                                                        SelectedItem="{Binding SelectedWeapon, Mode=TwoWay}" />
+                                                    <ComboBox
+                                                        Grid.Column="2"
+                                                        MinWidth="0"
+                                                        HorizontalAlignment="Stretch"
+                                                        DisplayMemberPath="Label"
+                                                        Header="{i18n:Loc Key='allegiance_demo.weapon_variant'}"
+                                                        IsEnabled="{Binding CanSelectWeaponVariant}"
+                                                        ItemsSource="{Binding WeaponVariantChoices}"
+                                                        SelectedItem="{Binding SelectedWeaponVariant, Mode=TwoWay}" />
+                                                </Grid>
+                                            </Grid>
                                         </Grid>
-                                    </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
-                        <Border
+                        <StackPanel
                             x:Name="EmptySquadPanel"
-                            Style="{StaticResource LiveToolInsetStyle}"
+                            Margin="20"
+                            HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            HorizontalAlignment="Stretch"
-                            Margin="20">
+                            Spacing="8">
+                            <FontIcon
+                                FontSize="32"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE902;" />
                             <TextBlock
+                                HorizontalAlignment="Center"
                                 Style="{StaticResource CompactSafetyTextStyle}"
                                 Text="{i18n:Loc Key='allegiance_demo.no_squad_members'}"
                                 TextAlignment="Center" />
-                        </Border>
+                        </StackPanel>
                     </Grid>
 
                     <TextBlock
@@ -323,7 +538,7 @@
             HorizontalAlignment="Stretch"
             HorizontalContentAlignment="Stretch"
             Header="{i18n:Loc Key='allegiance_demo.advanced_reinforce'}">
-            <Grid ColumnSpacing="10" Padding="0,8,0,0">
+            <Grid Padding="0,8,0,0" ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="160" />
                     <ColumnDefinition Width="Auto" />
@@ -351,11 +566,5 @@
                     TextTrimming="CharacterEllipsis" />
             </Grid>
         </Expander>
-
-        <InfoBar
-            x:Name="StatusBar"
-            Grid.Row="4"
-            IsClosable="True"
-            IsOpen="False" />
     </Grid>
 </Page>

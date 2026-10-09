@@ -70,6 +70,7 @@ fn run() -> Result<()> {
     let mut output = None;
     let mut inspect = None;
     let mut expand_palettes = false;
+    let mut expand_split = false;
     let mut expand_characters = false;
     let mut ensure_demo_squads = false;
     let mut dump_demo_squads = false;
@@ -84,6 +85,7 @@ fn run() -> Result<()> {
             "--output" => output = args.next().map(PathBuf::from),
             "--inspect" => inspect = args.next().map(|value| value.to_string_lossy().into_owned()),
             "--expand-palettes" => expand_palettes = true,
+            "--expand-split" => expand_split = true,
             "--expand-characters" => expand_characters = true,
             "--ensure-demo-squads" => ensure_demo_squads = true,
             "--dump-demo-squads" => dump_demo_squads = true,
@@ -123,21 +125,32 @@ fn run() -> Result<()> {
     }
     if expand_palettes {
         let output = priority_output(output.context("--output is required with --expand-palettes")?);
-        let report = expand_palettes::expand_all_mission_palettes(&archives, &output, dry_run)?;
+        let report = expand_palettes::expand_all_mission_palettes(
+            &archives,
+            &output,
+            dry_run,
+            expand_palettes::ExpandParts::CAMPAIGN,
+        )?;
         for line in &report.lines {
             println!("{line}");
         }
         println!(
-            "Summary: {} / {} scenario(s) changed from catalogs of {} biped(s)/{} vehicle(s)/{} weapon(s)/{} safe AI character(s); +{} biped, +{} vehicle, +{} weapon, +{} character palette entries ({} skipped by 64-cap); +{} hm_ally ({} hostile-fallback), +{} hm_hostile",
+            "Summary: {} / {} scenario(s) changed from catalogs of {} biped(s)/{} vehicle(s)/{} weapon(s)/{} scenery/{} machine(s)/{} safe AI character(s); +{} biped, +{} vehicle, +{} weapon, +{} scenery ({} skipped by 256-cap), +{} machine ({} skipped by 256-cap), +{} character palette entries ({} skipped by 64-cap); +{} hm_ally ({} hostile-fallback), +{} hm_hostile",
             report.scenarios_changed,
             report.scenarios_seen,
             report.biped_catalog,
             report.vehicle_catalog,
             report.weapon_catalog,
+            report.scenery_catalog,
+            report.machine_catalog,
             report.character_catalog,
             report.biped_added_total,
             report.vehicle_added_total,
             report.weapon_added_total,
+            report.scenery_added_total,
+            report.scenery_skipped_cap,
+            report.machine_added_total,
+            report.machine_skipped_cap,
             report.character_added_total,
             report.character_skipped_cap,
             report.ally_added,
@@ -146,11 +159,47 @@ fn run() -> Result<()> {
         );
         return Ok(());
     }
+    if expand_split {
+        let output_dir = output.context("--output is required with --expand-split")?;
+        std::fs::create_dir_all(&output_dir)
+            .with_context(|| format!("could not create {}", output_dir.display()))?;
+        let combined_dir = output_dir.join("combined");
+        std::fs::create_dir_all(&combined_dir)
+            .with_context(|| format!("could not create {}", combined_dir.display()))?;
+        let campaign = output_dir.join("MMYJ_FULL_VEHI_WAP_P.utoc");
+        let characters = output_dir.join("MMYJ_FULL_CHAR_P.utoc");
+        let combined_campaign = combined_dir.join("MMYJ_FULL_VEHI_WAP_P.utoc");
+        let combined_characters = combined_dir.join("MMYJ_FULL_CHAR_P.utoc");
+        let lines = expand_palettes::write_split_palette_overlays(
+            &archives,
+            &expand_palettes::SplitPalettePaths {
+                campaign: &campaign,
+                characters: &characters,
+                combined_campaign: &combined_campaign,
+                combined_characters: &combined_characters,
+            },
+            dry_run,
+        )?;
+        for line in &lines {
+            println!("{line}");
+        }
+        let ai = expand_palettes::write_character_ai_packs(&archives, &output_dir, dry_run)?;
+        for line in &ai.lines {
+            println!("{line}");
+        }
+        println!(
+            "Summary: split palette overlays plus {} character enhancement pack(s){}",
+            ai.written,
+            if dry_run { " (dry run)" } else { "" }
+        );
+        return Ok(());
+    }
     if expand_characters {
-        let output =
-            priority_output(output.context("--output is required with --expand-characters")?);
+        let output_dir = output.context("--output is required with --expand-characters")?;
+        std::fs::create_dir_all(&output_dir)
+            .with_context(|| format!("could not create {}", output_dir.display()))?;
         let report =
-            expand_palettes::write_character_ai_overlay(&archives, &output, dry_run)?;
+            expand_palettes::write_character_ai_packs(&archives, &output_dir, dry_run)?;
         for line in &report.lines {
             println!("{line}");
         }

@@ -4,7 +4,7 @@ internal static class AppLanguageStore
 {
     private static readonly string StorePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "HaloMeister",
+        AppPaths.DataFolderName,
         "ui-language.txt");
 
     public static string? Load()

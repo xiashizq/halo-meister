@@ -245,7 +245,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(L.Format("shell.patch_snapshot_failed", ex.Message), InfoBarSeverity.Error);
+            Report(L.Format("shell.patch_snapshot_failed", UserFacingErrors.Format(ex)), InfoBarSeverity.Error);
         }
     }
 
@@ -297,7 +297,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_launch"));
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("shell.could_not_launch"));
         }
     }
 
@@ -407,7 +407,7 @@ public sealed partial class MainWindow : Window
             SetLiveToolsCard(
                 LiveToolsCardKind.Failed,
                 detailLiteral: ex.Message);
-            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_install_bridge"));
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("shell.could_not_install_bridge"));
         }
         finally
         {
@@ -845,7 +845,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_uninstall_bridge"));
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("shell.could_not_uninstall_bridge"));
         }
         finally
         {
@@ -881,7 +881,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_change_bridge_folder"));
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("shell.could_not_change_bridge_folder"));
         }
     }
 
@@ -896,9 +896,13 @@ public sealed partial class MainWindow : Window
     }
 
     public void ReportCrash(Exception ex)
-        => Report(ex.Message, InfoBarSeverity.Error, L.Get("common.something_went_wrong"));
+        => Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("common.something_went_wrong"));
 
-    private void Report(string message, InfoBarSeverity severity = InfoBarSeverity.Informational, string? title = null)
+    public void Report(
+        string message,
+        InfoBarSeverity severity = InfoBarSeverity.Informational,
+        string? title = null,
+        bool sanitize = true)
     {
         _statusDismissTimer.Stop();
         Status.Title = title ?? severity switch
@@ -908,12 +912,21 @@ public sealed partial class MainWindow : Window
             InfoBarSeverity.Success => L.Get("common.done"),
             _ => L.Get("common.info"),
         };
-        Status.Message = message;
+        Status.Message = sanitize
+            ? UserFacingErrors.ForDisplay(message, severity)
+            : message;
         Status.Severity = severity;
         Status.Visibility = Visibility.Visible;
         Status.IsOpen = true;
         if (severity == InfoBarSeverity.Success)
             _statusDismissTimer.Start();
+    }
+
+    public void DismissStatus()
+    {
+        _statusDismissTimer.Stop();
+        Status.IsOpen = false;
+        Status.Visibility = Visibility.Collapsed;
     }
 
     private static Type ResolvePageType(string? tag) => tag switch
@@ -992,7 +1005,7 @@ public sealed partial class MainWindow : Window
             catch (Exception ex)
             {
                 App.LogCrash("Navigate", ex);
-                Report(ex.Message, InfoBarSeverity.Error);
+                Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
             }
             return;
         }
@@ -1029,7 +1042,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             App.LogCrash("Navigate", ex);
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
         finally
         {
@@ -1148,7 +1161,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1174,7 +1187,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             _state.Unload();
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1198,7 +1211,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1227,7 +1240,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1244,7 +1257,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1268,7 +1281,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error);
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error);
         }
     }
 
@@ -1306,7 +1319,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             Report(
-                L.Format("shell.auth_load_failed", ex.Message),
+                L.Format("shell.auth_load_failed", UserFacingErrors.Format(ex)),
                 InfoBarSeverity.Warning,
                 L.Get("shell.auth_unavailable"));
         }
@@ -1372,7 +1385,7 @@ public sealed partial class MainWindow : Window
             }
             catch (Exception ex)
             {
-                Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_save_auth"));
+                Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("shell.could_not_save_auth"));
             }
             return;
         }
@@ -1393,7 +1406,7 @@ public sealed partial class MainWindow : Window
             _awaitingAuthCapture = false;
             _authSavedDuringCapture = false;
             UpdateCloudActions();
-            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_start_capture"));
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("shell.could_not_start_capture"));
         }
     }
 
@@ -1451,7 +1464,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.playfab_failed"));
+            Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("shell.playfab_failed"));
         }
         finally
         {
@@ -1477,7 +1490,7 @@ public sealed partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    Report(ex.Message, InfoBarSeverity.Error, L.Get("shell.could_not_save_auth"));
+                    Report(UserFacingErrors.Format(ex), InfoBarSeverity.Error, L.Get("shell.could_not_save_auth"));
                 }
             }
             UpdateCloudActions();

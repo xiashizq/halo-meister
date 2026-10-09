@@ -31,7 +31,7 @@ public sealed class PlayerLocationStore
             Environment.SpecialFolder.LocalApplicationData);
         _locationsPath = Path.Combine(
             localAppData,
-            "HaloMeister",
+            AppPaths.DataFolderName,
             "PlayerTools",
             "locations.json");
     }

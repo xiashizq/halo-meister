@@ -6,7 +6,7 @@ namespace HaloMeister.App.Services;
 
 /// <summary>
 /// Persists the user's WinINet proxy settings before capture. Titanium restores settings
-/// during a clean stop; this snapshot also repairs an orphaned Halo Meister proxy on the
+/// during a clean stop; this snapshot also repairs an orphaned Cartographer Toolkit proxy on the
 /// next launch after a crash or debugger termination.
 /// </summary>
 internal sealed class WindowsProxyRecovery
@@ -16,7 +16,7 @@ internal sealed class WindowsProxyRecovery
 
     private readonly string _recoveryPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "HaloMeister",
+        AppPaths.DataFolderName,
         "proxy-recovery.json");
 
     public void RecoverStaleProxy()

@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Text;
 using HaloMeister.App.Models;
 using HaloMeister.App.Localization;
@@ -9,6 +9,31 @@ public sealed record LoadableWeapon(string Name, RuntimeTagEntry Tag)
 {
     public string ImageUri => ProjectileSwapperService.WeaponIconUri(Tag.Name);
     public string TagPath => Tag.Name;
+
+    /// <summary>
+    /// Localized weapon name (official / community terminology), resolved from
+    /// <c>weapon_loader.name.&lt;tag leaf&gt;</c>. Falls back to the tag-derived name.
+    /// </summary>
+    public string DisplayName
+    {
+        get
+        {
+            string leaf = Tag.LeafName.ToLowerInvariant();
+            if (leaf.EndsWith("-weapon", StringComparison.Ordinal))
+                leaf = leaf[..^"-weapon".Length];
+            string key = "weapon_loader.name." + leaf;
+            return LocalizationService.Current.Has(key) ? L.Get(key) : Name;
+        }
+    }
+
+    /// <summary>Original tag-derived name, shown as a subtitle when it differs.</summary>
+    public string SecondaryName =>
+        string.Equals(DisplayName, Name, StringComparison.OrdinalIgnoreCase) ? "" : Name;
+
+    public Microsoft.UI.Xaml.Visibility SecondaryNameVisibility =>
+        SecondaryName.Length == 0
+            ? Microsoft.UI.Xaml.Visibility.Collapsed
+            : Microsoft.UI.Xaml.Visibility.Visible;
 }
 
 public sealed record WeaponModelVariant(
@@ -135,7 +160,7 @@ public sealed class WeaponLoaderService : IDisposable
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
 
         if (variant is not null &&
             variant.Index != 0 &&
@@ -273,7 +298,7 @@ public sealed class WeaponLoaderService : IDisposable
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
         return result;
     }
 
@@ -297,7 +322,7 @@ public sealed class WeaponLoaderService : IDisposable
                 TimeSpan.FromSeconds(20),
                 cancellationToken);
             if (loaded.Outcome != ScriptOutcome.Confirmed)
-                throw new InvalidOperationException(loaded.Message);
+                throw new BridgeFailureException(loaded.Message);
             loadMessage = loaded.Message;
 
             // The cooked-tag subsystem can publish the Blam entry a few frames after

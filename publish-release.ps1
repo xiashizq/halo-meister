@@ -22,7 +22,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
 
 $releaseRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $projectRoot 'artifacts\release'))
-$packageName = "HaloMeister-$Version-win-x64"
+$packageName = "CartographerToolkit-$Version-win-x64"
 $packageDirectory = [System.IO.Path]::GetFullPath(
     (Join-Path $releaseRoot $packageName))
 $archivePath = [System.IO.Path]::GetFullPath(
@@ -81,8 +81,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $requiredPackageFiles = @(
-    'HaloMeister.exe',
-    'HaloMeister.dll',
+    'CartographerToolkit.exe',
+    'CartographerToolkit.dll',
     'START_HERE.txt',
     'Assets\UE4SS\bridge.lua',
     'Assets\UE4SS\halomeister_blam_v45.dll',
@@ -106,6 +106,29 @@ foreach ($relative in $requiredPackageFiles) {
         throw "Published release is incomplete: $relative"
     }
 }
+
+# Directory.Build.props is canonical. Stamp the packaged Lua so a forgotten
+# source bump cannot ship a bridge that refuses to install against this app.
+$packagedBridge = Join-Path $packageDirectory 'Assets\UE4SS\bridge.lua'
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+$bridgeText = [System.IO.File]::ReadAllText($packagedBridge)
+$versionMarker = '-- HALOMEISTER SCRIPTING BRIDGE:VERSION'
+$markerMatch = [regex]::Match($bridgeText, [regex]::Escape($versionMarker) + '\s+\S+')
+if (-not $markerMatch.Success) {
+    throw "Packaged bridge.lua is missing the VERSION marker."
+}
+$bridgeText = $bridgeText.Remove($markerMatch.Index, $markerMatch.Length).Insert(
+    $markerMatch.Index,
+    "$versionMarker $Version")
+$assignmentMatch = [regex]::Match($bridgeText, 'local\s+bridge_version\s*=\s*(["''])[^"'']*\1')
+if (-not $assignmentMatch.Success) {
+    throw "Packaged bridge.lua is missing local bridge_version."
+}
+$bridgeText = $bridgeText.Remove($assignmentMatch.Index, $assignmentMatch.Length).Insert(
+    $assignmentMatch.Index,
+    "local bridge_version = `"$Version`"")
+[System.IO.File]::WriteAllText($packagedBridge, $bridgeText, $utf8NoBom)
+Write-Host "Stamped packaged bridge.lua to $Version."
 
 $definitionCount = @(
     Get-ChildItem `

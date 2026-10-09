@@ -1,8 +1,8 @@
 # Vehicle icon sources
 
-Local UI previews for the Vehicle Workshop. Prefer modern remaster / later-game
-wiki renders or concept art over classic Halo: CE screenshots. Campaign Evolved
-runtime tags that have no confident match use `missing.png`.
+The Vehicle Workshop list uses the in-game HUD cradle icons in
+`../WeaponIcons` (`T_UI_*`). Families with no cradle texture use the Warthog
+HUD icon. The renders below are unused by the workshop list.
 
 | File | Source | Era / notes |
 |------|--------|-------------|

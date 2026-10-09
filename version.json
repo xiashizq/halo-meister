@@ -1,8 +1,14 @@
 {
-  "app": "0.2.6",
-  "bridge": "0.2.6",
-  "mods": {
-    "campaign": "9313770E",
-    "characters": "2E7D7A8B"
-  }
+    "app":  "0.2.7",
+    "bridge":  "0.2.7",
+    "mods":  {
+                 "campaign":  "94F8BC9D",
+                 "characters":  "790D1134",
+                 "char_trooper":  "555DC61A",
+                 "char_elite":  "87F423BE",
+                 "char_grunt":  "BAD64F4F",
+                 "char_jackal":  "78C13DBE",
+                 "char_brute":  "F294BB1F",
+                 "char_hunter":  "6C50ACBC"
+             }
 }

@@ -1,7 +1,8 @@
-<Page
+﻿<Page
     x:Class="HaloMeister.App.Pages.VehicleWorkshopPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:HaloMeister.App.Controls"
     xmlns:i18n="using:HaloMeister.App.Localization">
     <Grid Padding="24" RowSpacing="16">
         <Grid.RowDefinitions>
@@ -35,13 +36,6 @@
                     Content="{i18n:Loc Key='vehicle_workshop.refresh'}"
                     IsEnabled="False" />
                 <Button
-                    x:Name="FullPalettesButton"
-                    Height="32"
-                    VerticalAlignment="Center"
-                    Click="OnToggleFullPalettes"
-                    Content="{i18n:Loc Key='vehicle_workshop.add_all_vehicles_weapons'}"
-                    IsEnabled="False" />
-                <Button
                     x:Name="ScanButton"
                     Height="32"
                     VerticalAlignment="Center"
@@ -60,8 +54,8 @@
 
         <Grid Grid.Row="1" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" />
-                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="540" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <Border
@@ -117,10 +111,19 @@
                                         Grid.Column="1"
                                         VerticalAlignment="Center"
                                         Spacing="2">
-                                        <TextBlock
-                                            FontWeight="SemiBold"
-                                            Text="{Binding Name}"
-                                            TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock
+                                                FontWeight="SemiBold"
+                                                Text="{Binding DisplayName}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{Binding SecondaryName}"
+                                                TextTrimming="CharacterEllipsis"
+                                                Visibility="{Binding SecondaryNameVisibility}" />
+                                        </StackPanel>
                                         <TextBlock
                                             FontFamily="Consolas"
                                             FontSize="10"
@@ -192,6 +195,10 @@
                                     Style="{ThemeResource SubtitleTextBlockStyle}"
                                     TextWrapping="Wrap" />
                                 <TextBlock
+                                    x:Name="SelectedVehicleSubText"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap" />
+                                <TextBlock
                                     x:Name="SelectedPathText"
                                     FontFamily="Consolas"
                                     FontSize="11"
@@ -237,28 +244,31 @@
                                 </ComboBox>
                             </StackPanel>
                         </Border>
-                        <Button
-                            x:Name="SpawnButton"
-                            Margin="0,8,0,0"
-                            HorizontalAlignment="Left"
-                            Click="OnSpawn"
-                            Content="{i18n:Loc Key='vehicle_workshop.spawn_vehicle_ahead'}"
-                            IsEnabled="False"
-                            Style="{StaticResource AccentButtonStyle}" />
-                        <Button
-                            x:Name="EnablePlayerControlButton"
-                            HorizontalAlignment="Left"
-                            Click="OnEnablePlayerControl"
-                            Content="{i18n:Loc Key='vehicle_workshop.enable_player_control'}"
-                            IsEnabled="False"
-                            Visibility="Collapsed" />
-                        <Button
-                            x:Name="AllowSeraphExitButton"
-                            HorizontalAlignment="Left"
-                            Click="OnAllowSeraphExit"
-                            Content="{i18n:Loc Key='vehicle_workshop.allow_player_exit'}"
-                            IsEnabled="False"
-                            Visibility="Collapsed" />
+                        <controls:WrapPanel Margin="0,8,0,0" HorizontalSpacing="8" VerticalSpacing="8">
+                            <Button
+                                x:Name="SpawnButton"
+                                Click="OnSpawn"
+                                Content="{i18n:Loc Key='vehicle_workshop.spawn_vehicle_ahead'}"
+                                IsEnabled="False"
+                                Style="{StaticResource AccentButtonStyle}" />
+                            <Button
+                                x:Name="EnablePlayerControlButton"
+                                Click="OnEnablePlayerControl"
+                                Content="{i18n:Loc Key='vehicle_workshop.enable_player_control'}"
+                                IsEnabled="False"
+                                Visibility="Collapsed" />
+                            <Button
+                                x:Name="AllowSeraphExitButton"
+                                Click="OnAllowSeraphExit"
+                                Content="{i18n:Loc Key='vehicle_workshop.allow_player_exit'}"
+                                IsEnabled="False"
+                                Visibility="Collapsed" />
+                            <Button
+                                x:Name="EnableThirdPersonButton"
+                                Click="OnEnableThirdPerson"
+                                Content="{i18n:Loc Key='vehicle_workshop.enable_third_person'}"
+                                IsEnabled="False" />
+                        </controls:WrapPanel>
                         <InfoBar
                             IsClosable="False"
                             IsOpen="True"
@@ -275,10 +285,6 @@
                 x:Name="ConnectionText"
                 FontSize="11"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            <InfoBar
-                x:Name="StatusBar"
-                IsClosable="True"
-                IsOpen="False" />
         </StackPanel>
     </Grid>
 </Page>

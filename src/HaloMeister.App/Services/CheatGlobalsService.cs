@@ -119,7 +119,7 @@ public sealed class CheatGlobalsService
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
 
         Dictionary<string, bool> values = ParseValues(result.Message);
         if (!values.TryGetValue(name, out bool actual) || actual != enabled)
@@ -144,7 +144,7 @@ public sealed class CheatGlobalsService
             TimeSpan.FromSeconds(20),
             cancellationToken);
         if (result.Outcome is not (ScriptOutcome.Submitted or ScriptOutcome.Confirmed))
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
     }
 
     private static string BuildDeathlessScript(bool enabled)
@@ -182,7 +182,7 @@ public sealed class CheatGlobalsService
             TimeSpan.FromSeconds(15),
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
-            throw new InvalidOperationException(result.Message);
+            throw new BridgeFailureException(result.Message);
         return ParseValues(result.Message);
     }
 

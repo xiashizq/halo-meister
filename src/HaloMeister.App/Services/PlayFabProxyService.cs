@@ -181,7 +181,7 @@ public sealed class PlayFabProxyService : IDisposable
             if (proxy.CertificateManager.IsRootCertificateUserTrusted())
                 proxy.CertificateManager.RemoveTrustedRootCertificate(machineTrusted: false);
         }
-        catch (Exception ex) { Error?.Invoke($"Could not remove the temporary Halo Meister root certificate: {ex.Message}"); }
+        catch (Exception ex) { Error?.Invoke($"Could not remove the temporary Cartographer Toolkit root certificate: {ex.Message}"); }
     }
 
     private Task OnBeforeTunnelConnect(object sender, TunnelConnectSessionEventArgs e)

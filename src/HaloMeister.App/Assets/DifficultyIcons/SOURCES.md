@@ -8,7 +8,7 @@ These thumbnails are static composites of the game's own difficulty UI component
 
 The source textures were extracted from the locally installed Halo: Campaign Evolved
 `pakchunk0-WinGDK` IO Store with `retoc`, decoded from BC7, and composed into the four
-layouts used by the campaign difficulty UI. They are retained only as Halo Meister UI
+layouts used by the campaign difficulty UI. They are retained only as Cartographer Toolkit UI
 assets for the user's locally installed game.
 
 Layout mapping:

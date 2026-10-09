@@ -413,7 +413,7 @@ public sealed class PlayerCameraService
     {
         if (!_memory.IsConnected)
             throw new InvalidOperationException(
-                "Connect Halo Meister to the running game from the header first.");
+                "Connect Cartographer Toolkit to the running game from the header first.");
     }
 
     private void EnsureDefinitions()

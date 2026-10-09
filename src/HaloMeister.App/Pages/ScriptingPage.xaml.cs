@@ -649,18 +649,17 @@ public sealed partial class ScriptingPage : Page, IActivatablePage
     }
 
     private void ShowStatus(string message, InfoBarSeverity severity)
-    {
-        PageStatus.Title = severity switch
-        {
-            InfoBarSeverity.Error => L.Get("scripting.scripting_failed"),
-            InfoBarSeverity.Warning => L.Get("scripting.submitted_not_verified"),
-            InfoBarSeverity.Success => L.Get("scripting.scripting_title"),
-            _ => L.Get("scripting.runtime_scripting"),
-        };
-        PageStatus.Message = message;
-        PageStatus.Severity = severity;
-        PageStatus.IsOpen = true;
-    }
+        => MainWindow.Instance?.Report(
+            message,
+            severity,
+            severity switch
+            {
+                InfoBarSeverity.Error => L.Get("scripting.scripting_failed"),
+                InfoBarSeverity.Warning => L.Get("scripting.submitted_not_verified"),
+                InfoBarSeverity.Success => L.Get("scripting.scripting_title"),
+                _ => L.Get("scripting.runtime_scripting"),
+            },
+            sanitize: false);
 
     private static string Label(ScriptOutcome outcome) => outcome switch
     {
