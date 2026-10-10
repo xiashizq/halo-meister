@@ -216,6 +216,8 @@ public sealed partial class MainWindow : Window
         GameResourcesNavItem.Content = L.Get("shell.game_resources");
         MusicNavItem.Content = L.Get("shell.music");
         CharacterModelsNavItem.Content = L.Get("shell.character_models");
+        GameTextNavItem.Content = L.Get("shell.game_text");
+        SubtitlesNavItem.Content = L.Get("shell.subtitles");
         ChangeBipedNavItem.Content = L.Get("shell.change_character");
         AdvancedNavItem.Content = L.Get("shell.advanced");
         // RuntimeTagsNavItem.Content = L.Get("shell.realtime_tags");
@@ -954,6 +956,8 @@ public sealed partial class MainWindow : Window
         "cinematics" => typeof(CinematicsPage),
         "music" => typeof(MusicPage),
         "character-models" => typeof(CharacterModelsPage),
+        "game-text" => typeof(GameTextPage),
+        "subtitles" => typeof(SubtitlesPage),
         _ => typeof(MissionsPage),
     };
 
@@ -1127,6 +1131,8 @@ public sealed partial class MainWindow : Window
             "cinematics" => CinematicsNavItem,
             "music" => MusicNavItem,
             "character-models" => CharacterModelsNavItem,
+            "game-text" => GameTextNavItem,
+            "subtitles" => SubtitlesNavItem,
             "change-biped" => ChangeBipedNavItem,
             // "runtime-tags" => RuntimeTagsNavItem,
             "scenario-props" => ScenarioPropsNavItem,

@@ -66,6 +66,8 @@
     <Content Include="Assets\SkullIcons\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Definitions\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\GameBuildProfiles.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\GameText\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Subtitles\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\HaloScript\**\*" CopyToOutputDirectory="PreserveNewest" />
     <!-- Keep historical local bridge builds out of source and release packages. -->
     <Content Include="Assets\UE4SS\bridge.lua" CopyToOutputDirectory="PreserveNewest" />

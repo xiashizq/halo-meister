@@ -160,6 +160,22 @@
                             Content="{i18n:Loc Key='shell.character_models'}"
                             Icon="People"
                             Tag="character-models" />
+                        <NavigationViewItem
+                            x:Name="GameTextNavItem"
+                            Content="{i18n:Loc Key='shell.game_text'}"
+                            Tag="game-text">
+                            <NavigationViewItem.Icon>
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE8D2;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                        <NavigationViewItem
+                            x:Name="SubtitlesNavItem"
+                            Content="{i18n:Loc Key='shell.subtitles'}"
+                            Tag="subtitles">
+                            <NavigationViewItem.Icon>
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE8F2;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
 

@@ -1,0 +1,13 @@
+[package]
+name = "halomeister-text"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "halomeister-text"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+serde_json = "1"
+blam-tags = { git = "https://github.com/camden-smallwood/blam-tags", rev = "1c3ad0c", features = ["iostore"] }
