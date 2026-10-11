@@ -58,6 +58,13 @@ public sealed class AllegianceDemoService
     private readonly record struct TrackedBot(int ActorDatum, bool Friendly);
     private readonly record struct WorldPoint(float X, float Y, float Z);
 
+    private readonly record struct PlayerPose(
+        float X,
+        float Y,
+        float Z,
+        float ForwardX,
+        float ForwardY);
+
     public sealed record BotRecallResult(
         int Considered,
         int Teleported,
@@ -116,7 +123,8 @@ public sealed class AllegianceDemoService
 
     /// <summary>
     /// Halo 10-foot units along the player's right (negative = left).
-    /// Extra spawn batches stay beside the player instead of metres ahead.
+    /// Slot 0 is the player. Extra spawn batches stay beside the player
+    /// instead of metres ahead.
     /// </summary>
     public static (float Right, float Forward) BotFormationOffset(int slot)
     {
@@ -124,6 +132,36 @@ public sealed class AllegianceDemoService
             return (0f, 0f);
         float distance = ((slot + 1) / 2) * 0.9f;
         return slot % 2 == 1 ? (-distance, 0f) : (distance, 0f);
+    }
+
+    /// <summary>
+    /// World XY delta for a recalled bot. Skips the on-player slot and rotates
+    /// the formation by the simulation forward so people stand to the side.
+    /// </summary>
+    public static (float X, float Y) RecallWorldOffset(
+        int slot,
+        float forwardX,
+        float forwardY)
+    {
+        (float lateral, float ahead) = BotFormationOffset(slot + 1);
+        float length = MathF.Sqrt(forwardX * forwardX + forwardY * forwardY);
+        if (length < 1e-4f)
+        {
+            forwardX = 1f;
+            forwardY = 0f;
+        }
+        else
+        {
+            forwardX /= length;
+            forwardY /= length;
+        }
+
+        // Same horizontal right as basis_from_view_angles: (forward.Y, -forward.X).
+        float rightX = forwardY;
+        float rightY = -forwardX;
+        return (
+            rightX * lateral + forwardX * ahead,
+            rightY * lateral + forwardY * ahead);
     }
 
     public static IReadOnlyList<PlayerTeamOption> CreateTeamOptions() =>
@@ -365,10 +403,10 @@ public sealed class AllegianceDemoService
 
         EnsureObjectBridgeReady();
 
-        WorldPoint player = await ReadPlayerPositionAsync(cancellationToken);
+        PlayerPose player = await ReadPlayerPoseAsync(cancellationToken);
         int teleported = 0;
         int failed = 0;
-        var dead = new List<int>();
+        var gone = new List<int>();
         int slot = 0;
 
         foreach (TrackedBot bot in candidates)
@@ -376,7 +414,10 @@ public sealed class AllegianceDemoService
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                (float offsetX, float offsetY) = FormationOffset(slot++);
+                (float offsetX, float offsetY) = RecallWorldOffset(
+                    slot++,
+                    player.ForwardX,
+                    player.ForwardY);
                 WorldPoint destination = new(
                     player.X + offsetX,
                     player.Y + offsetY,
@@ -390,21 +431,27 @@ public sealed class AllegianceDemoService
                 else
                 {
                     failed++;
-                    dead.Add(bot.ActorDatum);
+                    if (IsForgottenActor(move.Message))
+                        gone.Add(bot.ActorDatum);
                 }
             }
-            catch
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
             {
                 failed++;
-                dead.Add(bot.ActorDatum);
+                if (IsForgottenActor(ex.Message))
+                    gone.Add(bot.ActorDatum);
             }
         }
 
-        if (dead.Count > 0)
+        if (gone.Count > 0)
         {
             lock (_combatLock)
             {
-                _trackedBots.RemoveAll(bot => dead.Contains(bot.ActorDatum));
+                _trackedBots.RemoveAll(bot => gone.Contains(bot.ActorDatum));
             }
         }
 
@@ -413,6 +460,22 @@ public sealed class AllegianceDemoService
 
     private static bool IsSpawnSuccess(ScriptOutcome outcome) =>
         outcome is ScriptOutcome.Confirmed or ScriptOutcome.Submitted;
+
+    /// <summary>
+    /// A missed landing or a bridge timeout leaves the actor tracked so the
+    /// next recall can retry. Drop the entry only when the unit is gone.
+    /// </summary>
+    private static bool IsForgottenActor(string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return false;
+        return message.Contains("does not resolve", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("no longer", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("not readable", StringComparison.OrdinalIgnoreCase)
+            || message.Contains(
+                "orientation before teleporting",
+                StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// One-shot combat wake after spawn. Hostiles renew and lock onto the
@@ -660,7 +723,7 @@ public sealed class AllegianceDemoService
             _ => throw new ArgumentOutOfRangeException(nameof(team)),
         };
 
-    private async Task<WorldPoint> ReadPlayerPositionAsync(
+    private async Task<PlayerPose> ReadPlayerPoseAsync(
         CancellationToken cancellationToken)
     {
         ScriptExecutionResult result = await _bridge.ExecuteAsync(
@@ -670,12 +733,12 @@ public sealed class AllegianceDemoService
             cancellationToken);
         if (result.Outcome != ScriptOutcome.Confirmed)
             throw new BridgeFailureException(result.Message);
-        if (!TryParseReturnPosition(result.Message, out WorldPoint point))
+        if (!TryParsePlayerPose(result.Message, out PlayerPose pose))
         {
             throw new InvalidDataException(
                 "The game returned an invalid player position.");
         }
-        return point;
+        return pose;
     }
 
     private async Task<ScriptExecutionResult> TeleportObjectAsync(
@@ -693,9 +756,9 @@ public sealed class AllegianceDemoService
             cancellationToken);
     }
 
-    private static bool TryParseReturnPosition(string message, out WorldPoint point)
+    private static bool TryParsePlayerPose(string message, out PlayerPose pose)
     {
-        point = default;
+        pose = default;
         const string marker = "Return value: ";
         int markerOffset = message.IndexOf(marker, StringComparison.Ordinal);
         if (markerOffset < 0)
@@ -707,7 +770,7 @@ public sealed class AllegianceDemoService
         string[] values = rest
             .Trim()
             .TrimEnd('.')
-            .Split(',', StringSplitOptions.TrimEntries);
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (values.Length < 3 ||
             !float.TryParse(
                 values[0],
@@ -728,12 +791,28 @@ public sealed class AllegianceDemoService
             return false;
         }
 
-        point = new WorldPoint(x, y, z);
+        float forwardX = 1f;
+        float forwardY = 0f;
+        if (values.Length >= 5 &&
+            float.TryParse(
+                values[3],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out float parsedForwardX) &&
+            float.TryParse(
+                values[4],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out float parsedForwardY) &&
+            parsedForwardX * parsedForwardX + parsedForwardY * parsedForwardY > 1e-8f)
+        {
+            forwardX = parsedForwardX;
+            forwardY = parsedForwardY;
+        }
+
+        pose = new PlayerPose(x, y, z, forwardX, forwardY);
         return true;
     }
-
-    private static (float X, float Y) FormationOffset(int slot) =>
-        BotFormationOffset(slot);
 
     private static IReadOnlyList<int> ParseActorDatums(string message)
     {

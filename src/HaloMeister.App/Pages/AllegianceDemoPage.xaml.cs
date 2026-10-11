@@ -393,20 +393,17 @@ public sealed partial class AllegianceDemoPage : Page, IActivatablePage
 
     private void OnHotkeyTick(object? sender, object e)
     {
-        if (_suppressHotkey || _busy)
-        {
-            _hotkeyWasDown = false;
-            return;
-        }
-
         AllegianceBotRecallSettings settings = _demo.RecallSettings;
-        if (!settings.HotkeyEnabled)
+        bool down = settings.HotkeyEnabled &&
+            (GetAsyncKeyState(settings.HotkeyVirtualKey) & 0x8000) != 0;
+        // A recall clears _busy while V may still be held. Keep the edge so
+        // that release-and-press is required before another summon starts.
+        if (_suppressHotkey || _busy || !settings.HotkeyEnabled)
         {
-            _hotkeyWasDown = false;
+            _hotkeyWasDown = down;
             return;
         }
 
-        bool down = (GetAsyncKeyState(settings.HotkeyVirtualKey) & 0x8000) != 0;
         bool pressed = down && !_hotkeyWasDown;
         _hotkeyWasDown = down;
         if (!pressed || !IsGameForeground())

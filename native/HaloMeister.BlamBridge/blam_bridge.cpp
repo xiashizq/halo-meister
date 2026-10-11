@@ -5224,10 +5224,13 @@ std::string teleport_object(const SpawnRequest& request)
         verified,
         forward,
         &transform_exception);
+    // Biped collision and ground contact can slide a unit by part of a
+    // 10-foot world unit after a landing that did occur. A teleport the
+    // engine ignored leaves the actor many units away and still fails.
     if (transform_error != 0 ||
-        std::fabs(verified[0] - request.x) > 0.35f ||
-        std::fabs(verified[1] - request.y) > 0.35f ||
-        std::fabs(verified[2] - request.z) > 0.35f)
+        std::fabs(verified[0] - request.x) > 1.0f ||
+        std::fabs(verified[1] - request.y) > 1.0f ||
+        std::fabs(verified[2] - request.z) > 1.0f)
     {
         throw std::runtime_error(
             "The engine did not retain the requested object position.");
